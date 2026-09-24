@@ -19,6 +19,7 @@ export const RIDE = {
   leanMax: 1.15, leanRate: 4.5, leanEase: 9, yawLag: 0.1,        // full thumb = ~66 deg on the rail (a ~2.3 g carve); how fast you can roll the board over (rad/s)
   finGrip: 4.2, gripMax: 20,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2): a buried rail holds ~2 g
   skidLoss: 0.16,                      // share of the excess sideways force lost as speed while the tail drifts
+  glide: 0.7,                          // share of the fins' braking given back in a carve (0 = raw physics, 1 = no loss)
   stallDrag: 3.0,                      // full brake (back foot + hand drag) slows you by this (m/s^2)
   pump: 0.5,                           // pumping adds this share of the downhill pull (and costs 1.2x that when climbing)
   popTime: 0.35,                       // seconds from lying to standing
@@ -195,8 +196,13 @@ export class Rider {
       const latA = P.finGrip * Math.hypot(lx, lz), lim = P.gripMax * pop * release;
       this.skid = latA > lim ? Math.min(1, latA / lim - 1) : 0;
       const sc = latA > lim ? lim / latA : 1;
-      ax += -P.finGrip * lx * sc; az += -P.finGrip * lz * sc;
-      if (this.skid) { const loss = P.skidLoss * (latA - lim) * Math.sign(along); ax += -loss * dx; az += -loss * dz; }
+      // the fins mostly bend your path rather than brake you: the part of their push that works against your motion is
+      // largely given back (a carving board keeps its glide; the wave's push refunds what a real rail would scrub)
+      let gx = -P.finGrip * lx * sc, gz = -P.finGrip * lz * sc;
+      const rs = Math.hypot(rx, rz);
+      if (rs > 0.5) { const ux = rx / rs, uz_ = rz / rs, gt = gx * ux + gz * uz_; if (gt < 0) { gx -= gt * P.glide * ux; gz -= gt * P.glide * uz_; } }
+      ax += gx; az += gz;
+      if (this.skid) { const loss = P.skidLoss * (1 - 0.5 * P.glide) * (latA - lim) * Math.sign(along); ax += -loss * dx; az += -loss * dz; }
       // pumping: weight the board on the way down, stay light going up. Legs only push for so long.
       this.pumpHold = inp.pump ? this.pumpHold + h : 0;
       const legs = 1 - smooth(0.45, 1.1, this.pumpHold);
@@ -262,7 +268,7 @@ export class Rider {
       // a cutback: from running down the line, turn right round to face the breaking part, still with speed
       const hd = Math.cos(this.th);
       if (hd > 0.5) this.cbArmed = true;
-      else if (this.cbArmed && hd < -0.5 && this.v > 0.45 * C.speed) { this.cbArmed = false; this.ride.cutbacks++; this.trick = { name: 'CUTBACK', t: 0 }; }
+      else if (this.cbArmed && hd < -0.4 && this.v > 0.45 * C.speed) { this.cbArmed = false; this.ride.cutbacks++; this.trick = { name: 'CUTBACK', t: 0 }; }
       // a snap (top turn): climb hard up to the lip, then whip the board back down the face from up there
       const relVz = this.vz - C.speed, hTop = y / Math.max(sl.top, 0.3);
       if (relVz < -1.2 && hTop > 0.6) this.snapArm = 1.2; else this.snapArm = Math.max(0, this.snapArm - h);
