@@ -9,10 +9,11 @@
 // top of the lip -> down the back of the wave. Rendered double-sided so you can see it from inside the tube.
 import * as THREE from 'three';
 
+// speed = how fast the wave comes in (about sqrt(g x depth) for a wave breaking on a reef: 4-6 m/s); peel = how fast it breaks along the reef
 export const CONDITIONS = {
-  easy:   { H: 1.1, peel: 4.2, hollow: 0.35, speed: 5.5, surge: 0, forgive: 0.55, name: 'Easy' },
-  medium: { H: 2.0, peel: 6.0, hollow: 0.75, speed: 7.0, surge: 0.18, forgive: 1, name: 'Medium' },
-  hard:   { H: 3.4, peel: 8.5, hollow: 1.0,  speed: 9.0, surge: 0.35, forgive: 1, name: 'Hard' },
+  easy:   { H: 1.1, peel: 4.0, hollow: 0.35, speed: 4.0, surge: 0, forgive: 0.55, name: 'Easy' },
+  medium: { H: 2.0, peel: 5.5, hollow: 0.75, speed: 5.0, surge: 0.18, forgive: 1, name: 'Medium' },
+  hard:   { H: 3.4, peel: 7.5, hollow: 1.0,  speed: 6.0, surge: 0.35, forgive: 1, name: 'Hard' },
 };
 
 // Cross-section keyframes (units of wave height H; z toward the beach, y up). Every keyframe lists the SAME 12
@@ -95,6 +96,7 @@ export class Wave {
       out[k++] = Math.min(1, broken * 0.9 + spray * curl * 0.7);
       out[k++] = thin * (1 - broken * 0.7);
     }
+    out[0] += 9 * H; out[1] = 0; out[2] = 0; out[3] = 0;   // skirt: the first sample runs far out over the flat water so the mesh edge sits well away from the rider
   }
 
   build() {
@@ -235,6 +237,7 @@ export function waterMaterial({ wave = false } = {}) {
         vec3 V = normalize(cameraPosition - vW);
         vec3 N = normalize(vN);
         if (!gl_FrontFacing) N = -N;
+        ${wave ? 'N = normalize(mix(vec3(0., 1., 0.), N, smoothstep(.0, .12 * uH, vW.y)));   // the wave\'s flat edge shades exactly like the open sea' : ''}
         // small ripples
         // ripples mapped on the flat sea (xz) and on steep walls (x, height+depth) so they never stretch into rings
         float wall = abs(N.y) < .6 ? 1. : 0.;
@@ -250,6 +253,7 @@ export function waterMaterial({ wave = false } = {}) {
         // water pulled up the face leaves vertical streaks; the base of the wave is darker and denser
         float streak = fbm(vec2(vW.x * 2.2 + vW.z * .6, vW.y * .35 - uTime * .6));
         thin *= .75 + .5 * streak;
+        thin *= smoothstep(.03, .22 * uH, vW.y);                        // flat water in front of the wave matches the open sea (no seam)
         float base = smoothstep(.0, .9, vW.y / max(uH, .5));
         float back = pow(max(dot(-V, uSun), 0.), 3.);                // looking toward the sun through the water
         vec3 body = mix(deep, turq, thin * .8) + turq * thin * back * 1.6 * uSunVis + uSunCol * thin * back * .25 * uSunVis + turq * thin * .25 * (1. - uSunVis);

@@ -13,10 +13,11 @@ export const RIDE = {
   lift: 0.16,             // how fast the face carries you up toward the lip if you ride straight (per second, in a)
   gripBase: 20,           // how hard you can carve before the rail lets go (m/s^2 sideways); lower in heavy surf
   turnSlow: 2.6, turnFast: 1.35,   // turn rate (rad/s) at low / high speed
-  stall: 1.4,
-  stallHigh: 3.2,
-  pump: 0.45,             // share of the drop you add by pumping         // extra drag high on the face             // below this speed the wave leaves you
+  stall: 1.4,             // below this speed the wave leaves you
+  stallHigh: 3.2,         // extra drag high on the face
+  pump: 0.45,             // share of the drop you add by pumping
   paddleMax: 2.1, paddleAcc: 1.6,
+  slide: 0.35,            // how much of the face's slope turns into speed while it lifts you (board still flat in the water)
 };
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -70,7 +71,7 @@ export class Rider {
     this.x = 0; this.a = 0; this.v = 0; this.psi = 0; this.turn = 0;
     this.zRel = 36;                 // while waiting/paddling: metres in front of the wave's toe
     this.paddleV = 0; this.heading = 0;   // paddling heading: 0 = toward the beach, + = angled toward +x (down the line)
-    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, end: 0, score: 0 }; this.lastSide = 0; this.pumpHold = 0; this.pumping = false; this.inBarrel = false; this.why = '';
+    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, end: 0, score: 0 }; this.lastSide = 0; this.lifting = false; this.u = 0; this.paddleT = 0; this.pumpHold = 0; this.pumping = false; this.inBarrel = false; this.why = '';
   }
   get s() { return this.x - this.wave.peelX; }
   set(state) { this.state = state; this.stateT = 0; }
@@ -81,22 +82,32 @@ export class Rider {
     if (this.state === 'WAIT' || this.state === 'PADDLE') {
       // lying on the board: hold PADDLE to move toward the beach; the wheel angles you along the wave
       if (inp.paddle && this.state === 'WAIT') this.state = 'PADDLE';
+      if (inp.paddle) this.paddleT += dt;
       this.paddleV += ((inp.paddle ? RIDE.paddleMax : 0) - this.paddleV) * Math.min(1, dt * (inp.paddle ? RIDE.paddleAcc : 0.6));
       this.heading = Math.max(-1.1, Math.min(1.1, this.heading + inp.steer * 1.4 * dt));
       this.x += Math.sin(this.heading) * this.paddleV * dt;
       // the wave rolls in at its own speed; you close the gap only as fast as the wave outruns your paddling
-      this.zRel -= (C.speed - Math.cos(this.heading) * this.paddleV) * dt;
+      if (!this.lifting) this.zRel -= (C.speed - Math.cos(this.heading) * this.paddleV) * dt;
       const s = this.s;
-      if (this.zRel <= 0) {
-        // the face has reached you: catch it, get pounded, or let it roll under
-        const f = this.face.at(s, 0.35);
-        const steepEnough = f.th > THREE.MathUtils.degToRad(21.5);
-        const fastEnough = this.paddleV > RIDE.paddleMax * 0.6;
-        if (s < -0.3 * H) { this.wipe(s < -4.5 * H ? 'The whitewater ran you over' : 'Caught inside: it broke right on you'); }
-        else if (steepEnough && fastEnough) {
+      if (this.zRel <= 0 && !this.lifting) {
+        // the face reaches you: if it's already broken here you get hit, otherwise it starts lifting you
+        if (s < -0.3 * H) return this.wipe(s < -4.5 * H ? 'The whitewater ran you over' : this.paddleT > 4 ? 'Paddled too early: you ended up inside it' : 'Caught inside: it broke right on you');
+        this.lifting = true; this.a = 0.03; this.u = Math.max(0, Math.cos(this.heading) * this.paddleV);
+      }
+      if (this.lifting) {
+        // on the face: you slide down it (gravity), your paddling adds a little, the water drags;
+        // the wave keeps moving under you. Match its speed before it passes and you're on.
+        const f = this.face.at(s, this.a);
+        this.u += (RIDE.g * Math.sin(f.th) * RIDE.slide + (inp.paddle ? RIDE.paddleAcc * 1.2 : 0) - 0.35 * this.u) * dt;
+        this.a = Math.max(0, this.a + (C.speed - this.u) / f.L * dt);
+        if (s < -0.3 * H) return this.wipe('Too late: it broke on top of you');
+        if (this.u >= C.speed * 0.82) {
           if (this.heading < -0.3) return this.done('Went left: this reef only peels right');
-          this.set('POPUP'); this.a = 0.45; this.v = C.speed * 0.55 + 1.5; this.psi = -0.25 * C.forgive;   // pop up angled slightly down the line
-        } else { this.done(fastEnough ? 'Too flat there: it rolled under you' : 'Not enough speed to catch it'); }
+          this.set('POPUP'); this.v = this.u + 0.8 + 0.1 * C.peel; this.psi = -0.25 * C.forgive;   // pop up angled slightly down the line
+          return;
+        }
+        if (this.a > 0.97) { this.zRel = this.face.at(s, this.a).z - this.face.at(s, 0).z - 0.6; this.lifting = false; } // it passes under you from here
+        if (this.a > 0.97) return this.done(this.paddleV > RIDE.paddleMax * 0.6 ? 'It rolled under you: start paddling earlier' : 'Not enough speed: hold PADDLE as it comes');
       }
       return;
     }
@@ -185,6 +196,13 @@ export class Rider {
     if (this.state === 'WAIT' || this.state === 'PADDLE' || (this.state === 'DONE' && this.ride.t === 0)) {
       // lying on the water in front of the wave; as the face arrives it lifts you, and if you miss it, it rolls under you
       const toe = this.face.at(s, 0);
+      if (this.lifting && this.state !== 'DONE') {
+        const f = this.face.at(s, this.a), c = Math.cos(f.th), sn = Math.sin(f.th);
+        out.pos.set(this.x, f.y + 0.05, f.z);
+        out.fwd.set(Math.sin(this.heading) * c, -sn, Math.cos(this.heading) * c).normalize();   // nose pointing down the face
+        out.up.set(0, c, sn);
+        return out;
+      }
       const zWorld = toe.z + this.zRel + 0.6;
       out.pos.set(this.x, 0.06 + this.face.surfaceY(s, zWorld), zWorld);
       out.fwd.set(Math.sin(this.heading), 0, Math.cos(this.heading)).normalize();

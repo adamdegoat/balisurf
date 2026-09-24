@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=12';
-import { Rider } from './surf.js?v=15';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=16';
+import { Rider } from './surf.js?v=18';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=1';
 
@@ -59,8 +59,13 @@ function newWave() {
   rider = new Rider(wave);
   // time the peak so it reaches roughly where you are (you can paddle sideways to line it up better)
   // you arrive a few metres ahead of the peak (in the pocket zone), with some variety; paddling along the line fixes it
-  const T = rider.zRel / (wave.cond.speed - 1.8);
-  wave.peelX = -wave.cond.peel * T - (1 + Math.random() * 8);
+  rider.zRel = wave.cond.speed * 6;                                   // about 6 s before the wave reaches you
+  // Where you meet the wave depends on how long you paddle (paddling in means meeting it later, further along the peel).
+  // Aim so that paddling for the last ~2.5 s puts you about 5 m ahead of the peak; earlier drifts inside, later onto the shoulder.
+  const T = (rider.zRel + 4.2) / wave.cond.speed;
+  // plus the peel keeps coming while the wave lifts you (about 0.6 s), so meet it with room to spare
+  wave.peelX = -wave.cond.peel * T - (1.5 * wave.cond.H + 0.6 * wave.cond.peel + 1.8 + Math.random() * 2);
+  faceSea = 1;
   wave.reefEnd = wave.peelX + wave.cond.peel * T + 110 + 30 * wave.cond.H;   // the reef section ends; ride it all the way for a bonus
   wave.mesh.position.x = wave.peelX;
   ui.cond.textContent = wave.cond.name + (mode === 'random' ? ' (random)' : '');
@@ -68,12 +73,12 @@ function newWave() {
   endT = -1; snapCam = true;
 }
 
-// ---------- controls: PADDLE (hold, left) and a steering wheel (drag, right). Keyboard for testing.
+// ---------- controls: PADDLE/PUMP (hold, left) and a thumb pad (right half). Keyboard for testing.
 const input = { paddle: false, steer: 0 };
 const keys = new Set();
 addEventListener('keydown', (e) => keys.add(e.code)); addEventListener('keyup', (e) => keys.delete(e.code));
 const ui = {
-  paddle: document.getElementById('paddle'), wheel: document.getElementById('wheel'), wheelIn: document.getElementById('wheel-in'),
+  paddle: document.getElementById('paddle'), pad: document.getElementById('pad'), guide: document.getElementById('guide'), knob: document.querySelector('#guide b'),
   speed: document.getElementById('speed'), score: document.getElementById('score'), cond: document.getElementById('cond'),
   msg: document.getElementById('msg'), msgT: document.getElementById('msg-t'), msgS: document.getElementById('msg-s'),
   tube: document.getElementById('tube'), hint: document.getElementById('hint'), start: document.getElementById('start'), sess: document.getElementById('sess'),
@@ -85,22 +90,30 @@ const hold = (el, on, off) => {
   el.addEventListener('mousedown', on); addEventListener('mouseup', off);
 };
 hold(ui.paddle, () => { input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
-let wheelTouch = null, wheelVal = 0;
-const wheelMove = (x) => { if (!wheelTouch) return; wheelVal = Math.max(-1, Math.min(1, (x - wheelTouch.x0) / 70)); };
-ui.wheel.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.changedTouches[0]; wheelTouch = { id: t.identifier, x0: t.clientX - wheelVal * 70 }; }, { passive: false });
-ui.wheel.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (wheelTouch && t.identifier === wheelTouch.id) wheelMove(t.clientX); }, { passive: false });
-const wheelEnd = (e) => { e.preventDefault(); for (const t of e.changedTouches) if (wheelTouch && t.identifier === wheelTouch.id) wheelTouch = null; };
-ui.wheel.addEventListener('touchend', wheelEnd, { passive: false }); ui.wheel.addEventListener('touchcancel', wheelEnd, { passive: false });
-ui.wheel.addEventListener('mousedown', (e) => { wheelTouch = { id: 'm', x0: e.clientX - wheelVal * 70 }; });
-addEventListener('mousemove', (e) => { if (wheelTouch && wheelTouch.id === 'm') wheelMove(e.clientX); });
-addEventListener('mouseup', () => { if (wheelTouch && wheelTouch.id === 'm') wheelTouch = null; });
+// thumb pad: touch anywhere on the right half; the spot you first touch is the centre.
+// Riding: slide up = climb the face, down = drop. Paddling: slide left/right to angle along the wave.
+let padTouch = null, padX = 0, padY = 0;
+const PAD_R = 55;
+const padMove = (x, y) => { if (!padTouch) return; padX = Math.max(-1, Math.min(1, (x - padTouch.x0) / PAD_R)); padY = Math.max(-1, Math.min(1, (y - padTouch.y0) / PAD_R)); };
+ui.pad.addEventListener('touchstart', (e) => { e.preventDefault(); if (padTouch) return; const t = e.changedTouches[0]; padTouch = { id: t.identifier, x0: t.clientX, y0: t.clientY }; padX = padY = 0; }, { passive: false });
+ui.pad.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (padTouch && t.identifier === padTouch.id) padMove(t.clientX, t.clientY); }, { passive: false });
+const padEnd = (e) => { e.preventDefault(); for (const t of e.changedTouches) if (padTouch && t.identifier === padTouch.id) padTouch = null; };
+ui.pad.addEventListener('touchend', padEnd, { passive: false }); ui.pad.addEventListener('touchcancel', padEnd, { passive: false });
+ui.pad.addEventListener('mousedown', (e) => { padTouch = { id: 'm', x0: e.clientX, y0: e.clientY }; padX = padY = 0; });
+addEventListener('mousemove', (e) => { if (padTouch && padTouch.id === 'm') padMove(e.clientX, e.clientY); });
+addEventListener('mouseup', () => { if (padTouch && padTouch.id === 'm') padTouch = null; });
 function readInput(dt) {
-  if (!wheelTouch) wheelVal *= Math.max(0, 1 - dt * 7);            // the wheel springs back when you let go
-  const k = (keys.has('KeyA') || keys.has('ArrowLeft') ? -1 : 0) + (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
-  input.steer = input.test != null ? input.test : k || wheelVal;   // input.test: scripted steering for automated checks
-  input.paddle = !!input.paddleBtn || keys.has('Space') || keys.has('KeyW');
-  ui.wheelIn.style.transform = `rotate(${input.steer * 110}deg)`;
-  // wheel right turns you down the face (toward the beach), left turns you up it
+  if (!padTouch) { padX *= Math.max(0, 1 - dt * 10); padY *= Math.max(0, 1 - dt * 10); }   // let go and the board runs straight
+  const lying = !rider || rider.state === 'WAIT' || rider.state === 'PADDLE';
+  // keys: up/down (W/S) while riding, left/right (A/D) while paddling
+  const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+  const ky = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+  // internal steer: + = down the face (riding) / toward screen-right (paddling)
+  const v = lying ? (kx || padX) : (ky || padY);
+  input.steer = input.test != null ? input.test : v;   // input.test: scripted steering for automated checks
+  input.paddle = !!input.paddleBtn || keys.has('Space');
+  ui.guide.classList.toggle('side', lying); ui.guide.classList.toggle('live', !!padTouch);
+  ui.knob.style.transform = lying ? `translateX(${input.steer * 45}px)` : `translateY(${input.steer * 45}px)`;
   return { paddle: input.paddle, pump: input.paddle, steer: -input.steer };   // same button: paddle lying down, pump once standing
 }
 
@@ -115,15 +128,24 @@ async function start(m) {
 if (Q.get('mode')) start(Q.get('mode'));
 
 // ---------- camera: in front while you wait for the wave, behind once you're up, tight and low in the barrel
+const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3();
+let faceSea = 1;                                                     // 1 = sitting up facing the incoming sets, 0 = turned to the beach
 const camPos = new THREE.Vector3(0, 2, 10), camLook = new THREE.Vector3(), pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() };
 function updateCamera(dt) {
   const p = pose.pos, st = rider.state, H = wave.cond.H;
   let want, look;
   if (st === 'WAIT' || st === 'PADDLE' || (st === 'DONE' && rider.ride.t === 0)) {
-    // shoreward of you, low, looking back past you at the wave coming in
-    const near = 1 - Math.min(1, Math.max(0, rider.zRel) / 20);
-    want = new THREE.Vector3(p.x + 0.9, 0.95 + near * H * 0.5, p.z + 3.0 + near * 1.2);
-    look = new THREE.Vector3(p.x - 0.5, 0.6 + near * H * 0.7, p.z - 6);
+    // over your shoulder, looking where you look: out at the sets while you wait, toward the beach once you paddle
+    const d = lookDir.set(Math.sin(rider.heading), 0, Math.cos(rider.heading)).applyAxisAngle(WORLD_UP, Math.PI * faceSea);
+    want = p.clone().addScaledVector(d, -3.1).add(_cv.set(0.35, 1.25, 0));
+    if (rider.lifting && st === 'PADDLE') {
+      // take-off: swing out beside you on the face (up the line, a bit toward the beach) and look down the drop
+      want = p.clone().add(_cv.set(-2.9, 1.5, 0.8));
+      look = p.clone().add(_cv.set(0.9, 0.1, 1.1));
+    }
+    const wy = rider.face.surfaceY(want.x - wave.peelX, want.z);
+    want.y = Math.max(want.y, wy + 0.9);                               // the wave lifts the camera with you
+    if (!(rider.lifting && st === 'PADDLE')) look = p.clone().addScaledVector(d, 6).add(_cv.set(0, 0.35, 0));
   } else if (st === 'WIPE') {
     // follow the body from the beach side; never below the water
     const b = surfer ? surfer.getWorldPosition(new THREE.Vector3()) : p;
@@ -148,7 +170,7 @@ function updateCamera(dt) {
     look = p.clone().addScaledVector(pose.fwd, 3).add(new THREE.Vector3(0, 0.6, 0));
     if (tube) look.y = p.y + 0.55;                                     // level gaze down the tube toward the opening
   }
-  const k = snapCam ? 1 : Math.min(1, dt * (st === 'RIDE' ? 5 : st === 'WIPE' ? 3.5 : 2.5)); snapCam = false;
+  const k = snapCam ? 1 : Math.min(1, dt * (st === 'RIDE' ? 5 : st === 'WIPE' ? 3.5 : 7));   // lying down the target itself swings round smoothly snapCam = false;
   camPos.lerp(want, k); camLook.lerp(look, k);
   camera.position.copy(camPos);
   if (st === 'WIPE') { const sh = 0.12 * Math.exp(-(W.t || 0) * 2.5); camera.position.add(new THREE.Vector3((Math.random() - .5) * sh, (Math.random() - .5) * sh, 0)); }
@@ -157,7 +179,7 @@ function updateCamera(dt) {
 
 // ---------- surfer pose on the board
 const WORLD_UP = new THREE.Vector3(0, 1, 0), INTO_WAVE = new THREE.Vector3(0, 0, -1), tmpM = new THREE.Matrix4(), xAxis = new THREE.Vector3(), bodyUp = new THREE.Vector3(), bodyFwd = new THREE.Vector3(), bodyX = new THREE.Vector3();
-const bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
+const _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
 // the rider's world orientation (bodyQ, plus side-on stance) expressed in the board's frame
 const setStance = () => { invQ.copy(rig.quaternion).invert(); surfer.quaternion.copy(invQ).multiply(bodyQ).multiply(stanceQ); };
 function updateRig(dt, t) {
@@ -170,6 +192,9 @@ function updateRig(dt, t) {
   tmpM.makeBasis(xAxis, up, pose.fwd);
   rig.quaternion.setFromRotationMatrix(tmpM);
   rig.position.copy(pose.pos);
+  // sitting you face the sea; when you start paddling you swing the board round to the beach
+  faceSea += ((rider.state === 'WAIT' || (rider.state === 'DONE' && rider.ride.t === 0) ? 1 : 0) - faceSea) * Math.min(1, dt * 3.5);
+  if (faceSea > 0.001) rig.quaternion.premultiply(_yq.setFromAxisAngle(WORLD_UP, Math.PI * faceSea));
   const upright = rider.state === 'POPUP' || rider.state === 'RIDE' || (rider.state === 'WIPE' && rider.stateT < 0.8);
   if (upright) {
     // on a steep wall the board lies on the face, but the rider stays near vertical, leaning into the wave
@@ -300,7 +325,7 @@ function updateHUD(dt) {
   ui.paddle.style.visibility = st === 'WIPE' || st === 'DONE' ? 'hidden' : 'visible';
   const lbl = st === 'WAIT' || st === 'PADDLE' ? 'PADDLE' : 'PUMP'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
   // first waves: tell the player what to do while the set rolls in
-  const hint = st === 'WAIT' ? (rider.zRel < 22 ? 'Wave coming: hold PADDLE' : '') : st === 'PADDLE' && rider.zRel < 10 ? 'Keep paddling...' : st === 'POPUP' ? 'Up!' : st === 'RIDE' && rider.stateT < 3.5 && session.waves < 2 ? 'Hold PUMP as you drop down the face' : '';
+  const hint = st === 'WAIT' ? (rider.zRel < wave.cond.speed * 2.6 ? 'Now! Hold PADDLE' : rider.zRel < wave.cond.speed * 5 ? 'Wave coming, get ready...' : '') : st === 'PADDLE' && rider.lifting ? 'It\'s lifting you, keep paddling!' : st === 'PADDLE' ? 'Wave behind you: keep paddling' : st === 'POPUP' ? 'Up!' : st === 'RIDE' && rider.stateT < 3.5 && session.waves < 2 ? 'Hold PUMP as you drop down the face' : '';
   ui.hint.textContent = session.waves < 3 || st === 'POPUP' ? hint : '';
   ui.tube.style.opacity = rider.inBarrel && st === 'RIDE' ? 1 : 0;
   ui.score.textContent = st === 'RIDE' ? Math.round(rider.ride.t * 5 + rider.ride.pocket * 10 + rider.ride.turns * 15 + rider.ride.top * 1.5 + rider.ride.barrel * 60) : '';

@@ -3,8 +3,9 @@
 const g = () => window.__g;
 export function run(policy, secs = 70) {
   const G = g(); G.newWave(); const r = G.rider; let t = 0; const trace = [];
-  G.input.paddleBtn = true; G.input.test = 0;
+  G.input.paddleBtn = false; G.input.test = 0;
   for (; t < secs; t += 1 / 30) {
+    if (r.state === 'WAIT' && r.zRel < 2.5 * r.wave.cond.speed) G.input.paddleBtn = true;
     if (r.state === 'RIDE' || r.state === 'POPUP') { const o = policy(r); G.input.test = typeof o === 'number' ? o : o.steer; G.input.paddleBtn = typeof o === 'number' ? false : !!o.pump; }
     G.step(1 / 30, 1 / 30, false);
     if (r.state === 'RIDE' && Math.round(t * 30) % 30 === 0) trace.push(`${t.toFixed(0)} s=${r.s.toFixed(1)} a=${r.a.toFixed(2)} v=${r.v.toFixed(1)} psi=${r.psi.toFixed(2)}${r.inBarrel ? ' B' : ''}`);
@@ -49,14 +50,28 @@ export function batch(n = 4, policies = { straight: () => 0, hold5: hold(.5), po
 export function scene(mode = 'medium') {
   const G = g(); G.paused = true; G.setMode(mode);
   document.getElementById('start').style.display = 'none'; document.body.classList.add('playing');
-  G.newWave(); G.input.paddleBtn = true; G.input.test = 0; return G.rider;
+  G.newWave(); G.input.paddleBtn = false; G.input.test = 0; return G.rider;
 }
 export function until(cond, policy = () => 0, max = 60) {
   const G = g(), r = G.rider; let t = 0;
-  while (!cond(r) && t < max) { if (r.state === 'RIDE' || r.state === 'POPUP') { const o = policy(r); G.input.test = typeof o === 'number' ? o : o.steer; G.input.paddleBtn = typeof o === 'number' ? false : !!o.pump; } G.step(1 / 30, 1 / 30, false); t += 1 / 30; }
+  while (!cond(r) && t < max) { if (r.state === 'WAIT' && r.zRel < 2.5 * r.wave.cond.speed) G.input.paddleBtn = true; if (r.state === 'RIDE' || r.state === 'POPUP') { const o = policy(r); G.input.test = typeof o === 'number' ? o : o.steer; G.input.paddleBtn = typeof o === 'number' ? false : !!o.pump; } G.step(1 / 30, 1 / 30, false); t += 1 / 30; }
   G.step(1 / 60); return `${r.state} s=${r.s.toFixed(1)} a=${r.a.toFixed(2)} v=${r.v.toFixed(1)} zRel=${r.zRel.toFixed(1)} barrel=${r.inBarrel} ${r.why}`;
 }
 // a fixed debug camera around the rider (dx, dy, dz metres from the board)
 export function look(dx, dy, dz, ty = 0.8) {
   const G = g(), p = G.rig.position; G.camera.position.set(p.x + dx, p.y + dy, p.z + dz); G.camera.lookAt(p.x, p.y + ty, p.z); G.renderer.render(G.scene, G.camera);
+}
+// catching like a person: wait, start paddling when the wave is `lead` seconds away, keep holding until up
+export function catchTest(lead, n = 6) {
+  const G = g(), out = {};
+  for (let i = 0; i < n; i++) {
+    G.newWave(); const r = G.rider; G.input.test = 0; G.input.paddleBtn = false;
+    for (let t = 0; t < 30 && (r.state === 'WAIT' || r.state === 'PADDLE'); t += 1 / 30) {
+      if (r.zRel < lead * r.wave.cond.speed) G.input.paddleBtn = true;
+      G.step(1 / 30, 1 / 30, false);
+    }
+    const k = r.state === 'POPUP' ? 'CAUGHT' : r.why; out[k] = (out[k] || 0) + 1;
+  }
+  G.input.paddleBtn = false; G.input.test = null;
+  return JSON.stringify(out);
 }
