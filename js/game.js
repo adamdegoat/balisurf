@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=53';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=75';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=54';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=79';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
 
@@ -141,14 +141,17 @@ function spawnRider() {
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
   rider.reset(2 + Math.random() * 4, -7 - Math.random() * 3, -Math.PI / 2);
   // don't drop a wave on your head as you arrive
-  const inc = incoming(); if (inc.t < 7) nextBreak = Math.max(nextBreak, T + 11);
+  // don't drop a wave on your head as you arrive: hold back every wave that hasn't reached you yet
+  { const inc = incoming(); if (inc.t < 7) { const shift = 7 - inc.t;
+      for (const w of waves) if (rider.z - w.zW >= -2) w.tBreak += shift;
+      nextBreak += shift; } }
   ui.msg.style.display = 'none';
 }
 
 // ---------- controls: PADDLE/PUMP (hold, left) and a thumb pad (right half). Keyboard for testing.
 const input = { paddle: false, steer: 0 };
 const keys = new Set();
-addEventListener('keydown', (e) => keys.add(e.code)); addEventListener('keyup', (e) => keys.delete(e.code));
+addEventListener('keydown', (e) => keys.add(e.code)); addEventListener('keyup', (e) => keys.delete(e.code)); addEventListener('blur', () => keys.clear());   // (switching apps mid-press)
 const ui = {
   paddle: document.getElementById('paddle'), stall: document.getElementById('stall'), pad: document.getElementById('pad'), touch: document.getElementById('touch'), knob: document.querySelector('#touch b'),
   speed: document.getElementById('speed'), score: document.getElementById('score'), cond: document.getElementById('cond'),
@@ -224,6 +227,7 @@ let starting = false;
 function toMenu() {
   window.__g.paused = true; starting = false; audio.pause(true);
   input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
+  keys.clear(); steerF = stickY = 0; ui.paddle.classList.remove('down'); ui.stall.classList.remove('down');
   document.body.classList.remove('playing', 'riding'); ui.msg.style.display = 'none';
   ui.start.style.display = ''; showBests();
 }
@@ -601,7 +605,7 @@ function wipeout(dt) {
       // back at the surface: head up, treading water
       p.y += (water - 1.35 - p.y) * Math.min(1, dt * 3);
       _dq.setFromEuler(_e.set(0, Math.atan2(camera.position.x - p.x, camera.position.z - p.z), 0)); obj.quaternion.slerp(_dq, Math.min(1, dt * 3));
-      vel.multiplyScalar(0.9); spin.set(0, 0, 0);
+      vel.multiplyScalar(Math.exp(-6.3 * dt)); spin.set(0, 0, 0);
     }
     if (!isBody && depth > -0.05 && W.t > 1.2) { p.y += (water + 0.03 - p.y) * Math.min(1, dt * 4); _dq.setFromEuler(_e.set(0, obj.rotation.y, 0)); obj.quaternion.slerp(_dq, dt * 2); }
   }
@@ -704,17 +708,17 @@ const _af = new THREE.Vector3(), _ar = new THREE.Vector3(), _ah = new THREE.Vect
 function surfStance() {
   if (sitting) straddle();
   const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POP' ? Math.min(1, rider.stateT / 0.45) : 0;
-  stanceW += (want - stanceW) * 0.2;
-  if (stanceW < 0.02 && st !== 'POP') return;
+  stanceW += (want - stanceW) * (1 - Math.exp(-13 * dtArm));
+  if ((stanceW < 0.02 && st !== 'POP') || (st === 'WIPE' && W.on)) return;   // (never pose a body that's been thrown off)
   if (!bones.thigh_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   surfer.updateMatrixWorld(true);
-  bodyT += 1 / 60;
+  bodyT += dtArm;
   // which way along the board each side of the body sits
   bones.thigh_l.getWorldPosition(_a); bones.thigh_r.getWorldPosition(_b);
   const side = Math.sign(_d.subVectors(_a, _b).dot(bodyFwd)) || 1;
   const w = stanceW, deep = rider.inBarrel ? 1 : 0;
   // how hard the turn is loading the legs (sideways g), smoothed; which way is the inside of the turn
-  gLoad += (Math.min(1.4, Math.abs(rider.turn) * rider.v / 9.8) - gLoad) * 0.15;
+  gLoad += (Math.min(1.4, Math.abs(rider.turn) * rider.v / 9.8) - gLoad) * (1 - Math.exp(-10 * dtArm));
   const leanN = Math.max(-1, Math.min(1, rider.lean / RIDE.leanMax));
   _in.crossVectors(bodyFwd, bodyUp).normalize().multiplyScalar(-Math.sign(leanN) || 1);   // toward the inside of the carve
   for (const [s, sgn] of [['l', side], ['r', -side]]) {

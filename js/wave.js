@@ -92,7 +92,7 @@ export class Wave {
   bend(s) { const Lx = this.cond.len || 1, sb = s / Lx; return (0.004 * sb * sb * Math.sign(sb) * -0.5 + 0.0015 * sb * sb) * Lx; }
   // how far the wave reaches along the reef and front to back (the physics only looks for water inside this)
   span() { const Lx = this.cond.len || 1, H = this.cond.H, Wd = this.cond.width || 1;
-    return this._span ||= { sLo: -BEHIND * Lx, sHi: AHEAD * Lx, zLo: -3.2 * H * Wd - 2, zHi: 2.4 * H * Wd + 6 }; }
+    return this._span ||= { sLo: -BEHIND * Lx, sHi: AHEAD * Lx, zLo: -4.6 * H * Wd - 2,   /* the whole drawn back of the wave */ zHi: 2.4 * H * Wd + 6 }; }
   // how tall the wave stands at distance s from the break: tallest at the peak, fading down the line (scaled by swell length)
   amp(s) { const L = this.cond.len || 1; return s > 0 ? 1 - 0.55 * smooth(8 * L, 70 * L, s) : 1 - 0.15 * smooth(0, 40 * L, -s); }
   // which blend of keyframes a slice at distance s ahead of the break has, plus how broken it is

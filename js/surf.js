@@ -103,7 +103,7 @@ export class Rider {
     this.paddling = false; this.paddleT = 0; this.catchT = 0;
     this.turn = 0; this.lean = 0; this.skid = 0; this.relS = 1; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
     this.wave = null; this.s = 99; this.zl = 99; this.inBarrel = false; this.onFace = false; this.lowT = 0;
-    this.pumpHold = 0; this.pumping = false;
+    this.pumpHold = 0; this.pumping = false; this.foamT = 0; this.tubeOut = 0; this.turnHold = 0; this.recentPaddle = 0; this.slide = 0; this.stalling = 0;
     this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, cutbacks: 0, snaps: 0, speed: 0, end: 0, score: 0, moves: [], tubeT: 0, leanPk: 0 }; this.turnSign = 0; this.cbArmed = false; this.snapArm = 0; this.trick = null;
   }
   set(state) { this.state = state; this.stateT = 0; }
@@ -135,7 +135,7 @@ export class Rider {
     //  which is exactly why it breaks: that's what picks a paddling surfer up)
     const sl = w ? w.prof.slice(q.s) : null;
     const d = H / 0.78, slopeNow = Math.sqrt(hx * hx + hz * hz);
-    const steep = smooth(0.35, 1.2, slopeNow), hRel = sl ? Math.min(1, q.y / Math.max(0.3, sl.top)) : 0;
+    const steep = smooth(0.35, 1.2, slopeNow), hRel = sl ? Math.min(1, q.y / Math.max(0.3, sl.top * (w.fade || 1))) : 0;
     let uz = w ? cw * Math.max(q.y / (d + q.y), Math.pow(hRel, 1.3) * (0.35 + 0.55 * steep)) * P.waterPush : 0;
     if (sl && sl.broken > 0.3 && q.zl > sl.topZ - 1.5 && q.y > 0.05) uz = Math.max(uz, cw * 0.85 * sl.broken);
     // Gravity along the surface, plus the push of the face itself. Work in the wave's own frame (moving along with the
@@ -214,7 +214,7 @@ export class Rider {
       ax += gx; az += gz;
       if (this.skid) { const loss = P.skidLoss * (1 - 0.5 * P.glide) * (latA - lim) * Math.sign(along); ax += -loss * dx; az += -loss * dz; }
       // pumping: weight the board on the way down, stay light going up. Legs only push for so long.
-      this.pumpHold = inp.pump ? this.pumpHold + h : 0;
+      this.pumpHold = inp.pump ? this.pumpHold + h : Math.max(0, this.pumpHold - 0.6 * h);   // legs recover slowly: tapping doesn't reset them
       const legs = 1 - smooth(0.45, 1.1, this.pumpHold);
       if (inp.pump) {
         const pull = g * Math.abs(this.gAlong) / (1 + slope2) * P.pump;
@@ -237,7 +237,9 @@ export class Rider {
     if (this.state === 'OUT') { this.inBarrel = false; this.onFace = false; return; }
     this.inBarrel = false; this.washed = false;
     if (!w) { this.onFace = false; if (this.standing) this.lostSpeed(h); return; }
-    const C = w.cond, H = C.H, s = q.s, zl = q.zl, y = q.y, slope = Math.hypot(this.hx, this.hz);
+    // (heights in the wave's own shape: the drawn wave is the profile scaled by the set's size, so the rules compare
+    // against the same scaled lip, top and barrel the player sees)
+    const C = w.cond, H = C.H, s = q.s, zl = q.zl, y = q.y / (w.fade || 1), slope = Math.hypot(this.hx, this.hz);
     const lipDown = C.hollow > 0.5 && sl.lipY < 0.45 * H;
     const onFront = zl > sl.topZ - 0.3;                               // on the face side of the wave, not behind it
     this.onFace = onFront && slope > 0.22 && this.hz < -0.1;          // downhill is toward the beach
@@ -260,17 +262,19 @@ export class Rider {
     const riding = this.state === 'RIDE';
     if (riding) this.ride.t += h;
     // falling out of the whitewater
-    if (sl.broken > 0.4 && onFront && y > 0.12 * H) return this.wipe(C.hollow > 0.5 ? 'The whitewater caught you' : 'The whitewater knocked you off');
+    // (a soft wave is forgiving: its whitewater is a gentle push you can ride, like beginners do; hollow waves knock you off)
+    const fg = C.forgive || 1;
+    if (sl.broken > 0.4 / fg && onFront && y > 0.12 * H / fg) return this.wipe(C.hollow > 0.5 ? 'The whitewater caught you' : 'The whitewater knocked you off');
     // too high while it's throwing
     // (only a wave that pitches can throw you; a soft, crumbly one just breaks around you and the whitewater rule decides)
     if (C.hollow > 0.5 && onFront && y > 0.86 * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
     this.inBarrel = lipDown && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
     // too deep: fall behind the curl and the foam ball (the broken wave churning inside the tube) catches you. You have
     // to keep your speed matched to the peel to stay in (pump, or come off the stall in time)
-    if (this.inBarrel && s < -1.75 * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > 2.2 || s < -2.6 * H) return this.wipe('Too deep: the foam ball swallowed you'); }
+    if (this.inBarrel && s < -2.0 * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > 2.5 || s < -2.8 * H) return this.wipe('Too deep: the foam ball swallowed you'); }
     else this.foamT = Math.max(0, (this.foamT || 0) - h);
     // over the back
-    if (!onFront && y < 0.4 * Math.max(sl.top, 0.3)) return this.out('Kicked out over the back');
+    if (!onFront && y < 0.4 * fg * fg * Math.max(sl.top, 0.3)) return this.out('Kicked out over the back');
     const kmh = this.v * 3.6; this.ride.top = Math.max(this.ride.top, kmh);
     if (riding) {
       if (this.inBarrel) this.ride.barrel += h;
@@ -280,11 +284,15 @@ export class Rider {
       const crit = Math.max(0, 1 - Math.abs(s + 0.5 * H) / (3 * H)) * 0.6 + 0.4 * Math.min(1, y / Math.max(0.3, sl.top));   // near the curl and high on the face = critical
       // a barrel counts once you come out of it (make it out, or it doesn't count)
       if (this.inBarrel) this.ride.tubeT += h;
-      else if (this.ride.tubeT > 0) { if (this.ride.tubeT > 0.5) this.move('BARREL', 0.6 + 0.4 * crit, this.ride.tubeT); this.ride.tubeT = 0; }
+      else if (this.ride.tubeT > 0) { this.tubeOut = (this.tubeOut || 0) + h;   // out for a moment (a wobble at the edge) is still the same barrel
+        if (this.tubeOut > 0.4) { if (this.ride.tubeT > 0.5) this.move('BARREL', 0.6 + 0.4 * crit, this.ride.tubeT); this.ride.tubeT = 0; } }
+      if (this.inBarrel) this.tubeOut = 0;
       // a turn counts when the carve swings hard one way and then hard the other at speed
+      // (and only a real carve: the last one held for at least 0.35 s, so thumb wiggles don't count)
       if (Math.abs(this.turn) > 0.9 && this.v > C.peel * 0.8) {
         const sg = Math.sign(this.turn);
-        if (sg !== this.turnSign) { if (this.turnSign !== 0) { this.ride.turns++; this.move('TURN', crit); } this.turnSign = sg; }
+        if (sg !== this.turnSign) { if (this.turnSign !== 0 && this.turnHold > 0.35) { this.ride.turns++; this.move('TURN', crit); } this.turnSign = sg; this.turnHold = 0; }
+        else this.turnHold = (this.turnHold || 0) + h;
       }
       // a cutback: from running down the line, turn right round to face the breaking part, still with speed
       const hd = Math.cos(this.th);
