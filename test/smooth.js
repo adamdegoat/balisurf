@@ -3,7 +3,7 @@
 //   cam jerk  = sudden changes in the camera's motion (m/s^3-ish, second difference of velocity)
 //   board jump = sudden changes in the board's height/tilt per frame
 // In the page console: const m = await import('./test/smooth.js'); m.measure('medium')
-import { brain } from './sim2.js';
+import { brain, carveBrain } from './sim2.js';
 const g = () => window.__g;
 const pct = (a, p) => { const b = [...a].sort((x, y) => x - y); return b[Math.min(b.length - 1, Math.floor(p * b.length))] || 0; };
 
@@ -11,7 +11,7 @@ export function measure(mode, secs = 60, opts = {}) {
   const G = g(); G.paused = true; G.setMode(mode);
   document.getElementById('start').style.display = 'none'; document.body.classList.add('playing');
   G.spawnRider();
-  const br = brain(opts), dt = 1 / 60, cam = G.camera;
+  const br = opts.carve ? carveBrain() : brain(opts), dt = 1 / 60, cam = G.camera;
   const dir = cam.getWorldDirection(new cam.position.constructor()), pd = dir.clone();
   const P = [], turn = [], jerk = [], byJump = [], tilt = [], stateAt = [];
   let prevUp = null, prevState = '';

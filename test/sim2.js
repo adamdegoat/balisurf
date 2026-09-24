@@ -92,3 +92,15 @@ export function carve(mode, n = 5, { hi = 0.7, lo = 0.25, dv = null, gain = 2.5 
   G.input.test = null; G.input.paddleBtn = false;
   return `${mode} carving\n` + out.join('\n');
 }
+
+export function carveBrain({ hi = 0.7, lo = 0.25, dv = null, gain = 2.5 } = {}) {
+  const base = brain({}); let phase = 'down';
+  return (r) => {
+    if (r.state !== 'RIDE' || !r.wave) { if (!r.standing) phase = 'down'; return base(r); }
+    const sl = r.wave.prof.slice(r.s), hRel = r.y / Math.max(sl.top, 0.3);
+    if (phase === 'down' && hRel < lo) phase = 'up'; else if (phase === 'up' && (hRel > hi || r.v < r.wave.cond.speed * 0.8)) phase = 'down';
+    const c = r.wave.cond.speed, k = dv ?? 0.5 * c, wantVz = phase === 'down' ? c + k : c - k;
+    const d = wrap(Math.asin(Math.max(-0.9, Math.min(0.97, wantVz / Math.max(r.v, 0.5)))) - r.th);
+    return { steer: Math.max(-1, Math.min(1, d * gain)), paddle: false, pump: false };
+  };
+}
