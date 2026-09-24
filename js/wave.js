@@ -135,7 +135,19 @@ export class Wave {
     this.spray.frustumCulled = false; scene.add(this.spray);
     for (let i = 0; i < N; i++) this.sl[i] = -1;
   }
+  dispose(scene) {
+    scene.remove(this.mesh); scene.remove(this.spray);
+    this.geo.dispose(); this.mesh.material.dispose();
+    this.spray.geometry.dispose(); this.spray.material.map.dispose(); this.spray.material.dispose();
+  }
   lipAt(s) {                                          // world position of the lip tip for the slice at s
+    // the shape for a given s never changes, so remember it (per 10 cm); only x moves with the peel
+    const key = Math.round(s * 10), c = (this._lip ||= new Map()).get(key);
+    if (c) return [this.peelX + s, c[0], c[1]];
+    const r = this._lipAt(key / 10); if (this._lip.size > 5000) this._lip.clear(); this._lip.set(key, [r[1], r[2]]);
+    return [this.peelX + s, r[1], r[2]];
+  }
+  _lipAt(s) {
     const { P } = this.shapeAt(s); const H = this.cond.H;
     const amp = s > 0 ? 1 - 0.55 * smooth(8, 70, s) : 1 - 0.15 * smooth(0, 40, -s);
     return [this.peelX + s, P[7][1] * H * amp, P[7][0] * H];
@@ -169,7 +181,7 @@ export class Wave {
     this.t += dt;
     this.peelX += this.cond.peel * (this.peelMul ?? 1) * dt;   // peelMul: surges in the peel speed (set by the game)
     this.mesh.position.x = this.peelX;                // same shape, slid along the reef as it peels
-    this.mesh.material.uniforms.uTime.value = this.t;
+    ENV.uTime.value += dt;
     this.mesh.material.uniforms.uH.value = this.cond.H;
     this.updateSpray(dt);
   }
@@ -188,6 +200,7 @@ export const WEATHER = {
 export const ENV = {
   uSun: { value: SUN_DIR.clone() }, uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSunCol: { value: new THREE.Color() },
   uFog: { value: new THREE.Color() }, uDeep: { value: new THREE.Color() }, uTurq: { value: new THREE.Color() },
+  uTime: { value: 0 },                                // one clock for every water surface, so the sea and the wave match
   uCloud: { value: 0.3 }, uChop: { value: 1 }, uFogFar: { value: 260 }, uSunVis: { value: 1 }, uFlash: { value: 0 },
 };
 export function setWeather(name) {
@@ -207,7 +220,7 @@ const NOISE = /* glsl */`
 export function waterMaterial({ wave = false } = {}) {
   return new THREE.ShaderMaterial({
     side: wave ? THREE.DoubleSide : THREE.FrontSide,
-    uniforms: { ...ENV, uTime: { value: 0 }, uH: { value: 2 } },
+    uniforms: { ...ENV, uH: { value: 2 } },
     vertexShader: /* glsl */`
       attribute vec2 aFoamThin;${wave ? '\n      attribute float aBrk;' : ''}
       uniform float uTime, uH;
@@ -251,8 +264,7 @@ export function waterMaterial({ wave = false } = {}) {
         float thin = vFT.y;
         vec3 deep = uDeep, turq = uTurq;
         // water pulled up the face leaves vertical streaks; the base of the wave is darker and denser
-        float streak = fbm(vec2(vW.x * 2.2 + vW.z * .6, vW.y * .35 - uTime * .6));
-        thin *= .75 + .5 * streak;
+        ${wave ? 'thin *= .75 + .5 * fbm(vec2(vW.x * 2.2 + vW.z * .6, vW.y * .35 - uTime * .6));' : ''}
         thin *= smoothstep(.03, .22 * uH, vW.y);                        // flat water in front of the wave matches the open sea (no seam)
         float base = smoothstep(.0, .9, vW.y / max(uH, .5));
         float back = pow(max(dot(-V, uSun), 0.), 3.);                // looking toward the sun through the water
@@ -261,6 +273,7 @@ export function waterMaterial({ wave = false } = {}) {
         vec3 col = mix(body, refl, fres);
         // sun glint
         col += uSunCol * pow(max(dot(R, uSun), 0.), 220.) * 3. * uSunVis;
+        ${wave ? `
         // foam: churned white where the lip throws and the whitewater rolls
         float foamN = fbm(vec2(vW.x, vW.y + vW.z) * 1.4 + vec2(0., uTime * 1.3));
         float foamMask = smoothstep(.35, .75, vFT.x + (foamN - .5) * .6);
@@ -274,6 +287,7 @@ export function waterMaterial({ wave = false } = {}) {
         foamMask = max(foamMask, lace * .55 * step(.02, vFT.y) * (1. - base * .4));
         vec3 foamCol = vec3(.95, .9, .86) * (.75 + .25 * max(dot(N, uSun), 0.)) + uHor * .12;
         col = mix(col, foamCol, foamMask);
+        ` : ''}
         // distance haze toward the horizon
         float d = length(cameraPosition - vW);
         col = mix(col, uFog, smoothstep(uFogFar * .15, uFogFar, d) * .9);

@@ -47,6 +47,7 @@
   #start .row { display: flex; gap: 8px; flex-wrap: wrap; }
   #start button { font: 600 13px "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); background: rgba(8,14,20,.35); border: 1.5px solid rgba(253,247,238,.6); padding: 12px 16px; border-radius: 3px; min-width: 104px; text-align: left; }
   #start button small { display: block; font-weight: 400; color: var(--dim); margin-top: 3px; font-size: 11px; }
+  #load { margin-top: 12px; min-height: 1.3em; color: var(--dim); }
   #start button:active { background: rgba(253,247,238,.18); }
   #rotate { position: fixed; inset: 0; display: none; place-items: center; background: #0d1720; color: var(--dim); z-index: 10; text-align: center; padding: 30px; }
   @media (orientation: portrait) and (max-width: 900px) { #rotate { display: grid; } }
@@ -62,23 +63,24 @@
 <div class="hud" id="fps"></div>
 <div class="ctl" id="paddle">PADDLE</div>
 <div class="ctl" id="pad"></div>
-<div class="ctl" id="guide"><svg class="u" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="d" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><b></b></div>
+<div class="ctl side" id="guide"><svg class="u" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="d" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><b></b></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
   <h1>Bali Surf</h1>
-  <p>A right-hand reef break. Hold PADDLE as the wave arrives. Once you're up, slide your right thumb up to climb the face and down to drop, and hold PUMP on the way down for speed.</p>
+  <p>A right-hand reef break. Hold PADDLE as the wave arrives. Once you're up, slide your right thumb left to climb the face and right to drop, and hold PUMP on the way down for speed.</p>
   <div class="row">
     <button data-mode="easy">Easy<small>Sunny, small and soft</small></button>
     <button data-mode="medium">Medium<small>Sunset, head-high barrels</small></button>
     <button data-mode="hard">Hard<small>Storm, big and heavy</small></button>
     <button data-mode="random">Random<small>Anything can roll in</small></button>
   </div>
+  <div id="load"></div>
 </div>
-<small id="build">build 260924-1403</small>
+<small id="build">build 260924-1415</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=39"></script>
+<script type="module" src="js/game.js?v=50"></script>
 </body>
 </html>

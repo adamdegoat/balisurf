@@ -34,7 +34,7 @@ export class SurfAudio {
   burst(gain, freq, dur, type = 'bandpass', delay = 0) {
     if (!this.ok) return;
     const ctx = this.ctx, t0 = ctx.currentTime + delay;
-    const src = ctx.createBufferSource(); src.buffer = this.noise; src.playbackRate.value = type === 'lowpass' ? 0.5 : 1;
+    const src = ctx.createBufferSource(); src.buffer = this.noise; src.loop = true; src.playbackRate.value = type === 'lowpass' ? 0.5 : 1;   // looped so long sounds never run off the end
     const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = freq; fl.Q.value = 0.8;
     const g = ctx.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + Math.min(0.04, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(fl).connect(g).connect(this.master); src.start(t0, Math.random() * 3); src.stop(t0 + dur + 0.05);
@@ -55,5 +55,7 @@ export class SurfAudio {
   paddle() { this.burst(0.18, 900 + Math.random() * 400, 0.25); }
   splash(size = 1) { this.burst(0.5 * size, 700, 0.9 * size); this.burst(0.35 * size, 2500, 0.5 * size, 'highpass'); }
   thunder(dist = 1) { this.burst(0.9, 90, 3.5, 'lowpass', 0.4 + dist * 1.5); this.burst(0.4, 260, 1.2, 'lowpass', 0.35 + dist * 1.5); }
+  // iOS only lets sound restart from a tap: call this from touch handlers
+  wake() { if (this.ok && this.ctx.state !== 'running') this.ctx.resume(); }
   pause(on) { if (!this.ok) return; on ? this.ctx.suspend() : this.ctx.resume(); }
 }

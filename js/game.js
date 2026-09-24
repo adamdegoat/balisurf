@@ -1,10 +1,10 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=16';
-import { Rider } from './surf.js?v=18';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=18';
+import { Rider } from './surf.js?v=28';
 import { makeBoard } from './board.js?v=1';
-import { SurfAudio } from './audio.js?v=1';
+import { SurfAudio } from './audio.js?v=2';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -32,17 +32,18 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); fi
 const rig = new THREE.Group(); scene.add(rig);           // board frame: +z along the board, +y out of the deck
 const board = makeBoard(); rig.add(board);
 let surfer = null, mixer = null, clips = {}, curClip = null;
-const ready = new Promise((res) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
+const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
   surfer = g.scene; rig.add(surfer);
   surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; } });
   mixer = new THREE.AnimationMixer(surfer);
   for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale')); clips[c.name] = mixer.clipAction(c); }
   res();
-}));
+}, undefined, (err) => { ui.load.textContent = 'Could not load the surfer. Check your connection and reload.'; rej(err); }));
 function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
   const a = clips[name]; if (!a) return;
   a.timeScale = speed; a.weight = weight;
   if (curClip === a) return;
+  if (curClip === clips.crouch && clips.stand) clips.stand.fadeOut(fade);   // the stance blend's second layer must not linger into other poses
   a.reset(); a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat); a.clampWhenFinished = true;
   if (curClip) a.crossFadeFrom(curClip, fade, false);
   a.play(); curClip = a;
@@ -52,7 +53,8 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
 let mode = null, wave = null, rider = null, session = { waves: 0, total: 0, best: 0 };
 function condFor(m) { return m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function newWave() {
-  if (wave) { scene.remove(wave.mesh); scene.remove(wave.spray); }
+  if (wave) wave.dispose(scene);
+  pumpC = 0; stanceW = 0; lastState = '';
   if (surfer) endWipe();
   const c = condFor(mode);
   wave = new Wave(scene, CONDITIONS[c]); wave.seed = Math.random() * 100;
@@ -81,21 +83,21 @@ const ui = {
   paddle: document.getElementById('paddle'), pad: document.getElementById('pad'), guide: document.getElementById('guide'), knob: document.querySelector('#guide b'),
   speed: document.getElementById('speed'), score: document.getElementById('score'), cond: document.getElementById('cond'),
   msg: document.getElementById('msg'), msgT: document.getElementById('msg-t'), msgS: document.getElementById('msg-s'),
-  tube: document.getElementById('tube'), hint: document.getElementById('hint'), start: document.getElementById('start'), sess: document.getElementById('sess'),
+  tube: document.getElementById('tube'), hint: document.getElementById('hint'), load: document.getElementById('load'), start: document.getElementById('start'), sess: document.getElementById('sess'),
 };
 const hold = (el, on, off) => {
   el.addEventListener('touchstart', (e) => { e.preventDefault(); on(e); }, { passive: false });
-  el.addEventListener('touchend', (e) => { e.preventDefault(); off(e); }, { passive: false });
-  el.addEventListener('touchcancel', (e) => { e.preventDefault(); off(e); }, { passive: false });
+  el.addEventListener('touchend', (e) => { e.preventDefault(); if (e.targetTouches.length === 0) off(e); }, { passive: false });
+  el.addEventListener('touchcancel', (e) => { e.preventDefault(); if (e.targetTouches.length === 0) off(e); }, { passive: false });
   el.addEventListener('mousedown', on); addEventListener('mouseup', off);
 };
-hold(ui.paddle, () => { input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
+hold(ui.paddle, () => { audio.wake(); input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
 // thumb pad: touch anywhere on the right half; the spot you first touch is the centre.
-// Riding: slide up = climb the face, down = drop. Paddling: slide left/right to angle along the wave.
-let padTouch = null, padX = 0, padY = 0;
+// Always left/right. Riding: the wave is on your left, so slide left = climb the face, right = drop. Paddling: aim along the wave.
+let padTouch = null, padX = 0, padY = 0, lastPadTouch = undefined, lastKnob = 1e9;
 const PAD_R = 55;
 const padMove = (x, y) => { if (!padTouch) return; padX = Math.max(-1, Math.min(1, (x - padTouch.x0) / PAD_R)); padY = Math.max(-1, Math.min(1, (y - padTouch.y0) / PAD_R)); };
-ui.pad.addEventListener('touchstart', (e) => { e.preventDefault(); if (padTouch) return; const t = e.changedTouches[0]; padTouch = { id: t.identifier, x0: t.clientX, y0: t.clientY }; padX = padY = 0; }, { passive: false });
+ui.pad.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); if (padTouch) return; const t = e.changedTouches[0]; padTouch = { id: t.identifier, x0: t.clientX, y0: t.clientY }; padX = padY = 0; }, { passive: false });
 ui.pad.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (padTouch && t.identifier === padTouch.id) padMove(t.clientX, t.clientY); }, { passive: false });
 const padEnd = (e) => { e.preventDefault(); for (const t of e.changedTouches) if (padTouch && t.identifier === padTouch.id) padTouch = null; };
 ui.pad.addEventListener('touchend', padEnd, { passive: false }); ui.pad.addEventListener('touchcancel', padEnd, { passive: false });
@@ -104,37 +106,40 @@ addEventListener('mousemove', (e) => { if (padTouch && padTouch.id === 'm') padM
 addEventListener('mouseup', () => { if (padTouch && padTouch.id === 'm') padTouch = null; });
 function readInput(dt) {
   if (!padTouch) { padX *= Math.max(0, 1 - dt * 10); padY *= Math.max(0, 1 - dt * 10); }   // let go and the board runs straight
-  const lying = !rider || rider.state === 'WAIT' || rider.state === 'PADDLE';
-  // keys: up/down (W/S) while riding, left/right (A/D) while paddling
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-  const ky = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
-  // internal steer: + = down the face (riding) / toward screen-right (paddling)
-  const v = lying ? (kx || padX) : (ky || padY);
+  // internal steer: + = screen-right = down the face (riding) / aim right (paddling)
+  const v = kx || padX;
   input.steer = input.test != null ? input.test : v;   // input.test: scripted steering for automated checks
   input.paddle = !!input.paddleBtn || keys.has('Space');
-  ui.guide.classList.toggle('side', lying); ui.guide.classList.toggle('live', !!padTouch);
-  ui.knob.style.transform = lying ? `translateX(${input.steer * 45}px)` : `translateY(${input.steer * 45}px)`;
+  if (padTouch !== lastPadTouch) { ui.guide.classList.toggle('live', !!padTouch); lastPadTouch = padTouch; }
+  const kt = Math.round(input.steer * 45); if (kt !== lastKnob) { ui.knob.style.transform = `translateX(${kt}px)`; lastKnob = kt; }
   return { paddle: input.paddle, pump: input.paddle, steer: -input.steer };   // same button: paddle lying down, pump once standing
 }
 
 for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => start(b.dataset.mode));
+let starting = false;
 async function start(m) {
-  mode = m; setWeather(m); audio.start(); await ready;
+  if (starting) return; starting = true;
+  mode = m; setWeather(m); audio.start();
+  // fullscreen + landscape lock must be asked for inside the tap, before any waiting (Android); iOS ignores both safely
+  try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {}); } catch (e) {}
+  ui.load.textContent = surfer ? '' : 'Loading...';
+  try { await ready; } catch (e) { starting = false; return; }
+  ui.load.textContent = '';
   ui.start.style.display = 'none'; document.body.classList.add('playing');
-  document.documentElement.requestFullscreen?.().catch(() => {}); screen.orientation?.lock?.('landscape').catch(() => {});
   session = { waves: 0, total: 0, best: 0 };
   newWave();
 }
 if (Q.get('mode')) start(Q.get('mode'));
 
 // ---------- camera: in front while you wait for the wave, behind once you're up, tight and low in the barrel
-const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3();
+const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3(), _lk = new THREE.Vector3();
 let faceSea = 1;                                                     // 1 = sitting up facing the incoming sets, 0 = turned to the beach
 const camPos = new THREE.Vector3(0, 2, 10), camLook = new THREE.Vector3(), pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() };
 function updateCamera(dt) {
   const p = pose.pos, st = rider.state, H = wave.cond.H;
   let want, look;
-  if (st === 'WAIT' || st === 'PADDLE' || (st === 'DONE' && rider.ride.t === 0)) {
+  if (st === 'WAIT' || st === 'PADDLE' || st === 'DONE') {
     // over your shoulder, looking where you look: out at the sets while you wait, toward the beach once you paddle
     const d = lookDir.set(Math.sin(rider.heading), 0, Math.cos(rider.heading)).applyAxisAngle(WORLD_UP, Math.PI * faceSea);
     want = p.clone().addScaledVector(d, -3.1).add(_cv.set(0.35, 1.25, 0));
@@ -154,9 +159,9 @@ function updateCamera(dt) {
     look = new THREE.Vector3(b.x, Math.max(b.y + (W.t > 1.4 ? 1.3 : 0.4), wy), b.z);
   } else {
     const tube = rider.inBarrel ? 1 : 0;
-    const back = 3.6 - 1.6 * tube + 0.06 * rider.v, height = 1.35 - 0.6 * tube;
-    // behind your heading, a little out toward the beach so the wall stays in shot
-    want = p.clone().addScaledVector(pose.fwd, -back).add(new THREE.Vector3(0, height, 0.9 - 0.5 * tube));
+    const back = 3.4 - 1.4 * tube + 0.05 * rider.v, height = 1.3 - 0.55 * tube;
+    // behind you along the wave (not along the board, which points up or down the face), out toward the beach so the wall frames the left
+    want = _cv.set(p.x - back, p.y + height, p.z + 1.3 - 0.8 * tube).clone();
     want.y = Math.max(want.y, 0.35);
     // never inside the water: stay in front of the face, and inside the tube stay behind the curtain and under the ceiling
     // the tube collapses into whitewater behind -4.5H: the camera can't sit back there
@@ -167,10 +172,13 @@ function updateCamera(dt) {
       want.y = Math.min(Math.max(want.y, p.y + 0.45), 0.62 * H);
     }
     want.y = Math.max(want.y, rider.face.surfaceY(cs, want.z) + 0.3);
-    look = p.clone().addScaledVector(pose.fwd, 3).add(new THREE.Vector3(0, 0.6, 0));
+    // never inside the wall: keep the camera in front of the face at its own height
+    if (!tube) want.z = Math.max(want.z, rider.face.zAtHeight(cs, want.y) + 0.7);
+    look = _lk.set(pose.fwd.x, pose.fwd.y * 0.4, pose.fwd.z * 0.5).normalize().multiplyScalar(3).add(p); look.y += 0.6;
     if (tube) look.y = p.y + 0.55;                                     // level gaze down the tube toward the opening
   }
-  const k = snapCam ? 1 : Math.min(1, dt * (st === 'RIDE' ? 5 : st === 'WIPE' ? 3.5 : 7));   // lying down the target itself swings round smoothly snapCam = false;
+  const k = snapCam ? 1 : Math.min(1, dt * (st === 'RIDE' ? 5 : st === 'WIPE' ? 3.5 : 7));   // lying down, the target itself swings round smoothly
+  snapCam = false;
   camPos.lerp(want, k); camLook.lerp(look, k);
   camera.position.copy(camPos);
   if (st === 'WIPE') { const sh = 0.12 * Math.exp(-(W.t || 0) * 2.5); camera.position.add(new THREE.Vector3((Math.random() - .5) * sh, (Math.random() - .5) * sh, 0)); }
@@ -179,7 +187,7 @@ function updateCamera(dt) {
 
 // ---------- surfer pose on the board
 const WORLD_UP = new THREE.Vector3(0, 1, 0), INTO_WAVE = new THREE.Vector3(0, 0, -1), tmpM = new THREE.Matrix4(), xAxis = new THREE.Vector3(), bodyUp = new THREE.Vector3(), bodyFwd = new THREE.Vector3(), bodyX = new THREE.Vector3();
-const _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
+const _up = new THREE.Vector3(), _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
 // the rider's world orientation (bodyQ, plus side-on stance) expressed in the board's frame
 const setStance = () => { invQ.copy(rig.quaternion).invert(); surfer.quaternion.copy(invQ).multiply(bodyQ).multiply(stanceQ); };
 function updateRig(dt, t) {
@@ -188,12 +196,12 @@ function updateRig(dt, t) {
   // the board rides on its rail: tilted partway toward the face, not lying flat against a steep wall
   if (rider.state !== 'WAIT' && rider.state !== 'PADDLE') { pose.up.lerp(WORLD_UP, 0.45).normalize(); pose.up.addScaledVector(pose.fwd, -pose.up.dot(pose.fwd)).normalize(); }
   xAxis.crossVectors(pose.up, pose.fwd).normalize();
-  const up = new THREE.Vector3().crossVectors(pose.fwd, xAxis).normalize();
+  const up = _up.crossVectors(pose.fwd, xAxis).normalize();
   tmpM.makeBasis(xAxis, up, pose.fwd);
   rig.quaternion.setFromRotationMatrix(tmpM);
   rig.position.copy(pose.pos);
   // sitting you face the sea; when you start paddling you swing the board round to the beach
-  faceSea += ((rider.state === 'WAIT' || (rider.state === 'DONE' && rider.ride.t === 0) ? 1 : 0) - faceSea) * Math.min(1, dt * 3.5);
+  faceSea += ((rider.state === 'WAIT' || rider.state === 'DONE' ? 1 : 0) - faceSea) * Math.min(1, dt * 3.5);
   if (faceSea > 0.001) rig.quaternion.premultiply(_yq.setFromAxisAngle(WORLD_UP, Math.PI * faceSea));
   const upright = rider.state === 'POPUP' || rider.state === 'RIDE' || (rider.state === 'WIPE' && rider.stateT < 0.8);
   if (upright) {
@@ -318,17 +326,18 @@ function surfStance() {
 }
 
 // ---------- HUD + end of ride
+const setText = (el, t) => { if (el._t !== t) { el._t = t; el.textContent = t; } };   // only touch the page when the text changes
 let endT = -1, snapCam = true;
 function updateHUD(dt) {
   const st = rider.state;
-  ui.speed.textContent = st === 'RIDE' || st === 'POPUP' ? `${Math.round(rider.v * 3.6)} km/h` : '';
+  setText(ui.speed, st === 'RIDE' || st === 'POPUP' ? `${Math.round(rider.v * 3.6)} km/h` : '');
   ui.paddle.style.visibility = st === 'WIPE' || st === 'DONE' ? 'hidden' : 'visible';
   const lbl = st === 'WAIT' || st === 'PADDLE' ? 'PADDLE' : 'PUMP'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
   // first waves: tell the player what to do while the set rolls in
   const hint = st === 'WAIT' ? (rider.zRel < wave.cond.speed * 2.6 ? 'Now! Hold PADDLE' : rider.zRel < wave.cond.speed * 5 ? 'Wave coming, get ready...' : '') : st === 'PADDLE' && rider.lifting ? 'It\'s lifting you, keep paddling!' : st === 'PADDLE' ? 'Wave behind you: keep paddling' : st === 'POPUP' ? 'Up!' : st === 'RIDE' && rider.stateT < 3.5 && session.waves < 2 ? 'Hold PUMP as you drop down the face' : '';
-  ui.hint.textContent = session.waves < 3 || st === 'POPUP' ? hint : '';
+  setText(ui.hint, session.waves < 3 || st === 'POPUP' ? hint : '');
   ui.tube.style.opacity = rider.inBarrel && st === 'RIDE' ? 1 : 0;
-  ui.score.textContent = st === 'RIDE' ? Math.round(rider.ride.t * 5 + rider.ride.pocket * 10 + rider.ride.turns * 15 + rider.ride.top * 1.5 + rider.ride.barrel * 60) : '';
+  setText(ui.score, st === 'RIDE' ? '' + rider.liveScore() : '');
   if ((st === 'WIPE' || st === 'DONE') && endT < 0) {
     endT = 0; session.waves++; session.total += rider.ride.score; session.best = Math.max(session.best, rider.ride.score);
     ui.msgT.textContent = rider.why;
@@ -341,19 +350,22 @@ function updateHUD(dt) {
 }
 
 // ---------- automatic quality
-let fpsAcc = 0, fpsN = 0, lowT = 0, highT = 0;
+let fpsAcc = 0, fpsN = 0, lowT = 0, highT = 0, refFps = 30;
 function autoQuality(dt) {
   fpsAcc += dt; fpsN++;
   if (fpsAcc < 1) return;
   const fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0;
-  if (fps < 50) { lowT++; highT = 0; } else if (fps > 58) { highT++; lowT = 0; }
+  // compare against what this screen can actually do (60, 120, or 30 in iPhone Low Power Mode), not a fixed number
+  refFps = Math.max(Math.min(fps, 125), refFps - 2);
+  if (fps < refFps * 0.82) { lowT++; highT = 0; } else if (fps > refFps * 0.95) { highT++; lowT = 0; }
   if (lowT >= 2 && pr > 0.75) { pr = Math.max(0.75, pr - 0.15); renderer.setPixelRatio(pr); lowT = 0; }
   if (highT >= 6 && pr < MAX_PR) { pr = Math.min(MAX_PR, pr + 0.1); renderer.setPixelRatio(pr); highT = 0; }
   if (Q.has('debug')) document.getElementById('fps').textContent = `${Math.round(fps)} fps · pr ${pr.toFixed(2)}`;
 }
 
 // ---------- loop
-let last = performance.now(), T = 0, strokeT = 0;
+const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)');
+let last = performance.now(), T = 0, strokeT = 0, lastState = '';
 function tick(dt) {
   T += dt;
   const inp = readInput(dt);
@@ -363,7 +375,7 @@ function tick(dt) {
     wave.peelMul = 1 + sg * (Math.sin(T * 0.9 + wave.seed) * 0.6 + Math.sin(T * 2.3 + wave.seed * 3) * 0.4);
     wave.update(dt);
     if (rider.state !== 'WIPE' && rider.state !== 'DONE') rider.update(dt, inp);
-    else { rider.stateT += dt; if (rider.state === 'DONE' && rider.ride.t === 0) rider.zRel -= wave.cond.speed * dt; }   // a missed wave keeps rolling past
+    else { rider.stateT += dt; if (rider.state === 'DONE') rider.zRel -= wave.cond.speed * dt; }   // the wave keeps rolling on past you
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); surfStance(); }
     updateCamera(dt);
@@ -375,7 +387,7 @@ function tick(dt) {
     if (st === 'WIPE' && W.on && surfer) { const b = surfer.position; underwater = W.t < 1.4 && b.y < rider.face.surfaceY(b.x - wave.peelX, b.z) - 0.2; }
     audio.update({ H, near, barrel: rider.inBarrel && st === 'RIDE', riding: st === 'RIDE' || st === 'POPUP', v: rider.v, turn: rider.turn, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
     if (st === 'PADDLE' && rider.paddleV > 0.3) { strokeT -= dt * (0.9 + rider.paddleV * 0.5); if (strokeT <= 0) { strokeT = 0.5; audio.paddle(); } }
-    if (st === 'POPUP' && rider.stateT < dt * 1.5) audio.splash(0.35);
+    if (st !== lastState) { if (st === 'POPUP') audio.splash(0.35); lastState = st; }
     sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   } else {
     // behind the start screen: a slow drift along a peeling wave
@@ -384,12 +396,12 @@ function tick(dt) {
     const px = tick.demo.peelX;
     camera.position.set(px + 14, 2.2, 13); camera.lookAt(px - 2, 1.2, 0);
   }
-  if (wave && tick.demo) { scene.remove(tick.demo.mesh); scene.remove(tick.demo.spray); tick.demo = null; }
+  if (wave && tick.demo) { tick.demo.dispose(scene); tick.demo = null; }
   fx.update(dt, camera.position);
 }
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
-  if (!window.__g.paused) tick(dt);
+  if (!window.__g.paused && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
 window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get wave() { return wave; }, input, keys, setMode: (m) => { mode = m; setWeather(m); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, newWave };

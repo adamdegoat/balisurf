@@ -16,9 +16,7 @@ export function run(policy, secs = 70) {
 }
 // hold a target height on the face
 export const hold = (ta) => (r) => {
-  const aNext = r.a + Math.sin(r.psi) * r.v / r.face.slice(r.s).L * 0.35;          // look ahead like a real surfer would
-  const want = Math.max(-.6, Math.min(.6, (ta - aNext) * 2.5));
-  return -Math.max(-1, Math.min(1, (want - r.psi) * 2.5));
+  return Math.max(-1, Math.min(1, (0.5 - ta) / 0.38));   // thumb position = the line you want
 };
 // pump: swing up and down the face in the pocket to build speed and score turns
 export const pump = (r) => { const H = r.wave.cond.H; const hi = (r.t = (r.t || 0) + 1 / 30) % 1.6 < 0.8; return hold(r.s > 3 * H ? 0.8 : hi ? 0.7 : 0.25)(r); };
