@@ -136,7 +136,7 @@ const hold = (el, on, off) => {
 hold(ui.paddle, () => { audio.wake(); input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
 // thumb pad: touch anywhere on the right half; the spot you first touch is the centre.
 // Left/right turns the board left/right, like leaning on a real board: lying, it points you where you paddle; standing, it carves.
-let padTouch = null, padX = 0, padY = 0, lastPadTouch = undefined, lastKnob = 1e9, steerF = 0;
+let padTouch = null, padX = 0, padY = 0, lastPadTouch = undefined, lastKnob = '', steerF = 0, stickY = 0, lastStickMode = null;
 const PAD_R = 62;                                                   // thumb travel (px) for a full lean
 const padMove = (x, y) => { if (!padTouch) return; padX = Math.max(-1, Math.min(1, (x - padTouch.x0) / PAD_R)); padY = Math.max(-1, Math.min(1, (y - padTouch.y0) / PAD_R)); };
 ui.pad.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); if (padTouch) return; const t = e.changedTouches[0]; padTouch = { id: t.identifier, x0: t.clientX, y0: t.clientY }; padX = padY = 0; }, { passive: false });
@@ -151,14 +151,44 @@ function readInput(dt) {
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   // thumb feel: a small dead zone (a resting thumb wobbles), fine control near the centre, full lean at the edge,
   // and a light filter so the board answers smoothly instead of twitching with every pixel
-  const ax = Math.abs(padX), shaped = ax < 0.08 ? 0 : Math.sign(padX) * Math.pow((ax - 0.08) / 0.92, 1.35);
-  const raw = kx || shaped;
-  steerF += (raw - steerF) * Math.min(1, dt * 14);
+  const shape = (v) => { const a = Math.abs(v); return a < 0.08 ? 0 : Math.sign(v) * Math.pow((a - 0.08) / 0.92, 1.35); };
+  const ky = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+  const sx = input.stick ? input.stick.x : kx || shape(padX), sy = input.stick ? input.stick.y : ky || shape(padY);
+  steerF += (sx - steerF) * Math.min(1, dt * 14);
+  stickY += (sy - stickY) * Math.min(1, dt * 14);
   input.steer = input.test != null ? input.test : steerF;   // input.test: scripted steering for automated checks
+  input.up = input.test != null ? 0 : stickY;              // thumb up (-) / down (+): where on the face you want to be
   input.paddle = !!input.paddleBtn || keys.has('Space');
+  const stickMode = !!(rider && rider.standing);
+  if (stickMode !== lastStickMode) { ui.guide.classList.toggle('stick', stickMode); ui.guide.classList.toggle('side', !stickMode); lastStickMode = stickMode; }
   if (padTouch !== lastPadTouch) { ui.guide.classList.toggle('live', !!padTouch); lastPadTouch = padTouch; }
-  const kt = Math.round(padX * 45); if (kt !== lastKnob) { ui.knob.style.transform = `translateX(${kt}px)`; lastKnob = kt; }
-  return { paddle: input.paddle, pump: input.paddle, steer: input.steer };    // same button: paddle lying down, pump once standing; steer + = turn right
+  const kt = `translate(${Math.round(padX * 42)}px,${Math.round((rider && rider.standing ? padY : 0) * 42)}px)`; if (kt !== lastKnob) { ui.knob.style.transform = kt; lastKnob = kt; }
+  return { paddle: input.paddle, pump: input.paddle, steer: input.steer, up: input.up };    // same button: paddle lying down, pump once standing; steer + = turn right
+}
+
+// Riding: the thumb says where you want to go on the wave, like in a surf game.
+//   up / down  = carve up the face toward the lip / drop to the bottom (how far you push = how hard you carve)
+//   sideways   = lean the board that way yourself (cutbacks, free turns); it overrides up/down while you hold it
+//   let go     = the board holds a gentle line mid-face (a surfer's trim), nothing more
+// Underneath it's the same physics: this only picks the lean a surfer would use to head there.
+const SURF = { range: 0.3, push: 0.9, ahead: 0.35 };   // how far up/down the face the thumb reaches, and how hard it pushes you there
+function surfSteer(sx, sy) {
+  const r = rider, w = r.wave;
+  if (!w || r.v < 1.5) return sx;
+  const c = w.cond.speed, v = Math.max(r.v, 0.5);
+  if (r.state !== 'RIDE' || r.stateT < 0.9) sy = Math.max(sy, 0);   // make the drop first: no climbing straight back into the lip
+  // the thumb picks a height on the face: up = high under the lip, centre = mid-face, down = the bottom.
+  // Heading there is a speed toward the beach: slower than the wave = climbing its face, faster = dropping down it
+  // (judged a moment ahead: if you're already climbing fast you'll get there anyway, so start turning early)
+  const top = Math.max(w.prof.slice(r.s).top, 0.3), climb = (c - r.vz) * Math.hypot(r.hx, r.hz);
+  const hRel = (r.y + climb * SURF.ahead) / top, hT = 0.5 - SURF.range * sy;
+  const want = c + (hRel - hT) * 0.76 * c * (1 + SURF.push * Math.abs(sy));   // scaled to the wave: a small wave needs a gentler push
+  // too slow to hold the face yet (the drop): angle down it to pick up speed
+  let target = r.v < c * 0.95 ? 1.1 : Math.asin(Math.max(-0.6, Math.min(0.97, want / v)));
+  if (Math.cos(r.th) < 0) target = Math.PI - target;               // facing back toward the curl (after a cutback): same, mirrored
+  const err = Math.atan2(Math.sin(target - r.th), Math.cos(target - r.th));
+  const side = Math.min(1, Math.abs(sx) * 1.4);                     // pushing sideways: you're steering yourself
+  return Math.max(-1, Math.min(1, Math.max(-1, Math.min(1, err * 2.2)) * (1 - side) + sx));
 }
 
 // your best ride per level, kept on this phone (quietly does nothing if storage is blocked)
@@ -663,8 +693,8 @@ function updateHUD(dt) {
     else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
   } else if (st === 'POP') hint = 'Up!';
-  else if (st === 'RIDE' && rider.stateT < 5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Lean with your thumb: a little to carve, all the way to drift' : 'Hold PUMP as you drop down the face for speed';
-  else if (st === 'RIDE' && rider.stateT > 6 && rider.stateT < 10 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: lean toward the beach and keep turning till you face the breaking wave';
+  else if (st === 'RIDE' && rider.stateT < 5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Thumb up: carve up to the lip. Thumb down: drop to the bottom' : 'Hold PUMP as you drop down the face for speed';
+  else if (st === 'RIDE' && rider.stateT > 6 && rider.stateT < 10 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: push your thumb sideways toward the beach and hold till you face the breaking wave';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
   // the callout: BARREL while you're in it, or the move you just landed
   const call = st !== 'RIDE' ? '' : rider.inBarrel ? 'BARREL' : rider.trick ? rider.trick.name : '';
@@ -682,9 +712,14 @@ function updateHUD(dt) {
     const stat = (v, l) => `<div>${v}<span>${l}</span></div>`;
     ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.cutbacks ? stat(r.cutbacks, r.cutbacks > 1 ? 'CUTBACKS' : 'CUTBACK') : '') + (r.snaps ? stat(r.snaps, r.snaps > 1 ? 'SNAPS' : 'SNAP') : '') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
     ui.sess.textContent = session.waves ? `Rides ${session.waves}  ·  session best ${session.best}  ·  all-time best ${Math.max(bestFor(mode), r.score)}` : '';
-    ui.msg.style.display = 'flex';
   }
-  if (endT >= 0) { endT += dt; if (endT > (st === 'WIPE' ? 3.4 : 2.6)) spawnRider(); }
+  // a wipeout plays out first (you see yourself go over), then the summary fades in
+  if (endT >= 0) {
+    endT += dt;
+    const showAt = st === 'WIPE' ? 0 : 0.2;   // TODO: 1.4 for WIPE once the wipeout camera shows the fall (today it's a wall of water)
+    if (endT >= showAt && ui.msg.style.display !== 'flex') { ui.msg.style.opacity = 0; ui.msg.style.display = 'flex'; requestAnimationFrame(() => (ui.msg.style.opacity = 1)); }
+    if (endT > showAt + (st === 'WIPE' ? 3.4 : 2.6)) spawnRider();
+  }
 }
 
 // ---------- automatic quality
@@ -709,6 +744,7 @@ function tick(dt) {
   T += dt;
   ENV.uTime.value += dt;
   const inp = readInput(dt);
+  if (rider && rider.standing && input.test == null) inp.steer = surfSteer(inp.steer, inp.up);
   if (rider) {
     updateWaves(dt);
     rider.update(dt, inp, waves);
@@ -760,4 +796,4 @@ renderer.setAnimationLoop(() => {
   if (!window.__g.paused && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
-window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
+window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, SURF, want: () => _want };

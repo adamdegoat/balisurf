@@ -43,11 +43,14 @@
     border-radius: 32px; border: 2px solid rgba(255,255,255,.5); background: rgba(10,30,40,.2); transition: opacity .2s; }
   #guide.live { border-color: rgba(255,255,255,.75); }
   #guide b { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-  #guide svg { position: absolute; left: 50%; width: 16px; height: 10px; margin-left: -8px; opacity: .8; }
-  #guide svg.u { top: 10px; } #guide svg.d { bottom: 10px; transform: rotate(180deg); }
-  #guide.side { width: 150px; height: 64px; }
-  #guide.side svg.u { top: 50%; left: 12px; margin: -5px 0 0; transform: rotate(-90deg); } #guide.side svg.d { top: 50%; left: auto; right: 12px; bottom: auto; margin: -5px 0 0; transform: rotate(90deg); }
+  #guide svg { position: absolute; width: 16px; height: 10px; opacity: .8; display: none; }
+  #guide svg.u { left: 50%; top: 10px; margin-left: -8px; } #guide svg.d { left: 50%; bottom: 10px; margin-left: -8px; transform: rotate(180deg); }
+  #guide svg.l { top: 50%; left: 12px; margin-top: -5px; transform: rotate(-90deg); } #guide svg.r { top: 50%; right: 12px; margin-top: -5px; transform: rotate(90deg); }
+  /* paddling: a left/right bar. riding: a round pad, up = up the face, down = to the bottom, sideways = turn */
+  #guide.side { width: 150px; height: 64px; } #guide.side svg.l, #guide.side svg.r { display: block; }
+  #guide.stick { width: 132px; height: 132px; border-radius: 50%; } #guide.stick svg { display: block; }
   #msg { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; padding: 0 30px; }
+  #msg { transition: opacity .35s; }
   #msg { background: radial-gradient(ellipse at center, rgba(5,12,18,.45), rgba(5,12,18,0) 70%); }
   #msg-t { font-size: 15px; font-weight: 600; color: var(--dim); text-shadow: 0 1px 4px rgba(0,0,0,.6); }
   #msg-n { margin-top: 2px; font: 800 54px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(0,0,0,.4); }
@@ -79,11 +82,11 @@
 <div class="hud" id="fps"></div>
 <div class="ctl" id="paddle">PADDLE</div>
 <div class="ctl" id="pad"></div>
-<div class="ctl side" id="guide"><svg class="u" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="d" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><b></b></div>
+<div class="ctl side" id="guide"><svg class="u" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="d" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="l" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="r" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><b></b></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
   <h1>Bali Surf</h1>
-  <p>A right-hand reef break in Bali. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: left and right lean the board. Hold PUMP on the way down for speed.</p>
+  <p>A right-hand reef break in Bali. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: up carves up the face to the lip, down drops you to the bottom, sideways turns the board. Hold PUMP on the way down for speed.</p>
   <div class="row">
     <button data-mode="easy">Easy<small>Sunny, small and soft</small></button>
     <button data-mode="medium">Medium<small>Sunset, head-high barrels</small></button>
@@ -93,11 +96,11 @@
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260924-1713</small>
+<small id="build">build 260924-1732</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=177"></script>
+<script type="module" src="js/game.js?v=194"></script>
 </body>
 </html>

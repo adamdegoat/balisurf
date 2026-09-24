@@ -182,3 +182,36 @@ export function feel(mode, amt = 0.8) {
   const slips = tr.filter((x) => x.t < 1.3).map((x) => x.slip);
   return `${mode} thumb ${amt}: turn bites in ${bite.toFixed(2)}s, stops ${settle.toFixed(2)}s after letting go, peak ${(peak * 57.3).toFixed(0)} deg/s, tail slide max ${Math.max(...slips).toFixed(0)} deg`;
 }
+
+// ride with the real thumb pad (input.stick: x sideways, y up(-)/down(+)), like a player would. `plan(r, t)` gives the
+// thumb position t seconds after standing. Paddling in is scripted as usual.
+export function thumb(mode, plan, n = 2) {
+  const G = g(); G.paused = true; G.setMode(mode);
+  document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); G.spawnRider();
+  const br = brain({}), out = []; let hs = [], guard = 0;
+  while (out.length < n && guard++ < 60 * 60 * 4) {
+    const r = G.rider;
+    if (r.state === 'WIPE' || r.state === 'OUT') {
+      const R = r.ride; hs.sort((a, b) => a - b);
+      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h turns ${R.turns} snaps ${R.snaps} cutbacks ${R.cutbacks} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
+      hs = []; G.spawnRider(); continue;
+    }
+    if (!r.standing) { const o = br(r); G.input.stick = null; G.input.test = o.steer; G.input.paddleBtn = o.paddle; }
+    else {
+      G.input.test = null; G.input.paddleBtn = false;
+      G.input.stick = r.state === 'RIDE' ? plan(r, r.stateT) : { x: 0, y: 0 };
+      if (r.wave && r.state === 'RIDE') hs.push(r.y / Math.max(r.wave.prof.slice(r.s).top, 0.3));
+    }
+    G.step(1 / 60, 1 / 60, false);
+  }
+  G.input.test = null; G.input.stick = null; G.input.paddleBtn = false;
+  return `${mode}\n` + out.join('\n');
+}
+// a few ways a player might use the thumb
+export const PLANS = {
+  handsOff: () => ({ x: 0, y: 0 }),
+  upDown: (r, t) => ({ x: 0, y: Math.floor(t / 1.1) % 2 ? 1 : -1 }),          // flick up to the lip, down to the bottom, repeat
+  upDownHalf: (r, t) => ({ x: 0, y: (Math.floor(t / 1.1) % 2 ? 1 : -1) * 0.5 }),
+  // read the wave: go up when low, down when high (what a player watching the screen does)
+  reader: (r) => { if (!r.wave) return { x: 0, y: 0 }; const h = r.y / Math.max(r.wave.prof.slice(r.s).top, 0.3); r._ph = r._ph || 'up'; if (h > 0.7) r._ph = 'down'; else if (h < 0.25) r._ph = 'up'; return { x: 0, y: r._ph === 'up' ? -1 : 1 }; },
+};
