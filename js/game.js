@@ -640,7 +640,7 @@ function surfStance() {
   if (sitting) straddle();
   const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POP' ? Math.min(1, rider.stateT / 0.45) : 0;
   stanceW += (want - stanceW) * 0.2;
-  if (stanceW < 0.02) return;
+  if (stanceW < 0.02 && st !== 'POP') return;
   if (!bones.thigh_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   surfer.updateMatrixWorld(true);
   bodyT += 1 / 60;
@@ -680,16 +680,24 @@ function surfStance() {
     if (front) {
       P.addScaledVector(F, ARM.ff).addScaledVector(R, ws * 0.25 * (1 - L)).addScaledVector(_in, 0.45 * L).addScaledVector(WORLD_UP, -ARM.fd - 0.3 * L + sway);
       P.lerp(_aq.copy(_ah).addScaledVector(F, ARM.ff).addScaledVector(R, ws * 0.45).addScaledVector(WORLD_UP, -ARM.fd - 0.3), deep);   // tucked low in the tube, reaching toward the wall
-      P.lerp(_aq.copy(_ah).addScaledVector(F, ARM.ff - 0.1).addScaledVector(R, ws * 0.15).addScaledVector(WORLD_UP, -ARM.fd - 0.15), popK);
     } else {
       P.addScaledVector(F, ARM.bf - 0.2 * L).addScaledVector(R, -ws * 0.3 * (1 - L)).addScaledVector(_in, -0.5 * L).addScaledVector(WORLD_UP, -ARM.bd + 0.35 * L + sway);
-      P.lerp(_aq.copy(_ah).addScaledVector(F, 0.3).addScaledVector(R, ws * 0.62).addScaledVector(WORLD_UP, -ARM.bd - 0.6), stallK);   // low and out to the side, fingers in the face
-      P.lerp(_aq.copy(_ah).addScaledVector(F, ARM.bf).addScaledVector(R, -ws * 0.35).addScaledVector(WORLD_UP, -ARM.bd - 0.1), popK);
     }
+    // stalling: the hand on the wave side drops and drags its fingers in the face (whichever arm that is: the other
+    // one reaching across your body would cover the board)
+    bones['upperarm_' + s].getWorldPosition(_ik4);
+    if (stallK > 0) {
+      if (Math.sign(_cv.subVectors(_ik4, _ah).dot(R)) === ws) P.lerp(_aq.copy(_ik4).addScaledVector(R, ws * 0.3).addScaledVector(F, 0.42).addScaledVector(WORLD_UP, -0.62), stallK);
+      else P.lerp(_aq.copy(_ik4).addScaledVector(R, -ws * 0.3).addScaledVector(F, -0.05).addScaledVector(WORLD_UP, -0.4), stallK);   // the other arm back by your side for balance
+    }
+    // pop-up: hands pushing down on the rails beside your chest (targets from the shoulder, within arm's reach, so
+    // the arm never points up through your eyes at an out-of-reach spot)
+    if (popK > 0) { const ua0 = bones['upperarm_' + s]; ua0.getWorldPosition(_ik4); const out = Math.sign(_cv.subVectors(_ik4, _ah).dot(R)) || 1;
+      P.lerp(_aq.copy(_ik4).addScaledVector(R, out * 0.14).addScaledVector(F, 0.18).addScaledVector(WORLD_UP, -0.5), popK); }
     // never into the lens: keep the hand at least 45 cm from your eyes
     const cd = P.distanceTo(camera.position); if (cd < 0.5) P.addScaledVector(F, 0.5 - cd);
     const ua = bones['upperarm_' + s], la = bones['lowerarm_' + s], hd = bones['hand_' + s];
-    reachArm(ua, la, hd, P, _aq.copy(WORLD_UP).multiplyScalar(-1).addScaledVector(R, (front ? ws : -ws) * 0.5), 0.9 * w);   // elbows bend down and out
+    reachArm(ua, la, hd, P, _aq.copy(WORLD_UP).multiplyScalar(-1).addScaledVector(R, (front ? ws : -ws) * 0.5), st === 'POP' ? 0.95 : 0.9 * w);   // (from the first frame of the pop: the clip's hands push up past your face)
   }
 }
 
