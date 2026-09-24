@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Bali surf · wave test</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0f18; overflow: hidden; color: #eee; font: 12px ui-monospace, Menlo, monospace; }
+  canvas { display: block; }
+  #bar { position: fixed; left: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  #bar button { background: rgba(0,0,0,.45); color: #eee; border: 1px solid rgba(255,255,255,.3); padding: 8px 10px; font: inherit; border-radius: 2px; }
+  #fps { position: fixed; top: 6px; right: 10px; opacity: .6; }
+</style>
+</head>
+<body>
+<div id="bar"></div><div id="fps"></div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX } from './js/wave.js?v=9';
+
+const q = new URLSearchParams(location.search);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 2000);
+skyDome(scene); ocean(scene);
+const fx = new WeatherFX(scene);
+setWeather(q.get('c') || 'medium');
+let wave = new Wave(scene, CONDITIONS[q.get('c') === 'random' ? 'medium' : (q.get('c') || 'medium')]);
+let view = q.get('view') || 'side';
+
+const bar = document.getElementById('bar');
+for (const [label, fn] of [
+  ['easy', () => swap('easy')], ['medium', () => swap('medium')], ['hard', () => swap('hard')], ['random sky', () => setWeather('random')],
+  ['side view', () => view = 'side'], ['face view', () => view = 'face'], ['barrel view', () => view = 'barrel'],
+]) { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; bar.appendChild(b); }
+function swap(c) { scene.remove(wave.mesh); scene.remove(wave.spray); setWeather(c); wave = new Wave(scene, CONDITIONS[c]); }
+
+function frame(dt) {
+  wave.update(dt);
+  fx.update(dt, camera.position);
+  const H = wave.cond.H, px = wave.peelX;
+  if (view === 'side') {            // from the channel, beside the wave, looking at the peeling section
+    camera.position.set(px + 6 + H * 3, H * 1.0, 8 + H * 3.5); camera.lookAt(px - H, H * 0.55, 0);
+  } else if (view === 'face') {     // on the shoulder ahead of the break, looking back along the face toward the peak
+    camera.position.set(px + 6 + H * 2, H * 0.55, H * 0.6); camera.lookAt(px - 2, H * 0.7, 0);
+  } else {                          // inside the tube, where a surfer would be, looking out of the opening
+    camera.position.set(px - H * 3.0, H * 0.34, H * 0.3); camera.lookAt(px + 6, H * 0.42, H * 0.34);
+  }
+}
+let last = performance.now(), frames = 0, acc = 0;
+renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
+  frame(dt); renderer.render(scene, camera);
+  frames++; acc += dt; if (acc > 1) { document.getElementById('fps').textContent = Math.round(frames / acc) + ' fps'; frames = 0; acc = 0; }
+});
+window.__step = (sec, v) => { if (v) view = v; for (let t = 0; t < sec; t += 1 / 30) frame(1 / 30); frame(0); renderer.render(scene, camera); };
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+</script>
+</body>
+</html>

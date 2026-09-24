@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bali surf · surfer test</title>
+<style>html,body{margin:0;height:100%;background:#1a2230;overflow:hidden}canvas{display:block}</style></head>
+<body>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { makeBoard } from './js/board.js?v=1';
+const q = new URLSearchParams(location.search);
+const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(innerWidth, innerHeight); renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x8fb4c8);
+scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x4a5a50, 1.2)); const sun = new THREE.DirectionalLight(0xfff0dd, 2.2); sun.position.set(3, 5, 2); scene.add(sun);
+const cam = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.05, 100);
+const board = makeBoard(); scene.add(board);
+new GLTFLoader().load('surfer.glb?v=' + Date.now(), (g) => {
+  const s = g.scene; scene.add(s); window.__s = s;
+  const mixer = new THREE.AnimationMixer(s); const pose = q.get('a') || 'crouch';
+  const A = (n) => mixer.clipAction(g.animations.find((c) => c.name === n));
+  if (pose === 'crouch') { const c = A('crouch'), st = A('stand'); c.play(); st.play(); c.weight = +(q.get('w') || 0.5); st.weight = 1 - c.weight; }
+  else A(pose).play();
+  mixer.update(+(q.get('t') || 0.3));
+  // how the body sits on the board for each pose
+  if (pose === 'paddle') { s.rotation.y = +(q.get('ry') || 0); s.position.set(0, +(q.get('py') || 0), +(q.get('pz') || 0)); }
+  else if (pose === 'sit') { s.position.set(0, -0.35, -0.15); }
+  else { s.rotation.y = Math.PI / 2; s.position.set(0, 0.03, -0.05); }                          // stance: side-on, feet along the board
+  const v = q.get('v') || 'front';
+  const P = { front: [2.6, 1.3, 1.2], side: [0.1, 1.0, 3.2], back: [-2.4, 1.4, -1.5] }[v];
+  cam.position.set(...P); cam.lookAt(0, pose === 'paddle' ? 0.2 : 0.7, 0);
+  renderer.render(scene, cam);
+});
+</script></body></html>
