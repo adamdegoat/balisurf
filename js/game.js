@@ -62,8 +62,8 @@ vArm = 0.;
 #endif`);
     sh.fragmentShader = 'uniform float uCut;\nvarying vec3 vCutW; varying float vArm;\n' + sh.fragmentShader.replace('void main() {', `void main() {
   vec3 cq = vCutW - cameraPosition; float cy = clamp(cq.y, -0.75, 0.);
-  if (vArm < 0.5 && (length(cq - vec3(0., cy, 0.)) < uCut * 1.9 || length(cq) < uCut * 2.2)) discard;   // body near the eyes
-  if (length(cq) < uCut * 0.8) discard;                                                                 // anything right in the lens`);
+  if (vArm < 0.12 && (length(cq - vec3(0., cy, 0.)) < uCut * 1.9 || length(cq) < uCut * 2.2)) discard;   // body near the eyes
+  if (length(cq) < uCut * 0.6) discard;   // anything right in the lens (arms are never cut: a cut shows the hollow inside of the arm as a 'fin')`);
   };
   m.side = THREE.FrontSide;   // (so a cut shows nothing behind it, not the inside of the arm)
   m.customProgramCacheKey = () => 'cutaway2';
@@ -650,7 +650,7 @@ const _ik1 = new THREE.Vector3(), _ik2 = new THREE.Vector3(), _ik3 = new THREE.V
 function reachArm(ua, la, hd, T, pole, w) {
   ua.getWorldPosition(_ik1); la.getWorldPosition(_ik2); hd.getWorldPosition(_ik3);
   const a = _ik1.distanceTo(_ik2), b = _ik2.distanceTo(_ik3);
-  const toT = _ik4.subVectors(T, _ik1); let d = toT.length(); d = Math.min(Math.max(d, Math.abs(a - b) + 0.01), a + b - 0.005); toT.normalize();
+  const toT = _ik4.subVectors(T, _ik1); let d = toT.length(); d = Math.min(Math.max(d, Math.abs(a - b) + 0.01), (a + b) * 0.94); toT.normalize();   // a soft bend always stays in the elbow (a locked-straight arm looks wrong)
   // elbow: along the reach by a*cos, out toward the pole by a*sin (law of cosines)
   const ca = (a * a + d * d - b * b) / (2 * a * d), sa = Math.sqrt(Math.max(0, 1 - ca * ca));
   const pp = _ik2.copy(pole).addScaledVector(toT, -pole.dot(toT)).normalize();
@@ -764,7 +764,7 @@ function surfStance() {
     const front = s === frontArm, sway = Math.sin(bodyT * 1.7 + (front ? 0 : 1.3)) * 0.03;
     const P = _ap;
     if (front) {
-      at(P, chest ? 0.5 : 0.46, (chest ? 0.46 : 0.44) - sway - pumpUp, chest ? 0.2 : -0.2);                       // trim
+      at(P, chest ? 0.5 : 0.46, (chest ? 0.5 : 0.48) - sway - pumpUp, chest ? 0.36 : -0.36);   // out over the rail, beside the board                       // trim
       if (bt) P.lerp(chest ? at(_aq, 0.6, 0.26, 0.26) : at(_aq, 0.45, 0.7, 0.34), bt);                               // bottom turn
       if (tt) P.lerp(at(_aq, 0.55, 0.5, -0.32), tt);                                                                  // top turn / cutback: leads round, points down the face
       if (deep) P.lerp(chest ? at(_aq, 0.52, 0.4, 0.32) : at(_aq, 0.3, 0.85, -0.14), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
@@ -777,9 +777,7 @@ function surfStance() {
     // a hand never reaches across your body (a whole arm across the view reads as broken): if its pose asks for the
     // other side, it goes to its own side instead; in a stall the drag is done by the hand on the wave side
     bones['upperarm_' + s].getWorldPosition(_ik4);
-    const own = Math.sign(_cv.subVectors(_ik4, eye).dot(R)) || 1, lat = _cv.subVectors(P, eye).dot(R);
     if (stallK) { if ((chest ? !front : front)) P.lerp(at(_aq, 0.55, 0.62, 0.46), stallK); else P.lerp(at(_aq, -0.15, 0.6, -0.3), stallK); }   // frontside the back hand drags, backside the front hand; ahead enough to see it trail through the face
-    if (lat * own < 0.14) P.addScaledVector(R, own * 0.14 - lat);
     // pop-up: flat on the deck under your shoulders, beside your ribs
     if (popK > 0) P.lerp(at(_aq, 0.46, 0.55, (s === 'l' ? -1 : 1) * ws * 0.15), popK);
     // smooth each hand's path (the pose blends above can jump between frames when the lean changes side)
@@ -791,8 +789,7 @@ function surfStance() {
     // the shoulder follows the reach (collarbone rolls forward/down toward the hand), so the upper arm doesn't have to
     // twist to an extreme angle and stretch the skin at the shoulder into a fin
     if (cl) { cl.getWorldPosition(_ik1); aimBone(cl, ua, _ik3.subVectors(P, _ik1).normalize(), 0.8 * w); }
-    reachArm(ua, la, hd, P, _aq.copy(WORLD_UP).multiplyScalar(-1).addScaledVector(R, (s === 'l' ? -1 : 1) * 0.6), st === 'POP' ? 0.95 : 0.92 * w);   // elbows down and out
-    hd.quaternion.slerp(_hq.identity(), 0.85 * w); hd.updateMatrixWorld(true);   // a relaxed straight wrist (the clip's wrist bends read as limp, twisted hands)
+    reachArm(ua, la, hd, P, _aq.copy(WORLD_UP).multiplyScalar(-1).addScaledVector(F, -0.6), st === 'POP' ? 0.95 : 0.92 * w);   // elbows point down and back, like a relaxed arm (never forward/up: that reads as hyperextended)
   }
 }
 let waveSide = -1; const _eyeA = new THREE.Vector3(); const armSm = { l: { p: new THREE.Vector3(), ok: false }, r: { p: new THREE.Vector3(), ok: false } }, _hq = new THREE.Quaternion();
