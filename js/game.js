@@ -769,7 +769,8 @@ function tick(dt) {
   T += dt;
   ENV.uTime.value += dt;
   const inp = readInput(dt);
-  if (rider && rider.standing && input.test == null) inp.steer = surfSteer(inp.steer, inp.up);
+  // in the barrel view the camera looks back at you, so your left is the screen's right: flip sideways so it matches the screen
+  if (rider && rider.standing && input.test == null) inp.steer = surfSteer(tubeK > 0.5 ? -inp.steer : inp.steer, inp.up);
   if (rider) {
     updateWaves(dt);
     rider.update(dt, inp, waves);

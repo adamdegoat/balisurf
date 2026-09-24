@@ -59,3 +59,35 @@ function slices(mode, n) {
   G.input.stick = null; G.input.test = null;
   return mode + ': ' + Object.entries(B).map(([k, [v, t, wt]]) => `${k} ${(v / t * 100).toFixed(0)}%${wt ? ` (cam under water ${(wt / t * 100).toFixed(0)}%)` : ''}`).join(' | ');
 }
+
+// Ground truth: render the real frame small, with the surfer painted flat magenta, and count magenta pixels.
+// 0 = you can't see the surfer (blocked, off screen, camera in the water), whatever the geometry checks say.
+const RT = new THREE.WebGLRenderTarget(160, 74), PIX = new Uint8Array(160 * 74 * 4), MAG = new THREE.MeshBasicMaterial({ color: 0xff00ff, fog: false });
+export function surferPixels() {
+  const G = window.__g, r = G.renderer, saved = [];
+  G.surfer.traverse((o) => { if (o.isMesh) { saved.push([o, o.material]); o.material = MAG; } });
+  G.camera.updateMatrixWorld(); r.setRenderTarget(RT); r.render(G.scene, G.camera); r.readRenderTargetPixels(RT, 0, 0, 160, 74, PIX); r.setRenderTarget(null);
+  for (const [o, m] of saved) o.material = m;
+  let n = 0; for (let i = 0; i < PIX.length; i += 4) if (PIX[i] > 200 && PIX[i + 1] < 60 && PIX[i + 2] > 200) n++;
+  return n / (160 * 74);
+}
+// ride Hard (angled take-off, then hold a line) and report how often the surfer really shows, in and around barrels
+export function barrelView(mode = 'hard', rides = 2, seed = 5) {
+  const rnd0 = Math.random; let st = seed >>> 0; Math.random = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296);
+  try {
+    const G = window.__g; G.paused = true; G.setMode(mode);
+    document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); G.spawnRider();
+    const br = _brain({}), B = {}; let done = 0;
+    for (let i = 0; i < 60 * 150 && done < rides; i++) {
+      const r = G.rider; if (r.state === 'WIPE' || r.state === 'OUT') { G.spawnRider(); done++; continue; }
+      if (!r.standing) { const o = br(r); G.input.stick = null; G.input.test = o.steer; G.input.paddleBtn = o.paddle; }
+      else { G.input.test = null; G.input.paddleBtn = false; G.input.stick = r.state === 'POP' || r.stateT < 0.9 ? { x: -0.7, y: 0 } : { x: 0, y: 0.3 }; }
+      G.step(1 / 60, 1 / 60, false);
+      if (!r.standing || i % 4) continue;
+      const k = r.inBarrel ? 'barrel' : r.state === 'POP' || r.stateT < 2 ? 'drop' : 'ride';
+      const px = surferPixels(), b = (B[k] = B[k] || [0, 0]); b[1]++; if (px > 0.004) b[0]++;
+    }
+    G.input.stick = null; G.input.test = null;
+    return `${mode}: ` + Object.entries(B).map(([k, [v, t]]) => `${k} seen ${(v / t * 100).toFixed(0)}% (${t})`).join(' | ');
+  } finally { Math.random = rnd0; }
+}
