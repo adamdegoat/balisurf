@@ -789,7 +789,10 @@ function surfStance() {
     // the shoulder follows the reach (collarbone rolls forward/down toward the hand), so the upper arm doesn't have to
     // twist to an extreme angle and stretch the skin at the shoulder into a fin
     if (cl) { cl.getWorldPosition(_ik1); aimBone(cl, ua, _ik3.subVectors(P, _ik1).normalize(), 0.8 * w); }
-    reachArm(ua, la, hd, P, _aq.copy(WORLD_UP).multiplyScalar(-1).addScaledVector(F, -0.6), st === 'POP' ? 0.95 : 0.92 * w);   // elbows point down and back, like a relaxed arm (never forward/up: that reads as hyperextended)
+    // elbows flare OUT, away from your body (and a little down): from the chest through this shoulder is 'out'
+    ua.getWorldPosition(_ik1); bones.spine_03.getWorldPosition(_ik2);
+    const outv = _ik3.subVectors(_ik1, _ik2); outv.y = 0; outv.normalize();
+    reachArm(ua, la, hd, P, _aq.copy(outv).multiplyScalar(0.85).addScaledVector(WORLD_UP, -0.5), st === 'POP' ? 0.95 : 0.92 * w);
   }
 }
 let waveSide = -1; const _eyeA = new THREE.Vector3(); const armSm = { l: { p: new THREE.Vector3(), ok: false }, r: { p: new THREE.Vector3(), ok: false } }, _hq = new THREE.Quaternion();
