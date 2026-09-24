@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=18';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=19';
 import { Rider } from './surf.js?v=28';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=2';
@@ -237,6 +237,60 @@ function updateRig(dt, t) {
   } else if (st === 'DONE') { play('sit'); surfer.position.set(0, -0.36, -0.15); }
 }
 
+// ---------- rail spray: water thrown off the board's edge when you carve, skid or pop up; a big burst when you wipe out
+const SPRAY_N = 1600;
+const railSpray = (() => {
+  const pos = new Float32Array(SPRAY_N * 3), vel = new Float32Array(SPRAY_N * 3), life = new Float32Array(SPRAY_N).fill(-1);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+  const cx = cv.getContext('2d'), gr = cx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  cx.fillStyle = gr; cx.fillRect(0, 0, 32, 32);
+  const tex = new THREE.CanvasTexture(cv);
+  const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf6f1ea, size: 0.055, map: tex, transparent: true, opacity: 0.75, depthWrite: false }));
+  pts.frustumCulled = false; scene.add(pts);
+  let next = 0, acc = 0;
+  const emit = (p, v, n, spread) => {
+    for (let k = 0; k < n; k++) {
+      const i = next; next = (next + 1) % SPRAY_N;
+      pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+      vel[i * 3] = v.x + (Math.random() - .5) * spread; vel[i * 3 + 1] = v.y + Math.random() * spread; vel[i * 3 + 2] = v.z + (Math.random() - .5) * spread;
+      life[i] = 0.5 + Math.random() * 0.6;
+    }
+  };
+  const _p = new THREE.Vector3(), _v = new THREE.Vector3();
+  return {
+    burst(p, n = 120, up = 3) { emit(p, _v.set(0, up, 0), n, 3.5); },
+    update(dt) {
+      // how much water the rail is throwing: carving load, skidding, and a little at speed
+      if (rider && (rider.state === 'RIDE' || rider.state === 'POPUP')) {
+        const load = Math.abs(rider.turn) * rider.v / 12 + rider.skid * 1.5 + (rider.state === 'POPUP' ? 0.6 : 0) + Math.max(0, rider.v - 6) * 0.03;
+        acc += load * 900 * dt;
+        if (acc >= 1) {
+          const n = Math.floor(acc); acc -= n;
+          // from the tail, thrown out of the face and back
+          _p.copy(rig.position).addScaledVector(pose.fwd, -0.55).addScaledVector(pose.up, 0.05);
+          // a fan: along the rail from mid-board to tail, thrown out of the face, up, and back
+          for (let k = 0; k < n; k++) {
+            _p.copy(rig.position).addScaledVector(pose.fwd, -0.15 - Math.random() * 0.6).addScaledVector(pose.up, 0.04);
+            _v.copy(pose.up).multiplyScalar(1.2 + load * 2.2 + Math.random()).addScaledVector(pose.fwd, -rider.v * (0.2 + Math.random() * 0.3)).add(_cv.set(0, 0.8 + Math.random() * 1.2, 0));
+            emit(_p, _v, 1, 0.6);
+          }
+        }
+      } else acc = 0;
+      for (let i = 0; i < SPRAY_N; i++) {
+        if (life[i] <= 0) { if (life[i] > -1) { pos[i * 3 + 1] = -50; life[i] = -1; } continue; }
+        life[i] -= dt;
+        vel[i * 3 + 1] -= 9.8 * dt;
+        const k = Math.exp(-dt * 1.2);
+        vel[i * 3] *= k; vel[i * 3 + 2] *= k;
+        pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+      }
+      g.attributes.position.needsUpdate = true;
+    },
+  };
+})();
+
 // ---------- wipeout: the rider is thrown off, goes under, comes back up; the board tumbles away on its own
 const W = { on: false, bv: new THREE.Vector3(), bw: new THREE.Vector3(), rv: new THREE.Vector3(), rw: new THREE.Vector3(), under: 0 };
 const _e = new THREE.Euler(), _dq = new THREE.Quaternion();
@@ -252,7 +306,7 @@ function startWipe() {
   W.bv.copy(pose.fwd).multiplyScalar(v * 0.9).add(new THREE.Vector3(0, 1 + Math.random(), lip ? 2 : 0.5));
   W.bw.set(Math.random() * 6 - 3, Math.random() * 8 - 4, Math.random() * 10 - 5);
   play('fall', { once: true, fade: 0.08 });
-  audio.splash(0.6); W.hit = false;
+  audio.splash(0.6); W.hit = false; railSpray.burst(rig.position, 90, 2.5);
 }
 function wipeout(dt) {
   if (!W.on) startWipe();
@@ -267,7 +321,7 @@ function wipeout(dt) {
       vel.z += (isBody ? 2.5 : 3.5) * dt; vel.x += wave.cond.peel * 0.3 * dt;
       vel.y += (isBody ? (W.t < 1.4 ? -2 : 6) : 14) * Math.min(1, depth + 0.3) * dt;
       spin.multiplyScalar(Math.exp(-dt * (isBody ? 2 : 3)));
-      if (isBody) { W.under += dt; if (!W.hit) { W.hit = true; audio.splash(1.2); } }
+      if (isBody) { W.under += dt; if (!W.hit) { W.hit = true; audio.splash(1.2); railSpray.burst(p, 160, 3.5); } }
     } else vel.y -= 9.8 * dt;
     p.addScaledVector(vel, dt);
     _dq.setFromEuler(_e.set(spin.x * dt, spin.y * dt, spin.z * dt)); obj.quaternion.premultiply(_dq);
@@ -378,6 +432,7 @@ function tick(dt) {
     else { rider.stateT += dt; if (rider.state === 'DONE') rider.zRel -= wave.cond.speed * dt; }   // the wave keeps rolling on past you
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); surfStance(); }
+    railSpray.update(dt);
     updateCamera(dt);
     updateHUD(dt);
     // sound follows what's happening

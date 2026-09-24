@@ -284,7 +284,7 @@ export function waterMaterial({ wave = false } = {}) {
         float lw = min(fwidth(ln) * 1.3 + .003, .022);
         float lace = (1. - smoothstep(.0, lw, abs(ln - .5))) * smoothstep(.35, .6, fbm(vec2(vW.x, vW.y + vW.z) * .7));
         lace *= .45 + .55 * smoothstep(2., 10., length(cameraPosition - vW));
-        foamMask = max(foamMask, lace * .55 * step(.02, vFT.y) * (1. - base * .4));
+        foamMask = max(foamMask, lace * .3 * step(.02, vFT.y) * (1. - base * .5));   // faint: old foam lines, not chalk marks
         vec3 foamCol = vec3(.95, .9, .86) * (.75 + .25 * max(dot(N, uSun), 0.)) + uHor * .12;
         col = mix(col, foamCol, foamMask);
         ` : ''}
