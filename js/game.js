@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=54';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=79';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=56';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=81';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
 
@@ -119,6 +119,7 @@ function updateWaves(dt) {
     const sg = C.name === 'Hard' || C.name === 'Extreme' ? 0.3 : C.name === 'Medium' ? 0.18 : 0.06;
     const rate = C.peel * (1 + sg * (0.6 * Math.sin(t * 0.55 + w.seed) + 0.4 * Math.sin(t * 1.3 + w.seed * 2.1)));
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
+    w.peelRate = rate;   // the physics uses the peel speed right now (not the average), so the wave's push matches what you see
     w.place(w.px, C.speed * t);
     w.fade = (w.size || 1) * Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40)) * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));   // far out it's a small swell; past the end of the reef it backs off
     w.update(dt);
@@ -744,7 +745,9 @@ function surfStance() {
   //   pop-up:      hands flat on the deck under your shoulders, then the front arm opens forward and low
   // arms never go above the shoulders, and they lead the board: the lean you ask for (not the board's heading) drives them
   const F = _af.set(Math.cos(pov.yaw), 0, Math.sin(pov.yaw)), R = _ar.set(-F.z, 0, F.x);
-  const ws = Math.sign(INTO_WAVE.dot(R)) || -1, stallK = Math.min(1, (rider.stalling || 0) * 1.3);
+  // which side the wave is on, with a dead band: heading straight at the beach or the wave it would flip every frame
+  { const d = INTO_WAVE.dot(R); if (Math.abs(d) > 0.25) waveSide = Math.sign(d); }
+  const ws = waveSide, stallK = Math.min(1, (rider.stalling || 0) * 1.3);
   const popK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - rider.stateT / 0.5) : 0;
   // frontside or backside: which way your chest faces
   bones.upperarm_l.getWorldPosition(_ik1); bones.upperarm_r.getWorldPosition(_ik2);
@@ -792,7 +795,7 @@ function surfStance() {
     hd.quaternion.slerp(_hq.identity(), 0.85 * w); hd.updateMatrixWorld(true);   // a relaxed straight wrist (the clip's wrist bends read as limp, twisted hands)
   }
 }
-const _eyeA = new THREE.Vector3(); const armSm = { l: { p: new THREE.Vector3(), ok: false }, r: { p: new THREE.Vector3(), ok: false } }, _hq = new THREE.Quaternion();
+let waveSide = -1; const _eyeA = new THREE.Vector3(); const armSm = { l: { p: new THREE.Vector3(), ok: false }, r: { p: new THREE.Vector3(), ok: false } }, _hq = new THREE.Quaternion();
 let dtArm = 1 / 60;
 
 // ---------- HUD + end of ride

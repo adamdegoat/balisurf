@@ -563,7 +563,7 @@ export function coast(scene) {
   group.add(at(new THREE.Mesh(colorize(land, [0.12, 0.2, 0.1], 0.2), mat), 0, 0, 475));
   // jungle: layered tree canopies behind the palms. Each tree is a lumpy crown (a noise-dented blob, darker underneath
   // where it's in shade) sitting on the ground or on a short trunk; neighbours overlap into one uneven forest edge.
-  const blob = new THREE.IcosahedronGeometry(1, 3);
+  const blob = new THREE.IcosahedronGeometry(1, 1);   // (42 points each: it's 80 m+ away; phones draw hundreds of these)
   { const p = blob.attributes.position, c = new Float32Array(p.count * 3), v = new THREE.Vector3();
     for (let i = 0; i < p.count; i++) {
       v.fromBufferAttribute(p, i);
@@ -574,13 +574,13 @@ export function coast(scene) {
       c[i * 3] = 0.09 * k; c[i * 3 + 1] = 0.2 * k; c[i * 3 + 2] = 0.08 * k;
     }
     blob.setAttribute('color', new THREE.BufferAttribute(c, 3)); blob.computeVertexNormals(); }
-  const NJ = 1100, jungle = new THREE.InstancedMesh(blob, mat, NJ); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+  const NJ = 620, jungle = new THREE.InstancedMesh(blob, mat, NJ); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
   const NT = 90, jTrunk = new THREE.InstancedMesh(colorize(new THREE.CylinderGeometry(0.25, 0.45, 1, 6).translate(0, 0.5, 0), [0.22, 0.18, 0.14], 0.2), mat, NT);
   let n = 0, nt = 0;
   const crown = (x, y, z, r) => { if (n >= NJ) return; q.setFromEuler(new THREE.Euler(0, Math.random() * 6.3, 0));
     jungle.setMatrixAt(n++, m4.compose(ps.set(x, y, z), q, sc.set(r * (1 + Math.random() * 0.4), r * (0.7 + Math.random() * 0.3), r * (0.9 + Math.random() * 0.4)))); };
   // understory: a dense band of low bushes so no sky shows through at the foot of the forest
-  for (let i = 0; i < 700; i++) { const x = -750 + Math.random() * 1500, z = 232 + Math.random() * 60, r = 2 + Math.random() * 3.5; crown(x, 1.3 + (z - 230) * 0.04 + r * 0.4, z, r); }
+  for (let i = 0; i < 380; i++) { const x = -750 + Math.random() * 1500, z = 232 + Math.random() * 60, r = 3 + Math.random() * 4; crown(x, 1.3 + (z - 230) * 0.04 + r * 0.4, z, r); }
   // trees: a crown of two or three overlapping lumps; the tall ones stand on a trunk above the understory
   while (n < NJ - 3) {
     const tall = nt < NT && Math.random() < 0.3, r = tall ? 5 + Math.random() * 4 : 3 + Math.random() * 3;

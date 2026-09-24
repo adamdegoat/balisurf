@@ -143,7 +143,7 @@ export class Rider {
     // against it by the curvature (the w.Hess.w term), so a face rising under you shoves you forward and down it.
     let curv = 0;
     if (w) {
-      const wx = this.vx - C.peel, wz = this.vz - cw, ws = Math.hypot(wx, wz);
+      const wx = this.vx - (w.peelRate || C.peel), wz = this.vz - cw, ws = Math.hypot(wx, wz);
       if (ws > 0.05) {
         const ux = wx / ws, uz2 = wz / ws, ee = 0.3;
         const d2 = (heightAt(waves, this.x + ux * ee, this.z + uz2 * ee) - 2 * q.y + heightAt(waves, this.x - ux * ee, this.z - uz2 * ee)) / (ee * ee);
@@ -274,7 +274,7 @@ export class Rider {
     if (this.inBarrel && s < -2.0 * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > 2.5 || s < -2.8 * H) return this.wipe('Too deep: the foam ball swallowed you'); }
     else this.foamT = Math.max(0, (this.foamT || 0) - h);
     // over the back
-    if (!onFront && y < 0.4 * fg * fg * Math.max(sl.top, 0.3)) return this.out('Kicked out over the back');
+    if (!onFront && y < 0.4 * Math.max(sl.top, 0.3)) return this.out('Kicked out over the back');
     const kmh = this.v * 3.6; this.ride.top = Math.max(this.ride.top, kmh);
     if (riding) {
       if (this.inBarrel) this.ride.barrel += h;
