@@ -270,7 +270,7 @@ function povCamera(dt) {
   snapCam = false;
   // head pitch: riding, look down the line and at the nose; lying, look ahead over the nose; at the drop, look down the face
   const dropK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - rider.stateT / 1.0) : 0;
-  const pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : -0.5;   // take-off: look down at the board and the face; lying: down enough to see your arms paddling
+  const pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : sitting ? -0.54 : -0.4;   // sitting: tipped down enough to see your knees and hands on the board   // take-off: look down at the board and the face; lying: down enough to see your arms paddling
   pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * 5);
   pov.roll += ((standing ? -rider.lean * 0.28 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve
   // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
@@ -628,12 +628,23 @@ function straddle() {
   rig.getWorldQuaternion(_rq); _bf.set(0, 0, 1).applyQuaternion(_rq); _bs.set(1, 0, 0).applyQuaternion(_rq);
   for (const [s, sg] of [['l', 1], ['r', -1]]) {
     const side = bones['thigh_' + s].getWorldPosition(_a).sub(rig.getWorldPosition(_b)).dot(_bs) > 0 ? 1 : -1;
-    _t.set(0, -1, 0).addScaledVector(_bs, side * 0.55).addScaledVector(_bf, 0.35).normalize();
-    aimBone(bones['thigh_' + s], bones['calf_' + s], _t, 0.85);
-    _t.set(0, -1, 0).addScaledVector(_bf, -0.15).normalize();
+    // thighs forward and down either side of the rails (your knees are what you see below you), shins hanging
+    _t.set(0, -0.6, 0).addScaledVector(_bs, side * 0.45).addScaledVector(_bf, 1.1).normalize();
+    aimBone(bones['thigh_' + s], bones['calf_' + s], _t, 0.9);
+    _t.set(0, -1, 0).addScaledVector(_bf, -0.1).normalize();
     aimBone(bones['calf_' + s], bones['foot_' + s], _t, 0.8);
   }
+  // hands resting on the deck in front of you, either side of the stringer: from your own eyes you see your
+  // knees, your hands and the board you're sitting on (without them the board looks like it floats away from you)
+  bones.pelvis.getWorldPosition(_sp);
+  const deckY = rig.getWorldPosition(_b).y + 0.07;
+  for (const s of ['l', 'r']) {
+    const ua = bones['upperarm_' + s], side = ua.getWorldPosition(_a).sub(_b).dot(_bs) > 0 ? 1 : -1;
+    _sT.copy(_sp).addScaledVector(_bf, 0.66).addScaledVector(_bs, side * 0.16); _sT.y = deckY;   // leaning forward a little, hands on the deck ahead of your knees
+    reachArm(ua, bones['lowerarm_' + s], bones['hand_' + s], _sT, _t.set(0, 0, 0).addScaledVector(_bs, side).addScaledVector(_bf, -0.3), 0.9);
+  }
 }
+const _sp = new THREE.Vector3(), _sT = new THREE.Vector3();
 // turn a bone about a world axis (keeps everything below it attached)
 function turnBone(bone, axis, ang) {
   if (!bone || Math.abs(ang) < 1e-4) return;
