@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=25';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=27';
 import { Rider, Profile, waterAt, heightAt } from './surf.js?v=41';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=3';
@@ -75,7 +75,12 @@ function updateWaves(dt) {
   }
   for (let i = waves.length - 1; i >= 0; i--) {
     const w = waves[i], C = w.cond, t = T - w.tBreak;
-    w.place(C.peel * t, C.speed * t);
+    // the break doesn't peel at one steady speed: sections race ahead and slow down (more so in heavy surf), so a tube
+    // opens and pinches and you have to keep adjusting. Integrated so it stays smooth.
+    const sg = C.name === 'Hard' ? 0.3 : C.name === 'Medium' ? 0.18 : 0.06;
+    const rate = C.peel * (1 + sg * (0.6 * Math.sin(t * 0.55 + w.seed) + 0.4 * Math.sin(t * 1.3 + w.seed * 2.1)));
+    w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
+    w.place(w.px, C.speed * t);
     w.fade = (w.size || 1) * Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40)) * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));   // far out it's a small swell; past the end of the reef it backs off
     w.update(dt);
     if (w.zW > REEF.zBeach + 40 || w.peelX > REEF.xEnd + 45) { w.dispose(scene); waves.splice(i, 1); }
@@ -274,7 +279,7 @@ function updateCamera(dt) {
 
 // ---------- surfer pose on the board
 const WORLD_UP = new THREE.Vector3(0, 1, 0), INTO_WAVE = new THREE.Vector3(0, 0, -1), tmpM = new THREE.Matrix4(), xAxis = new THREE.Vector3(), bodyUp = new THREE.Vector3(), bodyFwd = new THREE.Vector3(), bodyX = new THREE.Vector3();
-const _up = new THREE.Vector3(), _tq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
+const _xAxis = new THREE.Vector3(1, 0, 0), _up = new THREE.Vector3(), _tq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
 // the rider's world orientation (bodyQ, plus side-on stance) expressed in the board's frame
 const setStance = () => { invQ.copy(rig.quaternion).invert(); surfer.quaternion.copy(invQ).multiply(bodyQ).multiply(stanceQ); };
 function updateRig(dt, t) {
@@ -293,9 +298,15 @@ function updateRig(dt, t) {
   tmpM.makeBasis(xAxis, up, pose.fwd);
   _tq.setFromRotationMatrix(tmpM);
   // the water surface kinks where the face bends; ease the board's tilt so it rides over those instead of snapping
-  if (snapCam) rig.quaternion.copy(_tq);
-  else { const ang = rig.quaternion.angleTo(_tq); rig.quaternion.rotateTowards(_tq, Math.min(ang * Math.min(1, dt * (rider.state === 'POP' ? 9 : 16)), 6 * dt)); }   // eased, and never faster than ~340 deg/s
+  // the sitting tilt eases in and out too; smoothing runs on its own copy so extra tilts never pile up
+  const sitK = rider.state === 'LIE' && !rider.paddling || rider.state === 'OUT' ? 1 : 0;
+  sitTilt += (sitK - sitTilt) * Math.min(1, dt * 4);
+  _tq.multiply(_yq.setFromAxisAngle(_xAxis, -0.25 * sitTilt));
+  if (snapCam) rigQ.copy(_tq);
+  else { const ang = rigQ.angleTo(_tq); rigQ.rotateTowards(_tq, Math.min(ang * Math.min(1, dt * (rider.state === 'POP' ? 9 : 16)), 6 * dt)); }   // eased, and never faster than ~340 deg/s
+  rig.quaternion.copy(rigQ);
   rig.position.copy(pose.pos);
+  rig.position.y -= 0.05 * sitTilt;                                    // the rider's weight sinks the tail
   if (standing || (rider.state === 'WIPE' && rider.stateT < 0.1)) {
     // the rider stands on the deck, leaning into the turn and a little toward the wave
     const lean = 0.15 + (rider.inBarrel ? 0.12 : 0);
@@ -311,10 +322,15 @@ function updateRig(dt, t) {
   if (!standing) rig.position.y += Math.sin(t * 1.6) * 0.04;
   if (!surfer) return;
   const st = rider.state;
+  sitting = false;
   surfer.position.set(0, 0, 0); surfer.rotation.set(0, 0, 0);
   if (st === 'LIE' || st === 'OUT') {
     if (rider.paddling && st === 'LIE') { play('paddle', { speed: 0.7 + rider.v / 3 }); surfer.position.set(0, -0.93, -0.25); }
-    else { play('sit'); surfer.position.set(0, -0.36, -0.15); }
+    else {
+      // sitting astride: weight over the tail sinks it, nose tips up ~14 deg, legs hang in the water either side
+      play('sit'); surfer.position.set(0, -0.36, -0.25);
+      sitting = true;
+    }
   } else if (st === 'POP') {
     // pop-up: from flat on the board, hands push, feet swing under, straight into the crouch (no jump)
     const u = Math.min(1, rider.stateT / 0.35), e = u * u * (3 - 2 * u);
@@ -399,8 +415,8 @@ const wake = (() => {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aA', new THREE.BufferAttribute(a, 1)); g.setAttribute('aS', new THREE.BufferAttribute(sz, 1));
   const m = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
-    uniforms: { uScale: { value: 1 } },
-    vertexShader: 'attribute float aA; attribute float aS; varying float vA; uniform float uScale; void main(){ vA = aA; vec4 mv = modelViewMatrix * vec4(position, 1.); gl_PointSize = aS * uScale / -mv.z; gl_Position = projectionMatrix * mv; }',
+    uniforms: { uScale: { value: 1 }, uMax: { value: 8 } },
+    vertexShader: 'attribute float aA; attribute float aS; varying float vA; uniform float uScale; uniform float uMax; void main(){ vA = aA; vec4 mv = modelViewMatrix * vec4(position, 1.); gl_PointSize = min(aS * uScale / -mv.z, uMax); gl_Position = projectionMatrix * mv; }',
     fragmentShader: 'varying float vA; void main(){ vec2 d = gl_PointCoord - .5; float r = dot(d, d) * 4.; if (r > 1.) discard; gl_FragColor = vec4(vec3(.96, .95, .93), vA * (1. - r) * .7); }',
   });
   const pts = new THREE.Points(g, m); pts.frustumCulled = false; scene.add(pts);
@@ -409,7 +425,7 @@ const wake = (() => {
   const _p = new THREE.Vector3();
   return {
     update(dt) {
-      m.uniforms.uScale.value = renderer.domElement.height * 0.9;
+      m.uniforms.uScale.value = renderer.domElement.height * 0.9; m.uniforms.uMax.value = 7 * renderer.getPixelRatio();   // flecks, never blobs
       if (rider && rider.standing && rider.y > -1) {
         // lay foam at the fins as fast as the board moves, a little wider when carving
         acc += (40 + rider.v * 9) * dt;
@@ -483,7 +499,7 @@ function endWipe() { if (!W.on) return; W.on = false; rig.add(surfer); surfer.po
 
 // ---------- surf stance on top of the clips: feet wide along the board, arms out for balance
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _t = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _wq = new THREE.Quaternion();
-const bones = {};
+const bones = {}, _rq = new THREE.Quaternion(), _bf = new THREE.Vector3(), _bs = new THREE.Vector3();
 function aimBone(bone, child, target, w) {
   bone.getWorldPosition(_a); child.getWorldPosition(_b); _d.subVectors(_b, _a).normalize();
   _q.setFromUnitVectors(_d, target); _q.slerp(_wq.identity(), 1 - w);          // world-space turn toward the target, partly
@@ -502,8 +518,23 @@ function swingBone(bone, end, sgn, ang) {
   bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));
   bone.updateMatrixWorld(true);
 }
-let stanceW = 0, pumpC = 0;
+let stanceW = 0, pumpC = 0, sitting = false, sitTilt = 0;
+const rigQ = new THREE.Quaternion();
+function straddle() {
+  // the sit clip is a chair pose (thighs forward); on a board the thighs go down either side and the shins hang in the water
+  if (!bones.thigh_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  surfer.updateMatrixWorld(true);
+  rig.getWorldQuaternion(_rq); _bf.set(0, 0, 1).applyQuaternion(_rq); _bs.set(1, 0, 0).applyQuaternion(_rq);
+  for (const [s, sg] of [['l', 1], ['r', -1]]) {
+    const side = bones['thigh_' + s].getWorldPosition(_a).sub(rig.getWorldPosition(_b)).dot(_bs) > 0 ? 1 : -1;
+    _t.set(0, -1, 0).addScaledVector(_bs, side * 0.55).addScaledVector(_bf, 0.35).normalize();
+    aimBone(bones['thigh_' + s], bones['calf_' + s], _t, 0.85);
+    _t.set(0, -1, 0).addScaledVector(_bf, -0.15).normalize();
+    aimBone(bones['calf_' + s], bones['foot_' + s], _t, 0.8);
+  }
+}
 function surfStance() {
+  if (sitting) straddle();
   const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POP' ? Math.min(1, rider.stateT / 0.45) : 0;
   stanceW += (want - stanceW) * 0.2;
   if (stanceW < 0.02) return;

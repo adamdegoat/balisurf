@@ -106,8 +106,14 @@ export class Wave {
       const thin = THIN[i] + (THIN[Math.min(11, i + 1)] - THIN[i]) * t;
       const spray = SPRAY[i] + (SPRAY[Math.min(11, i + 1)] - SPRAY[i]) * t;
       // the lower face runs further out in front than the keyframes say: steep near the lip, easing into the flats like a real wave
-      const wide = z > 0 ? 1 + 0.55 * (1 - smooth(0, 0.6, y)) * (i < 4 ? 1 : i === 4 ? 1 - t * t * (3 - 2 * t) : 0) : 1;   // eased out, no crease
-      out[k++] = z * H * wide; out[k++] = Math.max(0, y) * H * amp;
+      // Real faces: near vertical only in the top third, ~45-55 deg through the middle, flattening to 20-30 deg at the
+      // bottom; on the unbroken shoulder a broad ramp. The keyframes are a steep outline, so the lower and middle face
+      // are pushed out in front (more on the shoulder, less under a pitching lip so the tube stays open) and the back
+      // of the wave is made thicker.
+      const below = i < 5 ? 1 : i === 5 ? 1 - t * t * (3 - 2 * t) : 0;
+      const push = (0.45 + 0.3 * smooth(0, 30, s)) * (1 - 0.8 * curl) * Math.pow(1 - smooth(0, 0.85, y), 1.3) * below;
+      const back = i >= 9 ? 1.6 : i === 8 ? 1 + 0.6 * t : 1;
+      out[k++] = (z * back + push) * H; out[k++] = Math.max(0, y) * H * amp;
       out[k++] = Math.min(1, broken * 0.9 + spray * curl * 0.7);
       out[k++] = thin * (1 - broken * 0.7);
     }
