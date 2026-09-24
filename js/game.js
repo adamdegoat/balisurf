@@ -47,19 +47,32 @@ let surfer = null, mixer = null, clips = {}, curClip = null;
 // first-person cutaway: your own head, neck, chest and shoulders (a column from your eyes down, this wide) aren't drawn (your neck, shoulders
 // and upper arms are right at the camera and would fill the screen); hands, forearms, legs and the board stay
 const CUT = { value: 0.21 };   // just the neck and head (at 42 cm it cut your arms off at the elbow: floating hands)
+// which skeleton bones are "arm" (upper arm down to the fingertips): the cutaway never removes those, so you always see
+// whole arms, while your chest, shoulders and neck near the camera are hidden (they were showing as a stretched skin fin)
+const ARMBONE = { value: new Float32Array(96) };
 function cutaway(m) {
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uCut = CUT;
-    sh.vertexShader = 'varying vec3 vCutW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = 'uniform float uCut;\nvarying vec3 vCutW;\n' + sh.fragmentShader.replace('void main() {', 'void main() {\n  vec3 cq = vCutW - cameraPosition; float cy = clamp(cq.y, -0.75, 0.); if (length(cq - vec3(0., cy, 0.)) < uCut || length(cq) < uCut * 1.6) discard;');   // a column from your eyes down through your body
+    sh.uniforms.uCut = CUT; sh.uniforms.uArmBone = ARMBONE;
+    sh.vertexShader = 'varying vec3 vCutW; varying float vArm; uniform float uArmBone[96];\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+vCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;
+#ifdef USE_SKINNING
+vArm = skinWeight.x * uArmBone[int(skinIndex.x)] + skinWeight.y * uArmBone[int(skinIndex.y)] + skinWeight.z * uArmBone[int(skinIndex.z)] + skinWeight.w * uArmBone[int(skinIndex.w)];
+#else
+vArm = 0.;
+#endif`);
+    sh.fragmentShader = 'uniform float uCut;\nvarying vec3 vCutW; varying float vArm;\n' + sh.fragmentShader.replace('void main() {', `void main() {
+  vec3 cq = vCutW - cameraPosition; float cy = clamp(cq.y, -0.75, 0.);
+  if (vArm < 0.5 && (length(cq - vec3(0., cy, 0.)) < uCut * 1.9 || length(cq) < uCut * 2.2)) discard;   // body near the eyes
+  if (length(cq) < uCut * 0.8) discard;                                                                 // anything right in the lens`);
   };
   m.side = THREE.FrontSide;   // (so a cut shows nothing behind it, not the inside of the arm)
-  m.customProgramCacheKey = () => 'cutaway';
+  m.customProgramCacheKey = () => 'cutaway2';
   m.needsUpdate = true;
 }
 const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
   surfer = g.scene; rig.add(surfer);
   surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else cutaway(o.material); } });
+  surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/.test(b.name)) ARMBONE.value[i] = 1; }); });
   mixer = new THREE.AnimationMixer(surfer);
   for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale')); clips[c.name] = mixer.clipAction(c); }
   res();
@@ -255,7 +268,7 @@ const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 // Eyes at the head, looking where you're going and a little down so the board's nose and the wave ahead are in view.
 // A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
 // and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
-const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.5, drop: 0.18 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
+const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.5, drop: 0.08 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
 const _pq2 = new THREE.Quaternion();
 const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
 function povCamera(dt) {
@@ -758,10 +771,10 @@ function surfStance() {
     // other side, it goes to its own side instead; in a stall the drag is done by the hand on the wave side
     bones['upperarm_' + s].getWorldPosition(_ik4);
     const own = Math.sign(_cv.subVectors(_ik4, eye).dot(R)) || 1, lat = _cv.subVectors(P, eye).dot(R);
-    if (stallK) { if (own === ws) P.lerp(at(_aq, 0.3, 0.8, 0.42), stallK); else P.lerp(at(_aq, -0.15, 0.6, -0.3), stallK); }
+    if (stallK) { if ((chest ? !front : front)) P.lerp(at(_aq, 0.55, 0.62, 0.46), stallK); else P.lerp(at(_aq, -0.15, 0.6, -0.3), stallK); }   // frontside the back hand drags, backside the front hand; ahead enough to see it trail through the face
     if (lat * own < 0.14) P.addScaledVector(R, own * 0.14 - lat);
     // pop-up: flat on the deck under your shoulders, beside your ribs
-    if (popK > 0) P.lerp(at(_aq, 0.3, 0.6, (s === 'l' ? -1 : 1) * ws * 0.2), popK);
+    if (popK > 0) P.lerp(at(_aq, 0.46, 0.55, (s === 'l' ? -1 : 1) * ws * 0.15), popK);
     // smooth each hand's path (the pose blends above can jump between frames when the lean changes side)
     // (smoothed relative to your eyes: smoothing in the world would leave the hands trailing behind you at speed)
     const sm = armSm[s]; P.sub(eye); if (!sm.ok || snapCam) { sm.p.copy(P); sm.ok = true; } else sm.p.lerp(P, Math.min(1, dtArm * 14)); P.copy(sm.p).add(eye);
