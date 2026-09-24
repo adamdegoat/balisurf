@@ -30,6 +30,12 @@ const sunLight = new THREE.DirectionalLight(0xfff0dd, 2.0); scene.add(sunLight);
 let lastW = 0, lastH = 0;
 const fit = () => { const w = innerWidth, h = innerHeight; if (w === lastW && h === lastH) return; lastW = w; lastH = h; renderer.setSize(w, h); fitFov(); };
 addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 250)); visualViewport?.addEventListener('resize', fit);
+// iPhone Safari ignores user-scalable=no: stop pinch-zoom, double-tap zoom and the rubber-band page drag ourselves
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+// in the Safari browser (not opened from the home screen icon), tell them how to get full screen
+if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) document.getElementById('homeTip').hidden = false;
 fit();
 
 // ---------- surfer on a board
