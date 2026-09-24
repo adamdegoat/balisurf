@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=29';
 import { Rider, Profile, waterAt, heightAt } from './surf.js?v=41';
 import { makeBoard } from './board.js?v=1';
-import { SurfAudio } from './audio.js?v=3';
+import { SurfAudio } from './audio.js?v=4';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -620,7 +620,7 @@ function autoQuality(dt) {
 
 // ---------- loop
 const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)');
-let last = performance.now(), T = 0, strokeT = 0, lastState = '';
+let last = performance.now(), T = 0, strokeT = 0, lastState = '', crashT = 1;
 function tick(dt) {
   T += dt;
   ENV.uTime.value += dt;
@@ -643,6 +643,14 @@ function tick(dt) {
     let underwater = false;
     if (st === 'WIPE' && W.on && surfer) { const b = surfer.position; underwater = W.t < 1.4 && b.y < heightAt(waves, b.x, b.z) - 0.2; }
     audio.update({ H: w ? w.cond.H : 1.5, near, barrel: rider.inBarrel && st === 'RIDE', riding: rider.standing, v: rider.v, turn: rider.turn, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
+    // the nearest breaking wave thumps each time a new stretch of lip lands (every second or two, faster in big surf)
+    crashT -= dt;
+    if (crashT <= 0) {
+      let best = null, bd = 1e9;
+      for (const v of waves) { if (v.peelX < -5) continue; const lx = v.peelX - 1.5 * v.cond.H, lz = v.zW + 1.5 * v.cond.H; const d = Math.hypot(rider.x - lx, rider.z - lz); if (d < bd) { bd = d; best = v; } }
+      if (best) audio.crash(best.cond.H * (best.size || 1), bd);
+      crashT = 1.1 + Math.random() * 0.9 - (best ? best.cond.H * 0.1 : 0);
+    }
     if (st === 'LIE' && rider.paddling) { strokeT -= dt * 1.6; if (strokeT <= 0) { strokeT = 0.55; audio.paddle(); } }
     if (st !== lastState) { if (st === 'POP') audio.splash(0.35); lastState = st; }
     sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);

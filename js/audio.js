@@ -55,6 +55,13 @@ export class SurfAudio {
     this.set(this.rain.g.gain, 0.25 * o.rain);
     this.set(this.under.frequency, o.underwater ? 420 : 18000, o.underwater ? 0.05 : 0.3);
   }
+  // the lip landing: a deep thump with a hiss of spray after it; bigger waves, deeper and louder
+  crash(H, dist) {
+    const k = Math.max(0, 1 - dist / 45);
+    if (k <= 0) return;
+    this.burst(0.55 * k * Math.min(1.3, H / 2), 70 + 30 / H, 0.9 + 0.25 * H, 'lowpass');
+    this.burst(0.22 * k, 1600, 0.7 + 0.2 * H, 'bandpass', 0.05);
+  }
   paddle() { this.burst(0.18, 900 + Math.random() * 400, 0.25); }
   splash(size = 1) { this.burst(0.5 * size, 700, 0.9 * size); this.burst(0.35 * size, 2500, 0.5 * size, 'highpass'); }
   thunder(dist = 1) { this.burst(0.9, 90, 3.5, 'lowpass', 0.4 + dist * 1.5); this.burst(0.4, 260, 1.2, 'lowpass', 0.35 + dist * 1.5); }
