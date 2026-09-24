@@ -136,7 +136,7 @@ function incoming() {
   return { w: best, t: tBest };
 }
 function spawnRider() {
-  if (surfer) endWipe();
+  if (surfer) endWipe(); rig.visible = true;
   pumpC = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
   rider = rider || new Rider();
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
@@ -226,7 +226,11 @@ for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('cl
 let starting = false;
 // back to the level select: stop the game behind the menu (you pick a level again to restart)
 function toMenu() {
-  window.__g.paused = true; starting = false; audio.pause(true);
+  starting = false; audio.pause(true);
+  // clear the session: the menu gets its slow drifting wave behind it again (and nothing of the old ride keeps running)
+  if (surfer) endWipe(); rider = null; rig.visible = false; endT = -1;
+  for (const w of waves) w.dispose(scene); waves = [];
+  setWeather('medium'); ui.cond.textContent = '';
   input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
   keys.clear(); steerF = stickY = 0; ui.paddle.classList.remove('down'); ui.stall.classList.remove('down');
   document.body.classList.remove('playing', 'riding'); ui.msg.style.display = 'none';
