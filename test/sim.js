@@ -5,7 +5,7 @@ export function run(policy, secs = 70) {
   const G = g(); G.newWave(); const r = G.rider; let t = 0; const trace = [];
   G.input.paddleBtn = true; G.input.test = 0;
   for (; t < secs; t += 1 / 30) {
-    if (r.state === 'RIDE' || r.state === 'POPUP') G.input.test = policy(r);
+    if (r.state === 'RIDE' || r.state === 'POPUP') { const o = policy(r); G.input.test = typeof o === 'number' ? o : o.steer; G.input.paddleBtn = typeof o === 'number' ? false : !!o.pump; }
     G.step(1 / 30, 1 / 30, false);
     if (r.state === 'RIDE' && Math.round(t * 30) % 30 === 0) trace.push(`${t.toFixed(0)} s=${r.s.toFixed(1)} a=${r.a.toFixed(2)} v=${r.v.toFixed(1)} psi=${r.psi.toFixed(2)}${r.inBarrel ? ' B' : ''}`);
     if (r.state === 'WIPE' || r.state === 'DONE') break;
@@ -36,6 +36,9 @@ export const barrel = (k = 1) => (r) => {
   if (s > -0.4 * H) return hold(0.5)(r);
   return hold(s > -1.3 * H ? 0.66 : s > -2.2 * H ? 0.52 : 0.38)(r);
 };
+// any rider plus well-timed pumping (push only while dropping) vs mashing (always held)
+export const withPump = (p) => (r) => ({ steer: p(r), pump: r.psi < -0.12 });
+export const mash = (p) => (r) => ({ steer: p(r), pump: true });
 export function batch(n = 4, policies = { straight: () => 0, hold5: hold(.5), pocket, pump, tube }) {
   const out = [];
   for (let i = 0; i < n; i++) for (const [k, p] of Object.entries(policies)) out.push(k + ' ' + run(p).line);
@@ -50,7 +53,7 @@ export function scene(mode = 'medium') {
 }
 export function until(cond, policy = () => 0, max = 60) {
   const G = g(), r = G.rider; let t = 0;
-  while (!cond(r) && t < max) { if (r.state === 'RIDE' || r.state === 'POPUP') G.input.test = policy(r); G.step(1 / 30, 1 / 30, false); t += 1 / 30; }
+  while (!cond(r) && t < max) { if (r.state === 'RIDE' || r.state === 'POPUP') { const o = policy(r); G.input.test = typeof o === 'number' ? o : o.steer; G.input.paddleBtn = typeof o === 'number' ? false : !!o.pump; } G.step(1 / 30, 1 / 30, false); t += 1 / 30; }
   G.step(1 / 60); return `${r.state} s=${r.s.toFixed(1)} a=${r.a.toFixed(2)} v=${r.v.toFixed(1)} zRel=${r.zRel.toFixed(1)} barrel=${r.inBarrel} ${r.why}`;
 }
 // a fixed debug camera around the rider (dx, dy, dz metres from the board)

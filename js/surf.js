@@ -14,7 +14,8 @@ export const RIDE = {
   gripBase: 20,           // how hard you can carve before the rail lets go (m/s^2 sideways); lower in heavy surf
   turnSlow: 2.6, turnFast: 1.35,   // turn rate (rad/s) at low / high speed
   stall: 1.4,
-  stallHigh: 3.2,         // extra drag high on the face             // below this speed the wave leaves you
+  stallHigh: 3.2,
+  pump: 0.45,             // share of the drop you add by pumping         // extra drag high on the face             // below this speed the wave leaves you
   paddleMax: 2.1, paddleAcc: 1.6,
 };
 
@@ -69,7 +70,7 @@ export class Rider {
     this.x = 0; this.a = 0; this.v = 0; this.psi = 0; this.turn = 0;
     this.zRel = 36;                 // while waiting/paddling: metres in front of the wave's toe
     this.paddleV = 0; this.heading = 0;   // paddling heading: 0 = toward the beach, + = angled toward +x (down the line)
-    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, end: 0, score: 0 }; this.lastSide = 0; this.inBarrel = false; this.why = '';
+    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, end: 0, score: 0 }; this.lastSide = 0; this.pumpHold = 0; this.pumping = false; this.inBarrel = false; this.why = '';
   }
   get s() { return this.x - this.wave.peelX; }
   set(state) { this.state = state; this.stateT = 0; }
@@ -130,7 +131,13 @@ export class Rider {
     const push = RIDE.pocket * (0.7 + 0.25 * C.H) * pocketAlong * pocketHigh * Math.max(0, Math.cos(this.psi));
     // flats are slow; riding high near the lip stalls you (that's how you let the curl catch up for a barrel)
     const drag = RIDE.drag * this.v + RIDE.drag2 * this.v * this.v + (this.a < 0.05 ? 1.2 : 0) + RIDE.stallHigh * C.forgive * smooth(hi0, hi0 + 0.27, this.a) * Math.min(1, this.v / 3);
-    this.v = Math.max(0, this.v + (grav + push - drag) * dt);
+    // pumping: push the board into the face on the way down (more speed out of the drop), stay light going up.
+    // Pushing while climbing just bogs you down, and legs can only push for so long before they're fully compressed.
+    this.pumpHold = inp.pump ? this.pumpHold + dt : 0;
+    const legs = 1 - smooth(0.45, 1.1, this.pumpHold);
+    const pump = inp.pump ? RIDE.pump * RIDE.g * sinTh * down * (down > 0 ? legs : 1.3) : 0;
+    this.pumping = inp.pump && down > 0 && legs > 0.2;
+    this.v = Math.max(0, this.v + (grav + push + pump - drag) * dt);
     // move: along the wave and up/down the face; the face also carries you up toward the lip
     this.x += Math.cos(this.psi) * this.v * dt;
     this.a += (Math.sin(this.psi) * this.v / f.L + RIDE.lift * C.forgive * (0.4 + 0.6 * pocketAlong) * (0.5 + f.curl)) * dt;

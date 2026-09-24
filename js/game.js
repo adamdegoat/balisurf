@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=12';
-import { Rider } from './surf.js?v=14';
+import { Rider } from './surf.js?v=15';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=1';
 
@@ -101,7 +101,7 @@ function readInput(dt) {
   input.paddle = !!input.paddleBtn || keys.has('Space') || keys.has('KeyW');
   ui.wheelIn.style.transform = `rotate(${input.steer * 110}deg)`;
   // wheel right turns you down the face (toward the beach), left turns you up it
-  return { paddle: input.paddle, steer: -input.steer };
+  return { paddle: input.paddle, pump: input.paddle, steer: -input.steer };   // same button: paddle lying down, pump once standing
 }
 
 for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => start(b.dataset.mode));
@@ -191,7 +191,9 @@ function updateRig(dt, t) {
   else if (st === 'POPUP') { play('popup', { once: true, fade: 0.12, speed: 1.6 }); setStance(); surfer.position.set(0, 0.03, -0.1); }
   else if (st === 'RIDE') {
     // stance: half crouch, deeper in the barrel and at speed; lean into the turn
-    const deep = rider.inBarrel ? 0.62 : 0.35 + 0.2 * Math.min(1, rider.v / 10);
+    // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
+    pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
+    const deep = Math.min(0.8, (rider.inBarrel ? 0.62 : 0.3 + 0.15 * Math.min(1, rider.v / 10)) + 0.3 * pumpC);
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     clips.crouch.weight = deep; clips.stand.weight = 1 - deep;
     setStance();
@@ -269,7 +271,7 @@ function swingBone(bone, end, sgn, ang) {
   bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));
   bone.updateMatrixWorld(true);
 }
-let stanceW = 0;
+let stanceW = 0, pumpC = 0;
 function surfStance() {
   const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POPUP' ? Math.min(1, rider.stateT / 0.45) : 0;
   stanceW += (want - stanceW) * 0.2;
@@ -295,9 +297,10 @@ let endT = -1, snapCam = true;
 function updateHUD(dt) {
   const st = rider.state;
   ui.speed.textContent = st === 'RIDE' || st === 'POPUP' ? `${Math.round(rider.v * 3.6)} km/h` : '';
-  ui.paddle.style.visibility = st === 'WAIT' || st === 'PADDLE' ? 'visible' : 'hidden';
+  ui.paddle.style.visibility = st === 'WIPE' || st === 'DONE' ? 'hidden' : 'visible';
+  const lbl = st === 'WAIT' || st === 'PADDLE' ? 'PADDLE' : 'PUMP'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
   // first waves: tell the player what to do while the set rolls in
-  const hint = st === 'WAIT' ? (rider.zRel < 22 ? 'Wave coming: hold PADDLE' : '') : st === 'PADDLE' && rider.zRel < 10 ? 'Keep paddling...' : st === 'POPUP' ? 'Up!' : '';
+  const hint = st === 'WAIT' ? (rider.zRel < 22 ? 'Wave coming: hold PADDLE' : '') : st === 'PADDLE' && rider.zRel < 10 ? 'Keep paddling...' : st === 'POPUP' ? 'Up!' : st === 'RIDE' && rider.stateT < 3.5 && session.waves < 2 ? 'Hold PUMP as you drop down the face' : '';
   ui.hint.textContent = session.waves < 3 || st === 'POPUP' ? hint : '';
   ui.tube.style.opacity = rider.inBarrel && st === 'RIDE' ? 1 : 0;
   ui.score.textContent = st === 'RIDE' ? Math.round(rider.ride.t * 5 + rider.ride.pocket * 10 + rider.ride.turns * 15 + rider.ride.top * 1.5 + rider.ride.barrel * 60) : '';
