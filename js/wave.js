@@ -339,9 +339,10 @@ export function waterMaterial({ wave = false } = {}) {
     vertexShader: /* glsl */`
       attribute vec2 aFoamThin;${wave ? '\n      attribute float aBrk;' : ''}
       uniform float uTime, uH;
-      varying vec3 vW; varying vec3 vN; varying vec2 vFT;
+      varying vec3 vW; varying vec3 vN; varying vec2 vFT; varying float vAge;
       void main(){
         vec3 pp = position;
+        vAge = ${wave ? 'clamp((-position.x / max(uH, .5) - 2.) / 7., 0., 1.)' : '0.'};   // how long ago this bit broke (0 at the curl, 1 far behind)
         ${wave ? 'pp.y += aBrk * uH * (sin(pp.x * 1.7 + pp.z * 2.3 + uTime * 3.) * .09 + sin(pp.x * .63 - uTime * 2.1 + pp.z * .9) * .12 + sin(pp.x * 4.1 + pp.z * 3.3 - uTime * 5.) * .045 + sin(pp.x * 2.9 - pp.z * 5.2 + uTime * 4.2) * .04); pp.z += aBrk * uH * sin(pp.x * 1.3 + uTime * 2.6) * .08;   // a churning, lumpy bore, not a smooth plateau' : ''}
         vec4 w = modelMatrix * vec4(pp,1.);
         vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal);
@@ -351,7 +352,7 @@ export function waterMaterial({ wave = false } = {}) {
     fragmentShader: /* glsl */`
       precision highp float;
       uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq;
-      varying vec3 vW; varying vec3 vN; varying vec2 vFT;
+      varying vec3 vW; varying vec3 vN; varying vec2 vFT; varying float vAge;
       ${NOISE}
       vec3 sky(vec3 d){
         float h = clamp(d.y, 0., 1.);
@@ -409,6 +410,10 @@ export function waterMaterial({ wave = false } = {}) {
         float fk = pow(2. / max(uH, 2.), .65);
         float foamN = fbm(vec2(vW.x, vW.y + vW.z) * 1.4 * fk + vec2(0., uTime * 1.3 * fk));
         float foamMask = smoothstep(.35, .75, vFT.x + (foamN - .5) * .6);
+        // whitewater ages: solid and churning just behind the curl, then it thins into drifting patches and lace with the
+        // water showing through (a uniform white blanket read as a carpet)
+        float patches = fbm(vW.xz * .28 * fk + vec2(uTime * .04, -uTime * .07)) + (foamN - .5) * .35;
+        foamMask *= mix(1., .15 + .85 * smoothstep(.44, .6, patches), vAge);
         // thin lace of old foam drifting on the face
         // lacework: thin wandering foam lines (contours of a noise field), not blobs
         float ln = fbm(vec2(vW.x * 1.3 + vW.z * .4, vW.y * 1.1 + vW.z * .7) * 1.8 * fk + vec2(0., uTime * .04));
