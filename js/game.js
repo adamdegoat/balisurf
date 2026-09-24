@@ -270,13 +270,24 @@ function updateCamera(dt) {
     const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
     // the barrel framing blends in and out over ~0.35 s instead of switching in one frame
     const tubeWant = rider.inBarrel ? 1 : 0;
-    tubeK += (tubeWant - tubeK) * Math.min(1, dt / 0.35); if (snapCam) tubeK = tubeWant;
+    tubeK += (tubeWant - tubeK) * Math.min(1, dt / 0.5); if (snapCam) tubeK = tubeWant;
     // heading toward the beach (the drop), come in close over your shoulder so you stay on the same face as the surfer;
     // turning along the wave, ease back out to the normal chase distance
     // chase distance: far enough to read the wave ahead (surfer ~a third of the screen), a little closer in the tube
     // standing up: no dive in close (it read as a zoom); the distance just eases from the lying 3.6 m to the riding 5.2 m
     const dropK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - Math.max(0, rider.stateT - 0.25) / 0.9) : 0;
     const frame = (tube, want, look) => {
+      if (tube) {
+        // the barrel: filmed from the open end of the tube, a few metres ahead of you, looking back at you inside it
+        // (behind you the tube has already collapsed into whitewater, so there's nothing to see from there)
+        const ax = Math.sign(rider.vx) || 1, H = rider.wave ? rider.wave.cond.H : 2;
+        want.set(p.x + ax * 3.6, Math.min(p.y + 0.45, 0.6 * H), p.z);
+        const qt = waterAt(waves, want.x, want.z, _wq2);
+        if (qt.w) { const slt = qt.w.prof.slice(qt.s), wall = qt.w.prof.frontZAt(qt.s, want.y) + qt.w.zW;
+          want.z = Math.max(wall + 0.7, Math.min(p.z + 0.3, slt.lipZ + qt.w.zW - 0.4)); want.y = Math.max(want.y, qt.y + 0.3); }
+        look.set(p.x, p.y + 0.7, p.z);
+        return;
+      }
       const back = standing ? 3.6 + (1.6 - 2.1 * tube) * ks : 3.6, height = standing ? 1.4 + (0.25 - 0.6 * tube) * ks + 1.6 * dropK : 1.4;   // during the drop: lift over the crest, don't move in   // at the drop: just behind your head
       want.set(p.x - dx * back, p.y + height, p.z - dz * back);
       // look just ahead of you (from the side or front during the drop, at you)
@@ -324,7 +335,10 @@ function updateCamera(dt) {
           look.x += (p.x + lx * 1.5 - look.x) * k; look.z += (p.z + lz * 1.5 - look.z) * k; look.y += (p.y + 0.4 - look.y) * k; } }
     };
     if (tubeK < 0.02) frame(0, want, look); else if (tubeK > 0.98) frame(1, want, look);
-    else { frame(0, want, look); frame(1, _wT, _lT); want.lerp(_wT, tubeK); look.lerp(_lT, tubeK); }
+    else {
+      frame(0, want, look); frame(1, _wT, _lT); want.lerp(_wT, tubeK); look.lerp(_lT, tubeK);
+      want.z += 3 * Math.sin(Math.PI * tubeK);   // swing round the beach side of you, never through the wave
+    }
   }
   // the camera follows a smoothed version of the surfer (a spring about 0.15 s behind): the board's little hops never shake it
   const tgt = st === 'WIPE' && W.on && surfer ? surfer.getWorldPosition(_anc) : p;
@@ -356,7 +370,9 @@ function updateCamera(dt) {
   }
   camOff.set(Math.cos(cam.a) * cam.r, cam.y, Math.sin(cam.a) * cam.r);
   camPos.addVectors(anchor, camOff); camLook.addVectors(anchor, lookOff);
-  { const sy = heightAt(waves, camPos.x, camPos.z) + 0.35; if (camPos.y < sy) { cam.y += sy - camPos.y; cam.vy = Math.max(cam.vy, 0); camPos.y = sy; } }   // never under the water
+  // never under the water (in the barrel the 'surface' above the camera is the lip overhead: only the face below counts)
+  { let sy = heightAt(waves, camPos.x, camPos.z) + 0.35; if (tubeK > 0.3) sy = Math.min(sy, pose.pos.y + 0.25);
+    if (camPos.y < sy) { cam.y += sy - camPos.y; cam.vy = Math.max(cam.vy, 0); camPos.y = sy; } }
   camera.position.copy(camPos);
   if (st === 'WIPE') { const sh = 0.12 * Math.exp(-(W.t || 0) * 2.5); camera.position.x += (Math.random() - .5) * sh; camera.position.y += (Math.random() - .5) * sh; }
   camera.lookAt(camLook);
