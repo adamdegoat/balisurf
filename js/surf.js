@@ -83,7 +83,7 @@ export function waterAt(waves, x, z, out) {
   }
   return out;
 }
-const _q = {}, _c = {};
+const _q = {}, _c = {}, IDLE = { paddle: false, pump: false, steer: 0 };
 export function heightAt(waves, x, z) { return waterAt(waves, x, z, _q).y; }
 
 export class Rider {
@@ -99,12 +99,15 @@ export class Rider {
   }
   set(state) { this.state = state; this.stateT = 0; }
   get standing() { return this.state === 'POP' || this.state === 'RIDE'; }
+  get active() { return this.state !== 'OUT' && this.state !== 'WIPE'; }
 
   update(dt, inp, waves) {
     this.stateT += dt;
-    if (this.state === 'WIPE' || this.state === 'OUT') return;
+    if (this.state === 'WIPE') return;
+    // after a ride ends you sit on your board and the wave rolls on under you: keep the water physics going, no control
+    const idle = this.state === 'OUT', use = idle ? IDLE : inp;
     const n = dt > 0.02 ? 3 : 2, h = dt / n;
-    for (let i = 0; i < n && this.state !== 'WIPE' && this.state !== 'OUT'; i++) this.step(h, inp, waves);
+    for (let i = 0; i < n && this.state !== 'WIPE' && (idle || this.state !== 'OUT'); i++) this.step(h, use, waves);
   }
 
   step(h, inp, waves) {
@@ -176,6 +179,8 @@ export class Rider {
         ax += f * dx; az += f * dz;
       }
       this.pumping = inp.pump && this.gAlong < 0 && legs > 0.2;
+      // popping up, the surfer throws their weight over the nose and drives the board down the face (the drop)
+      if (this.state === 'POP') { const gl = Math.hypot(hx, hz) || 1, push = 3.2 * Math.min(1, gl); ax += -hx / gl * push; az += -hz / gl * push; }
     }
     this.vx += ax * h; this.vz += az * h;
     this.x += this.vx * h; this.z += this.vz * h;
@@ -186,6 +191,7 @@ export class Rider {
   // what the wave does to you from here: catching, the barrel, the lip, the whitewater, kicking out, losing it
   judge(h, w, sl, q) {
     const P = RIDE;
+    if (this.state === 'OUT') { this.inBarrel = false; this.onFace = false; return; }
     this.inBarrel = false; this.washed = false;
     if (!w) { this.onFace = false; if (this.standing) this.lostSpeed(h); return; }
     const C = w.cond, H = C.H, s = q.s, zl = q.zl, y = q.y, slope = Math.hypot(this.hx, this.hz);
@@ -244,8 +250,9 @@ export class Rider {
   pose(out) {
     const dx = Math.cos(this.th), dz = Math.sin(this.th);
     out.pos.set(this.x, this.y + (this.standing ? 0.04 : 0.02), this.z);
-    out.fwd.set(dx, this.gAlong, dz).normalize();
-    out.up.set(-this.hx, 1, -this.hz).normalize();
+    out.fwd.set(dx, Math.max(-1.25, Math.min(1.25, this.gAlong)), dz).normalize();   // a board never pitches past ~50 deg: the nose and rail bite the water
+    const k = Math.min(1, 2.2 / Math.max(2.2, Math.hypot(this.hx, this.hz)));   // same limit for how far the deck tips
+    out.up.set(-this.hx * k, 1, -this.hz * k).normalize();
     return out;
   }
 }

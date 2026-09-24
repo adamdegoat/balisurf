@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=21';
-import { Rider, Profile, waterAt, heightAt } from './surf.js?v=37';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=23';
+import { Rider, Profile, waterAt, heightAt } from './surf.js?v=40';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=2';
 
@@ -52,12 +52,13 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
 // ---------- the surf: a reef with the peak at x=0, z=0. Waves come in from the sea one swell period apart.
 // Each wave breaks at the peak when it gets there and peels off to the right. You sit in the lineup and pick your own.
 let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0 }, nextBreak = 0;
-const REEF = { xEnd: 150, zBeach: 120 };
+const REEF = { xEnd: 150, zBeach: 120 }, PROFILES = new Map();
 function condFor(m) { return m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {
   const cond = CONDITIONS[condFor(mode)];
   const w = new Wave(scene, cond);
-  w.tBreak = tBreak; w.prof = new Profile(w); w.xEnd = REEF.xEnd; w.zBeach = REEF.zBeach; w.seed = Math.random() * 100;
+  if (!PROFILES.has(cond)) PROFILES.set(cond, new Profile(w));      // the surface shape is the same for every wave of a size: share its cache
+  w.tBreak = tBreak; w.prof = PROFILES.get(cond); w.xEnd = REEF.xEnd; w.zBeach = REEF.zBeach; w.seed = Math.random() * 100;
   waves.push(w);
   return w;
 }
@@ -160,7 +161,7 @@ if (Q.get('mode')) start(Q.get('mode'));
 // ---------- camera: a chase camera over your shoulder, looking where you're going; tight and low in the barrel
 const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3(), _lk = new THREE.Vector3(), _want = new THREE.Vector3(), _look = new THREE.Vector3();
 const camPos = new THREE.Vector3(0, 2, 10), camLook = new THREE.Vector3(), pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() };
-let camYaw = 0, lookBackK = 0;
+let camYaw = 0, lookBackK = 0, wipeCut = false;
 const cam = { a: 0, r: 3, y: 1.3, va: 0, vr: 0, vy: 0, vl: new THREE.Vector3() };
 const camOff = new THREE.Vector3(0, 1.3, 3), lookOff = new THREE.Vector3(), _anc = new THREE.Vector3(), anchorS = new THREE.Vector3(), anchorV = new THREE.Vector3();
 const smooth01 = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
@@ -171,9 +172,10 @@ function updateCamera(dt) {
   if (st === 'WIPE' && W.on && surfer) {
     // follow the body from the beach side; never below the water
     const b = surfer.getWorldPosition(_cv);
-    const wy = heightAt(waves, b.x + 3, b.z + 5);
-    want.set(b.x + 3, Math.max(wy + 0.8, b.y + 1.3), b.z + 5);
-    look.set(b.x, Math.max(b.y + (W.t > 1.4 ? 1.3 : 0.4), wy), b.z);
+    // from the beach side, down the line, back far enough to see the lip throw you and the board fly
+    const wy = heightAt(waves, b.x + 2.5, b.z + 7);
+    want.set(b.x + 2.5, Math.max(wy + 1.2, Math.min(b.y, 2) + 1.4), b.z + 7);
+    look.set(b.x, Math.max(b.y + (W.t > 1.4 ? 1.3 : 0.2), 0.3), b.z);
   } else {
     // follow the direction you're travelling when you're up and moving, the way the board points when you're lying
     const standing = rider.standing, moving = rider.v > 2.5 && standing;
@@ -234,6 +236,7 @@ function updateCamera(dt) {
   if (snapCam) { anchorS.copy(tgt); anchorV.set(0, 0, 0); }
   else { const w0 = 11; anchorV.addScaledVector(_cv.subVectors(tgt, anchorS), w0 * w0 * dt).multiplyScalar(Math.max(0, 1 - 2 * w0 * dt)); anchorS.addScaledVector(anchorV, dt); }
   const anchor = anchorS;
+  if (wipeCut && W.on) { snapCam = true; wipeCut = false; }
   const snap = snapCam;
   snapCam = false;
   // swing round the surfer in an arc (angle, distance, height) on critically damped springs: it eases in and out,
@@ -281,12 +284,14 @@ function updateRig(dt, t) {
   tmpM.makeBasis(xAxis, up, pose.fwd);
   _tq.setFromRotationMatrix(tmpM);
   // the water surface kinks where the face bends; ease the board's tilt so it rides over those instead of snapping
-  if (snapCam) rig.quaternion.copy(_tq); else rig.quaternion.slerp(_tq, Math.min(1, dt * (rider.state === 'POP' ? 9 : 16)));
+  if (snapCam) rig.quaternion.copy(_tq);
+  else { const ang = rig.quaternion.angleTo(_tq); rig.quaternion.rotateTowards(_tq, Math.min(ang * Math.min(1, dt * (rider.state === 'POP' ? 9 : 16)), 6 * dt)); }   // eased, and never faster than ~340 deg/s
   rig.position.copy(pose.pos);
   if (standing || (rider.state === 'WIPE' && rider.stateT < 0.1)) {
     // the rider stands on the deck, leaning into the turn and a little toward the wave
     const lean = 0.15 + (rider.inBarrel ? 0.12 : 0);
-    bodyUp.copy(pose.up).addScaledVector(INTO_WAVE, Math.tan(lean * 0.6)).normalize();
+    // stand over the board but closer to upright than the deck (legs absorb the tilt), leaning into the wave
+    bodyUp.copy(pose.up).lerp(WORLD_UP, 0.4).addScaledVector(INTO_WAVE, Math.tan(lean * 0.6)).normalize();
     bodyFwd.set(pose.fwd.x, 0, pose.fwd.z).normalize();
     bodyUp.addScaledVector(bodyFwd, -bodyUp.dot(bodyFwd)).normalize();
     bodyX.crossVectors(bodyUp, bodyFwd);
@@ -301,8 +306,15 @@ function updateRig(dt, t) {
   if (st === 'LIE' || st === 'OUT') {
     if (rider.paddling && st === 'LIE') { play('paddle', { speed: 0.7 + rider.v / 3 }); surfer.position.set(0, -0.93, -0.25); }
     else { play('sit'); surfer.position.set(0, -0.36, -0.15); }
-  } else if (st === 'POP') { play('popup', { once: true, fade: 0.12, speed: 1.6 }); setStance(); surfer.position.set(0, 0.03, -0.1); }
-  else if (st === 'RIDE') {
+  } else if (st === 'POP') {
+    // pop-up: from flat on the board, hands push, feet swing under, straight into the crouch (no jump)
+    const u = Math.min(1, rider.stateT / 0.35), e = u * u * (3 - 2 * u);
+    if (curClip !== clips.crouch) { play('crouch', { fade: 0.18 }); clips.stand.reset().play(); }
+    clips.crouch.weight = 0.8; clips.stand.weight = 0.2;
+    setStance();
+    if (e < 1) surfer.quaternion.slerp(_yq.identity(), 1 - e);          // rotate up from lying along the board to standing side-on
+    surfer.position.set(0, -0.45 * (1 - e) - 0.04, -0.1);
+  } else if (st === 'RIDE') {
     // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
     pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
     const deep = Math.min(0.8, (rider.inBarrel ? 0.62 : 0.3 + 0.15 * Math.min(1, rider.v / 10)) + 0.3 * pumpC);
@@ -343,7 +355,7 @@ const railSpray = (() => {
     update(dt) {
       // how much water the rail is throwing: carving load, skidding, and a little at speed
       if (rider && rider.standing) {
-        const load = Math.abs(rider.turn) * rider.v / 12 + rider.skid * 1.5 + (rider.state === 'POP' ? 0.6 : 0) + Math.max(0, rider.v - 6) * 0.03;
+        const load = Math.min(1.3, Math.abs(rider.turn) * rider.v / 14 + rider.skid * 1.2 + (rider.state === 'POP' ? 0.5 : 0) + Math.max(0, rider.v - 6) * 0.03);
         acc += load * 900 * dt;
         if (acc >= 1) {
           const n = Math.floor(acc); acc -= n;
@@ -352,7 +364,7 @@ const railSpray = (() => {
           // a fan: along the rail from mid-board to tail, thrown out of the face, up, and back
           for (let k = 0; k < n; k++) {
             _p.copy(rig.position).addScaledVector(pose.fwd, -0.15 - Math.random() * 0.6).addScaledVector(pose.up, 0.04);
-            _v.copy(pose.up).multiplyScalar(1.2 + load * 2.2 + Math.random()).addScaledVector(pose.fwd, -rider.v * (0.2 + Math.random() * 0.3)).add(_cv.set(0, 0.8 + Math.random() * 1.2, 0));
+            _v.copy(pose.up).multiplyScalar(0.8 + load * 1.6 + Math.random() * 0.6).addScaledVector(pose.fwd, -rider.v * (0.25 + Math.random() * 0.3)).add(_cv.set(0, 0.4 + Math.random() * 0.8, 0));   // a fan off the tail, a metre or two, not a fountain
             emit(_p, _v, 1, 0.6);
           }
         }
@@ -375,6 +387,7 @@ const W = { on: false, bv: new THREE.Vector3(), bw: new THREE.Vector3(), rv: new
 const _e = new THREE.Euler(), _dq = new THREE.Quaternion();
 function startWipe() {
   W.on = true; W.t = 0; W.under = 0;
+  wipeCut = true;                                                     // a clean cut to the wipeout camera, like a broadcast
   const v = rider.v, lip = /lip|falls|closed|whitewater|broke/i.test(rider.why);
   // body: carried by its own speed, pitched forward; the lip throws you down toward the flats
   surfer.getWorldPosition(W.bp = new THREE.Vector3()); surfer.getWorldQuaternion(W.bq = new THREE.Quaternion());
@@ -469,8 +482,10 @@ function updateHUD(dt) {
   let hint = '';
   if (st === 'LIE') {
     const inc = incoming(), facingIn = Math.sin(rider.th) > 0.5;
+    const onWave = rider.y > 0.3 && rider.onFace;
     if (rider.washed) hint = 'Caught inside! Hold on, paddle back out';
-    else if (inc.w && inc.t < 7) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
+    else if (onWave) hint = rider.paddling ? 'Keep paddling!' : 'Paddle now!';
+    else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
   } else if (st === 'POP') hint = 'Up!';
   else if (st === 'RIDE' && rider.stateT < 4 && session.waves < 3) hint = 'Steer along the wave. Hold PUMP going down for speed';

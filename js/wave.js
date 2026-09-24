@@ -45,9 +45,18 @@ function catmull(P, u) {                           // u in [0,1] across all segm
   return [c(p0[0], p1[0], p2[0], p3[0]), c(p0[1], p1[1], p2[1], p3[1]), i, t];
 }
 
+const SHARED = new Map();                           // condition -> built geometry + material
 export class Wave {
   constructor(scene, cond) {
     this.cond = cond; this.peelX = 0; this.zW = 0; this.t = 0; this.fade = 1;
+    // every wave of the same size has the same shape: build the mesh once per condition and share it (no hitch per wave)
+    const shared = SHARED.get(cond);
+    if (shared) {
+      this.geo = shared.geo; this.xs = shared.xs; this.shared = true;
+      this.mesh = new THREE.Mesh(shared.geo, shared.mat); this.mesh.frustumCulled = false; scene.add(this.mesh);
+      this.initSpray(scene); this.initMist(scene);
+      return;
+    }
     const g = new THREE.BufferGeometry();
     this.pos = new Float32Array(NX * NU * 3);
     this.attr = new Float32Array(NX * NU * 2);      // foam, thinness
@@ -66,8 +75,10 @@ export class Wave {
     this.mesh.frustumCulled = false;
     scene.add(this.mesh);
     this.initSpray(scene);
+    this.initMist(scene);
     this.xs = new Float32Array(NX);
     this.build();
+    SHARED.set(cond, { geo: this.geo, mat: this.mesh.material, xs: this.xs }); this.shared = true;
   }
 
   // which blend of keyframes a slice at distance s ahead of the break has, plus how broken it is
@@ -125,6 +136,42 @@ export class Wave {
     this.geo.computeVertexNormals();
   }
 
+  // whitewater mist: big soft puffs boiling off the broken part of the wave and drifting back in the offshore wind
+  initMist(scene) {
+    const N = 160; this.mistN = N;
+    this.mp = new Float32Array(N * 3); this.mv = new Float32Array(N * 3); this.ml = new Float32Array(N).fill(-1); this.ma = new Float32Array(N);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.mp, 3));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,.9)'); gr.addColorStop(0.5, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
+    this.mist = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf2efe9, size: 1.1 * this.cond.H, map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0.38, depthWrite: false }));
+    this.mist.frustumCulled = false; scene.add(this.mist);
+  }
+  updateMist(dt) {
+    const H = this.cond.H, P = this.mp, V = this.mv;
+    for (let i = 0; i < this.mistN; i++) {
+      if (this.ml[i] <= 0) {
+        if (Math.random() > 0.12) { P[i * 3 + 1] = -99; continue; }
+        // born along the top of the whitewater and where the lip hits the water
+        const s = -(4 + Math.random() * 10) * H;
+        if (s < -50) continue;
+        const sh = this.shapeAt(s), crest = sh.P[9], amp = 1 - 0.15 * smooth(0, 40, -s);
+        const atLip = Math.random() < 0.4 && sh.broken < 0.5;
+        P[i * 3] = this.peelX + s + (Math.random() - .5) * 2;
+        P[i * 3 + 1] = atLip ? 0.2 * H : crest[1] * H * amp * (0.7 + Math.random() * 0.4);
+        P[i * 3 + 2] = (atLip ? sh.P[7][0] : crest[0]) * H + this.zW + (Math.random() - .5) * H;
+        V[i * 3] = (Math.random() - .5) * 0.6; V[i * 3 + 1] = 0.5 + Math.random() * 1.2; V[i * 3 + 2] = this.cond.speed * 0.6 - 1.5 - Math.random() * 2;
+        this.ml[i] = 1 + Math.random() * 1.5;
+      }
+      this.ml[i] -= dt;
+      V[i * 3 + 1] -= 0.6 * dt;
+      P[i * 3] += V[i * 3] * dt; P[i * 3 + 1] += V[i * 3 + 1] * dt; P[i * 3 + 2] += V[i * 3 + 2] * dt;
+      if (this.ml[i] <= 0) P[i * 3 + 1] = -99;
+    }
+    this.mist.geometry.attributes.position.needsUpdate = true;
+    this.mist.material.opacity = 0.38 * this.fade;
+  }
   initSpray(scene) {
     const N = 900; this.sprayN = N;
     this.sp = new Float32Array(N * 3); this.sv = new Float32Array(N * 3); this.sl = new Float32Array(N);
@@ -143,8 +190,9 @@ export class Wave {
   place(peelX, zW) { this.placed = true; this.peelX = peelX; this.zW = zW; }
   dispose(scene) {
     scene.remove(this.mesh); scene.remove(this.spray);
-    this.geo.dispose(); this.mesh.material.dispose();
+    if (!this.shared) { this.geo.dispose(); this.mesh.material.dispose(); }   // shared shapes stay for the next wave
     this.spray.geometry.dispose(); this.spray.material.map.dispose(); this.spray.material.dispose();
+    scene.remove(this.mist); this.mist.geometry.dispose(); this.mist.material.map.dispose(); this.mist.material.dispose();
   }
   lipAt(s) {                                          // world position of the lip tip for the slice at s
     // the shape for a given s never changes, so remember it (per 10 cm); only x moves with the peel
@@ -190,6 +238,7 @@ export class Wave {
     this.mesh.scale.y = this.fade;
     this.mesh.material.uniforms.uH.value = this.cond.H;
     this.updateSpray(dt);
+    this.updateMist(dt);
   }
 }
 
