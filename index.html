@@ -18,7 +18,7 @@
   #speed { top: max(10px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
   #score { top: max(36px, calc(env(safe-area-inset-top) + 26px)); right: max(16px, env(safe-area-inset-right)); color: var(--dim); font-variant-numeric: tabular-nums; }
   #tube { top: 22%; left: 0; right: 0; text-align: center; font-size: 22px; font-weight: 700; letter-spacing: .3em; opacity: 0; transition: opacity .25s; }
-  #hint { top: 30%; left: 0; right: 0; text-align: center; font-size: 17px; font-weight: 600; }
+  #hint { top: max(12px, env(safe-area-inset-top)); left: 22%; right: 22%; text-align: center; font-size: 14px; font-weight: 600; }
   #build { position: fixed; right: 8px; bottom: 4px; color: rgba(253,247,238,.45); font-size: 9px; pointer-events: none; }
   body.playing #build { display: none; }
   #fps { bottom: 4px; left: 50%; transform: translateX(-50%); color: var(--dim); font-size: 10px; }
@@ -76,11 +76,11 @@
   </div>
   <div id="load"></div>
 </div>
-<small id="build">build 260924-1453</small>
+<small id="build">build 260924-1504</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=90"></script>
+<script type="module" src="js/game.js?v=94"></script>
 </body>
 </html>

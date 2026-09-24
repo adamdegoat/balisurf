@@ -13,7 +13,10 @@ export class SurfAudio {
     this.noise = buf;
     this.master = ctx.createGain(); this.master.gain.value = 0.9;
     this.under = ctx.createBiquadFilter(); this.under.type = 'lowpass'; this.under.frequency.value = 18000;   // muffles everything underwater
-    this.master.connect(this.under).connect(ctx.destination);
+    // a limiter at the end: thunder, the lip and the barrel boom can stack up; phone speakers must never crackle
+    const lim = ctx.createDynamicsCompressor();
+    lim.threshold.value = -14; lim.knee.value = 8; lim.ratio.value = 8; lim.attack.value = 0.004; lim.release.value = 0.25;
+    this.master.connect(this.under).connect(lim).connect(ctx.destination);
     const layer = (type, f, q) => {
       const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = Math.random() * 3;
       src.playbackRate.value = 0.8 + Math.random() * 0.4;

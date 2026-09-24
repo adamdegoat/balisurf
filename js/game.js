@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=23';
 import { Rider, Profile, waterAt, heightAt } from './surf.js?v=40';
 import { makeBoard } from './board.js?v=1';
-import { SurfAudio } from './audio.js?v=2';
+import { SurfAudio } from './audio.js?v=3';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -382,6 +382,50 @@ const railSpray = (() => {
   };
 })();
 
+// ---------- wake: a trail of white water behind the board that sits on the surface, drifts with the wave and fades
+const WAKE_N = 900;
+const wake = (() => {
+  const pos = new Float32Array(WAKE_N * 3), a = new Float32Array(WAKE_N), life = new Float32Array(WAKE_N), sz = new Float32Array(WAKE_N);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aA', new THREE.BufferAttribute(a, 1)); g.setAttribute('aS', new THREE.BufferAttribute(sz, 1));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { uScale: { value: 1 } },
+    vertexShader: 'attribute float aA; attribute float aS; varying float vA; uniform float uScale; void main(){ vA = aA; vec4 mv = modelViewMatrix * vec4(position, 1.); gl_PointSize = aS * uScale / -mv.z; gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'varying float vA; void main(){ vec2 d = gl_PointCoord - .5; float r = dot(d, d) * 4.; if (r > 1.) discard; gl_FragColor = vec4(vec3(.96, .95, .93), vA * (1. - r) * .7); }',
+  });
+  const pts = new THREE.Points(g, m); pts.frustumCulled = false; scene.add(pts);
+  let next = 0, acc = 0, frame = 0;
+  for (let i = 0; i < WAKE_N; i++) pos[i * 3 + 1] = -99;
+  const _p = new THREE.Vector3();
+  return {
+    update(dt) {
+      m.uniforms.uScale.value = renderer.domElement.height * 0.9;
+      if (rider && rider.standing && rider.y > -1) {
+        // lay foam at the fins as fast as the board moves, a little wider when carving
+        acc += (40 + rider.v * 9) * dt;
+        while (acc >= 1) {
+          acc--; const i = next; next = (next + 1) % WAKE_N;
+          _p.copy(rig.position).addScaledVector(pose.fwd, -0.7 - Math.random() * 0.2);
+          const side = (Math.random() - .5) * (0.25 + Math.abs(rider.turn) * 0.25);
+          pos[i * 3] = _p.x - Math.sin(rider.th) * side; pos[i * 3 + 1] = _p.y; pos[i * 3 + 2] = _p.z + Math.cos(rider.th) * side;
+          life[i] = 0.6 + Math.random() * 0.4; sz[i] = 0.06 + Math.random() * 0.06 + rider.skid * 0.08;
+        }
+      }
+      // age, drift shoreward with the wave's water, stay on the surface (heights refreshed every other frame)
+      frame++;
+      for (let i = 0; i < WAKE_N; i++) {
+        if (life[i] <= 0) continue;
+        life[i] -= dt / 2.2; a[i] = Math.max(0, life[i]); sz[i] *= 1 + dt * 0.5;
+        if (life[i] <= 0) { pos[i * 3 + 1] = -99; continue; }
+        pos[i * 3 + 2] += 1.2 * dt;
+        if ((i + frame) % 2 === 0) pos[i * 3 + 1] = heightAt(waves, pos[i * 3], pos[i * 3 + 2]) + 0.03;
+      }
+      g.attributes.position.needsUpdate = true; g.attributes.aA.needsUpdate = true; g.attributes.aS.needsUpdate = true;
+    },
+  };
+})();
+
 // ---------- wipeout: the rider is thrown off, goes under, comes back up; the board tumbles away on its own
 const W = { on: false, bv: new THREE.Vector3(), bw: new THREE.Vector3(), rv: new THREE.Vector3(), rw: new THREE.Vector3(), under: 0 };
 const _e = new THREE.Euler(), _dq = new THREE.Quaternion();
@@ -471,11 +515,12 @@ function surfStance() {
 }
 
 // ---------- HUD + end of ride
-const setText = (el, t) => { if (el._t !== t) { el._t = t; el.textContent = t; } };   // only touch the page when the text changes
+const setText = (el, t) => { if (el && el._t !== t) { el._t = t; el.textContent = t; } };   // only touch the page when the text changes
 let endT = -1, snapCam = true;
 function updateHUD(dt) {
   const st = rider.state;
   setText(ui.speed, rider.standing ? `${Math.round(rider.v * 3.6)} km/h` : '');
+  if (mode === 'random') setText(ui.cond, rider.wave && rider.standing ? `Random: ${rider.wave.cond.name.toLowerCase()} wave` : 'Random');
   ui.paddle.style.visibility = st === 'WIPE' || st === 'OUT' ? 'hidden' : 'visible';
   const lbl = rider.standing ? 'PUMP' : 'PADDLE'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
   // coaching for the first few waves: read the sea like a surfer would
@@ -533,6 +578,7 @@ function tick(dt) {
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); surfStance(); }
     railSpray.update(dt);
+    wake.update(dt);
     updateCamera(dt);
     updateHUD(dt);
     // sound follows what's happening: the breaking wave is loud near the curl
