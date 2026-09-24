@@ -173,7 +173,7 @@ export class Wave {
     const N = 240; this.mistN = N;
     this.mp = new Float32Array(N * 3); this.mv = new Float32Array(N * 3); this.ml = new Float32Array(N).fill(-1); this.ma = new Float32Array(N);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.mp, 3));
-    this.mist = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf2efe9, size: 1.1 * this.cond.H, map: sprite('mist', 64, [[0, 'rgba(255,255,255,.9)'], [0.5, 'rgba(255,255,255,.35)'], [1, 'rgba(255,255,255,0)']]), transparent: true, opacity: 0.38, depthWrite: false }));
+    this.mist = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf2efe9, size: 0.75 * this.cond.H, map: sprite('mist', 64, [[0, 'rgba(255,255,255,.9)'], [0.5, 'rgba(255,255,255,.35)'], [1, 'rgba(255,255,255,0)']]), transparent: true, opacity: 0.24, depthWrite: false }));
     this.mist.frustumCulled = false; scene.add(this.mist);
   }
   updateMist(dt) {

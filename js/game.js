@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=60';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=61';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=90';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
@@ -352,7 +352,8 @@ const _wiq = new THREE.Quaternion(), _wm = new THREE.Matrix4();
 function povWipe(dt) {
   if (bones.head) bones.head.getWorldPosition(_eye); else surfer.getWorldPosition(_eye);
   if (!W.cam) { W.cam = camera.position.clone(); W.q = camera.quaternion.clone(); W.up = false; }
-  if (W.t < 1.4) W.cam.lerp(_eye, Math.min(1, dt * 12)); else { W.cam.x += (_eye.x - W.cam.x) * Math.min(1, dt * 4); W.cam.z += (_eye.z - W.cam.z) * Math.min(1, dt * 4); W.cam.y += (Math.min(_eye.y, heightAt(waves, W.cam.x, W.cam.z) + 0.3) - W.cam.y) * Math.min(1, dt * 3); }
+  surfer.visible = false;   // you ARE the camera: your own body tumbling past the lens only looks broken
+  if (W.t < 1.4) W.cam.lerp(_eye, Math.min(1, dt * 30)); else { W.cam.x += (_eye.x - W.cam.x) * Math.min(1, dt * 4); W.cam.z += (_eye.z - W.cam.z) * Math.min(1, dt * 4); W.cam.y += (Math.min(_eye.y, heightAt(waves, W.cam.x, W.cam.z) + 0.3) - W.cam.y) * Math.min(1, dt * 3); }
   const water = heightAt(waves, W.cam.x, W.cam.z);
   if (W.t < 1.4) {
     // roll with your body, at 40% of its spin
@@ -612,7 +613,7 @@ function wipeout(dt) {
   }
   if (W.t > 1.4) play('tread', { fade: 0.4 });
 }
-function endWipe() { if (!W.on) return; W.on = false; rig.add(surfer); surfer.position.set(0, 0, 0); surfer.quaternion.identity(); }
+function endWipe() { if (surfer) surfer.visible = true; if (!W.on) return; W.on = false; rig.add(surfer); surfer.position.set(0, 0, 0); surfer.quaternion.identity(); }
 
 // ---------- surf stance on top of the clips: feet wide along the board, arms out for balance
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _t = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _wq = new THREE.Quaternion();
