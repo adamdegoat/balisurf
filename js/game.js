@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=52';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=53';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -660,8 +660,12 @@ function updateHUD(dt) {
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
   } else if (st === 'POP') hint = 'Up!';
   else if (st === 'RIDE' && rider.stateT < 5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Lean with your thumb: a little to carve, all the way to drift' : 'Hold PUMP as you drop down the face for speed';
-  setText(ui.hint, session.waves < 4 || st === 'POP' ? hint : '');
-  ui.tube.style.opacity = rider.inBarrel && st === 'RIDE' ? 1 : 0;
+  else if (st === 'RIDE' && rider.stateT > 6 && rider.stateT < 10 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: lean toward the beach and keep turning till you face the breaking wave';
+  setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
+  // the callout: BARREL while you're in it, or the move you just landed
+  const call = st !== 'RIDE' ? '' : rider.inBarrel ? 'BARREL' : rider.trick ? rider.trick.name : '';
+  if (call) setText(ui.tube, call);
+  ui.tube.style.opacity = call ? 1 : 0;
   setText(ui.score, st === 'RIDE' ? '' + rider.liveScore() : '');
   if ((st === 'WIPE' || st === 'OUT') && endT < 0) {
     endT = 0;
@@ -672,7 +676,7 @@ function updateHUD(dt) {
     ui.msgT.textContent = rider.why;
     ui.msgN.innerHTML = r.t > 0 ? `${r.score}${newBest ? '<small>NEW BEST</small>' : ''}` : '';
     const stat = (v, l) => `<div>${v}<span>${l}</span></div>`;
-    ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
+    ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.cutbacks ? stat(r.cutbacks, r.cutbacks > 1 ? 'CUTBACKS' : 'CUTBACK') : '') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
     ui.sess.textContent = session.waves ? `Rides ${session.waves}  ·  session best ${session.best}  ·  all-time best ${Math.max(bestFor(mode), r.score)}` : '';
     ui.msg.style.display = 'flex';
   }
