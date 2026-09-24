@@ -428,7 +428,7 @@ function updateRig(dt, t) {
     // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
     pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
     // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
-    const deep = Math.min(0.85, (rider.inBarrel ? 0.62 : 0.25 + 0.12 * Math.min(1, rider.v / 10)) + 0.28 * pumpC + 0.3 * gLoad);
+    const deep = Math.min(0.85, (rider.inBarrel ? 0.62 : 0.4 + 0.1 * Math.min(1, rider.v / 10)) + 0.28 * pumpC + 0.3 * gLoad);
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     clips.crouch.weight = deep; clips.stand.weight = 1 - deep;
     setStance();
@@ -644,7 +644,7 @@ function turnBone(bone, axis, ang) {
   bone.updateMatrixWorld(true);
 }
 const _in = new THREE.Vector3(), _fw = new THREE.Vector3();
-let bodyT = 0, gLoad = 0;
+let bodyT = 0, gLoad = 0; const STOOP = 0.25; const _sideAx = new THREE.Vector3();
 function surfStance() {
   if (sitting) straddle();
   const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POP' ? Math.min(1, rider.stateT / 0.45) : 0;
@@ -667,8 +667,8 @@ function surfStance() {
     // arms: the front arm leads into the turn and points where you're going, the back arm swings out for balance;
     // both drop low and in when tucked in the barrel, and never sit still
     const sway = Math.sin(bodyT * 1.7 + (sgn > 0 ? 0 : 1.3)) * 0.08;
-    if (sgn > 0) _t.copy(bodyFwd).multiplyScalar(0.85).addScaledVector(_in, 0.55 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.35 : 0.05) + 0.2 * Math.abs(leanN) + sway);
-    else _t.copy(bodyFwd).multiplyScalar(-0.7).addScaledVector(_in, -0.35 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.3 : 0.25) + 0.35 * Math.abs(leanN) + sway);
+    if (sgn > 0) _t.copy(bodyFwd).multiplyScalar(0.85).addScaledVector(_in, 0.55 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.35 : -0.3) + 0.4 * Math.abs(leanN) + sway);
+    else _t.copy(bodyFwd).multiplyScalar(-0.7).addScaledVector(_in, -0.35 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.3 : -0.2) + 0.5 * Math.abs(leanN) + sway);   // relaxed: arms low and loose; they rise for balance in a turn
     _t.addScaledVector(INTO_WAVE, 0.2).normalize();
     aimBone(bones['upperarm_' + s], bones['lowerarm_' + s], _t, 0.8 * w);
   }
@@ -677,6 +677,8 @@ function surfStance() {
   turnBone(bones.spine_02, bodyUp, twist * 0.5); turnBone(bones.spine_03, bodyUp, twist * 0.5);
   _fw.copy(bodyFwd);
   turnBone(bones.spine_01, _fw, -leanN * 0.18 * w * side);
+  // an athletic stance: chest a little forward over the knees, not standing up straight
+  _sideAx.crossVectors(bodyFwd, bodyUp).normalize(); turnBone(bones.spine_02, _sideAx, STOOP * w);
   // head: look ahead along your line (surfers always look where they're going)
   turnBone(bones.head, bodyUp, side * 0.55 * w - twist * 0.6);
 }
