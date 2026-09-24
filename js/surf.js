@@ -265,6 +265,10 @@ export class Rider {
     // (only a wave that pitches can throw you; a soft, crumbly one just breaks around you and the whitewater rule decides)
     if (C.hollow > 0.5 && onFront && y > 0.86 * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
     this.inBarrel = lipDown && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
+    // too deep: fall behind the curl and the foam ball (the broken wave churning inside the tube) catches you. You have
+    // to keep your speed matched to the peel to stay in (pump, or come off the stall in time)
+    if (this.inBarrel && s < -1.75 * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > 2.2 || s < -2.6 * H) return this.wipe('Too deep: the foam ball swallowed you'); }
+    else this.foamT = Math.max(0, (this.foamT || 0) - h);
     // over the back
     if (!onFront && y < 0.4 * Math.max(sl.top, 0.3)) return this.out('Kicked out over the back');
     const kmh = this.v * 3.6; this.ride.top = Math.max(this.ride.top, kmh);
@@ -330,7 +334,7 @@ export class Rider {
   wipe(why) { this.why = why; this.set('WIPE'); this.ride.score = this.ride.t > 0 ? this.liveScore(true) : 0; }
   out(why) {
     this.why = why;
-    if (this.ride.tubeT > 0.5 && this.wave) this.move('BARREL', 0.8, this.ride.tubeT);   // rode it out of (or to the end in) the barrel: that counts
+    if (this.ride.tubeT > 0.5 && this.wave && !this.inBarrel) this.move('BARREL', 0.8, this.ride.tubeT);   // came out of the barrel just as the ride ended: that counts
     this.ride.tubeT = 0; this.set('OUT'); this.ride.score = this.ride.t > 0 ? this.liveScore() : 0;
   }
 

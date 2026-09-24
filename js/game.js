@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=50';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=73';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=75';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
 
@@ -811,6 +811,7 @@ function updateHUD(dt) {
     else if (session.waves < 2 && inc.t >= 7) hint = 'Watch the horizon for the next set';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
   } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Go LEFT along the wave, hold PUMP for speed' : 'Up!';
+  else if (st === 'RIDE' && rider.inBarrel && (rider.foamT || 0) > 0.4) hint = 'Too deep! PUMP and steer up the face to get out';
   else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Slide your thumb left and right to carve, like a steering wheel' : rider.stateT < 5 ? 'Hold PUMP for speed, STALL to brake and let the barrel catch you' : 'Let go and the board just glides straight';
   else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: keep turning right till you face the breaking wave, then turn back';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
