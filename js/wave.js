@@ -372,6 +372,10 @@ export function waterMaterial({ wave = false } = {}) {
         vec2 q = mix(vW.xz, vec2(vW.x, vW.y + vW.z), smoothstep(.75, .35, abs(N.y))) * .45 + vec2(uTime*.12, uTime*.07);
         float n1 = fbm(q), n2 = fbm(q*2.3 + 7.1);
         N = normalize(N + vec3(n1 - .5, 0., n2 - .5) * .28 * uChop);
+        // fine wind ripples close to you (the big ripple pattern alone leaves the water glassy up close)
+        float nearK = smoothstep(30., 3., length(cameraPosition - vW)) * step(.6, abs(N.y));
+        vec2 rq = vW.xz * 3.2 + vec2(uTime * .5, uTime * .35);
+        N = normalize(N + vec3(fbm(rq) - .5, 0., fbm(rq * 1.7 + 4.3) - .5) * .5 * nearK * (.6 + .4 * uChop));
         ${wave ? `
         // fine texture on the face: water being drawn up the wall leaves streaky ripples that stream upward;
         // strongest on steep faces, fading with distance (it would only shimmer far away)
@@ -396,7 +400,9 @@ export function waterMaterial({ wave = false } = {}) {
         ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);' : ''}
         vec3 col = mix(body, refl, fres);
         // sun glint
-        col += uSunCol * pow(max(dot(R, uSun), 0.), 220.) * 3. * uSunVis;
+        // (broken into glitter by the small ripples, as on real water; a smooth glint reads as a white smudge up close)
+        float glit = smoothstep(.52, .78, fbm(vW.xz * 5.5 + vec2(uTime * .9, -uTime * .6)));
+        col += uSunCol * pow(max(dot(R, uSun), 0.), 220.) * 3. * uSunVis * (.25 + 1.6 * glit);
         ${wave ? `
         // foam: churned white where the lip throws and the whitewater rolls
         // foam features scale with the wave: a 15 m wave boils in big lumps, not a fine repeating pattern

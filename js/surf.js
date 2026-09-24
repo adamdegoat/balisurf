@@ -1,5 +1,5 @@
 // Surf physics: a board on the real water surface.
-// World: x runs along the reef (the break peels toward +x, a right-hander), z points to the beach, y is up.
+// World: x runs along the reef (the break peels toward +x: facing the beach that is to your LEFT, a left-hander like Uluwatu), z points to the beach, y is up.
 // Waves roll in along +z at their speed c and break along the reef at the peel rate. The board moves freely in x/z;
 // its height is the water surface under it. Forces: gravity down whatever slope you're on, the water moving with the
 // wave, drag (low along the board, very high sideways once you're standing: that's the fins), paddling, pumping.
