@@ -567,6 +567,8 @@ export function coast(scene) {
   const land = new THREE.PlaneGeometry(1800, 500, 90, 20); land.rotateX(-Math.PI / 2);
   { const p = land.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, 2 + 4 * Math.sin(x * 0.013) * Math.cos(z * 0.02) + (z + 250) * 0.03); } land.computeVertexNormals(); }
   group.add(at(new THREE.Mesh(colorize(land, [0.12, 0.2, 0.1], 0.2), mat), 0, 0, 475));
+  // height of the rolling land at a world point (the same formula that shapes the land mesh, placed at z = 475)
+  const landY = (x, z) => { const lz = z - 475; return 2 + 4 * Math.sin(x * 0.013) * Math.cos(lz * 0.02) + (lz + 250) * 0.03; };
   // jungle: layered tree canopies behind the palms. Each tree is a lumpy crown (a noise-dented blob, darker underneath
   // where it's in shade) sitting on the ground or on a short trunk; neighbours overlap into one uneven forest edge.
   const blob = new THREE.IcosahedronGeometry(1, 1);   // (42 points each: it's 80 m+ away; phones draw hundreds of these)
@@ -586,11 +588,11 @@ export function coast(scene) {
   const crown = (x, y, z, r) => { if (n >= NJ) return; q.setFromEuler(new THREE.Euler(0, Math.random() * 6.3, 0));
     jungle.setMatrixAt(n++, m4.compose(ps.set(x, y, z), q, sc.set(r * (1 + Math.random() * 0.4), r * (0.7 + Math.random() * 0.3), r * (0.9 + Math.random() * 0.4)))); };
   // understory: a dense band of low bushes so no sky shows through at the foot of the forest
-  for (let i = 0; i < 380; i++) { const x = -750 + Math.random() * 1500, z = 232 + Math.random() * 60, r = 3 + Math.random() * 4; crown(x, 1.3 + (z - 230) * 0.04 + r * 0.4, z, r); }
+  for (let i = 0; i < 380; i++) { const x = -750 + Math.random() * 1500, z = 232 + Math.random() * 60, r = 3 + Math.random() * 4; crown(x, landY(x, z) + r * 0.4, z, r); }
   // trees: a crown of two or three overlapping lumps; the tall ones stand on a trunk above the understory
   while (n < NJ - 3) {
     const tall = nt < NT && Math.random() < 0.3, r = tall ? 5 + Math.random() * 4 : 3 + Math.random() * 3;
-    const x = -750 + Math.random() * 1500, z = 238 + Math.random() * 55, ground = 1.3 + (z - 230) * 0.04, cy = ground + (tall ? r * (1.2 + Math.random() * 0.5) : r * 0.8);
+    const x = -750 + Math.random() * 1500, z = 238 + Math.random() * 55, ground = landY(x, z), cy = ground + (tall ? r * (1.2 + Math.random() * 0.5) : r * 0.8);
     for (let k = 0; k < 3; k++) crown(x + (Math.random() - 0.5) * r, cy + (k ? (Math.random() - 0.3) * r * 0.5 : 0), z + (Math.random() - 0.5) * r, r * (k ? 0.65 : 1));
     if (tall) jTrunk.setMatrixAt(nt++, m4.compose(ps.set(x, ground - 0.5, z), q.identity(), sc.set(r * 0.08 + 0.3, cy - ground, r * 0.08 + 0.3)));
   }
