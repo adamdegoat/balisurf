@@ -16,7 +16,7 @@ export const RIDE = {
   drag: 0.09, drag2: 0.013,            // planing drag along the board
   finGrip: 12, gripMax: 19,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2), then the tail skids
   skidLoss: 0.35,                      // share of the excess sideways force lost as speed while skidding
-  turnMax: 2.5, turnRadius: 2.6,       // carve: rad/s cap, and the tightest arc (m) a board holds at speed
+  turnMax: 2.2, turnRadius: 4.6,       // carve: rad/s cap, and the tightest arc (m) at speed: wide enough that the fins hold (v^2/R under their grip)
   pump: 0.5,                           // pumping adds this share of the downhill pull (and costs 1.2x that when climbing)
   popTime: 0.35,                       // seconds from lying to standing
   waterPush: 1.0,                      // how much the wave's moving water carries you
@@ -161,7 +161,7 @@ export class Rider {
       const pop = this.state === 'POP' ? 0.4 : 1;
       const speed = Math.hypot(this.vx, this.vz);
       const want = inp.steer * Math.min(P.turnMax, Math.max(0.9, speed / P.turnRadius)) * pop;
-      this.turn += (want - this.turn) * Math.min(1, h * 10);
+      this.turn += (want - this.turn) * Math.min(1, h * 5);             // the rail rolls into a turn, it doesn't snap
       this.th += this.turn * h;
       const dr = P.drag * along + P.drag2 * along * Math.abs(along);
       ax += -dr * dx; az += -dr * dz;

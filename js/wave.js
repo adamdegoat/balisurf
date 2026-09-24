@@ -445,3 +445,86 @@ export class WeatherFX {
     }
   }
 }
+
+// The coast behind the break, modelled on Keramas (Bali's right-hand reef on a beach): black volcanic sand, a line of
+// coconut palms, jungle behind, and Mount Agung far inland. All of it hazed by distance like real sea air.
+export function coast(scene) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: ENV,
+    vertexShader: `attribute vec3 color; varying vec3 vC; varying vec3 vW; varying vec3 vN;
+      void main(){ vC = color; vec4 w = modelMatrix * vec4(position, 1.);
+        #ifdef USE_INSTANCING
+          w = modelMatrix * instanceMatrix * vec4(position, 1.); vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+        #else
+          vN = normalize(mat3(modelMatrix) * normal);
+        #endif
+        vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec3 uSun, uSunCol, uHor, uZen, uFog; uniform float uSunVis, uFlash; varying vec3 vC; varying vec3 vW; varying vec3 vN;
+      void main(){
+        float l = .45 + .55 * max(dot(normalize(vN), uSun), 0.) * uSunVis;
+        vec3 c = vC * (l * mix(vec3(1.), uSunCol, .5) + uZen * .25) + uFlash * .4;
+        float d = length(cameraPosition - vW);
+        c = mix(c, mix(mix(uFog, uHor, .5), uZen, .25), .15 + .62 * smoothstep(120., 900., d));   // aerial haze: distant land turns blue-grey
+        gl_FragColor = vec4(c, 1.);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  });
+  const colorize = (g, rgb, jitter = 0.08) => {
+    const n = g.attributes.position.count, c = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const k = 1 + (Math.random() - .5) * jitter; c[i * 3] = rgb[0] * k; c[i * 3 + 1] = rgb[1] * k; c[i * 3 + 2] = rgb[2] * k; }
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3)); return g;
+  };
+  const group = new THREE.Group();
+  // beach: dark volcanic sand rising gently from the water
+  const sand = new THREE.PlaneGeometry(1600, 40, 60, 4); sand.rotateX(-Math.PI / 2);
+  { const p = sand.attributes.position; for (let i = 0; i < p.count; i++) { const z = p.getZ(i); p.setY(i, (z + 20) / 40 * 2.2 - 0.2 + Math.sin(p.getX(i) * 0.05) * 0.2); } sand.computeVertexNormals(); }
+  group.add(at(new THREE.Mesh(colorize(sand, [0.2, 0.18, 0.16]), mat), 0, 0, 205));
+  // land behind, gently rolling
+  const land = new THREE.PlaneGeometry(1800, 500, 90, 20); land.rotateX(-Math.PI / 2);
+  { const p = land.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, 2 + 4 * Math.sin(x * 0.013) * Math.cos(z * 0.02) + (z + 250) * 0.03); } land.computeVertexNormals(); }
+  group.add(at(new THREE.Mesh(colorize(land, [0.12, 0.2, 0.1], 0.2), mat), 0, 0, 475));
+  // jungle: big soft clumps behind the palms
+  const clump = colorize(new THREE.IcosahedronGeometry(1, 1), [0.1, 0.19, 0.09], 0.25);
+  const jungle = new THREE.InstancedMesh(clump, mat, 260); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+  for (let i = 0; i < 260; i++) {
+    // uneven canopy: mostly low scrub and trees, now and then a tall one, never a neat row
+    const tall = Math.random() < 0.18, r = tall ? 9 + Math.random() * 6 : 3 + Math.random() * 6;
+    ps.set(-750 + Math.random() * 1500, 1 + r * (tall ? 0.9 : 0.4), 236 + Math.random() * 45); sc.set(r * (1 + Math.random() * 0.8), r * (0.45 + Math.random() * 0.5), r * (0.8 + Math.random() * 0.5));
+    jungle.setMatrixAt(i, m4.compose(ps, q.identity(), sc));
+  }
+  group.add(jungle);
+  // coconut palms along the beach: leaning trunks and a spray of fronds
+  const N = 170;
+  const trunkG = colorize(new THREE.CylinderGeometry(0.18, 0.3, 1, 5, 1).translate(0, 0.5, 0), [0.35, 0.29, 0.22]);
+  const frond = new THREE.ConeGeometry(0.7, 4.2, 3, 1).rotateX(Math.PI / 2).translate(0, 0, 2.1).scale(1, 0.25, 1);
+  const crownParts = [];
+  for (let k = 0; k < 8; k++) crownParts.push(frond.clone().rotateX(0.45 + (k % 2) * 0.25).rotateY(k * Math.PI / 4));
+  const crownG = colorize(mergeGeos(crownParts), [0.14, 0.27, 0.1], 0.2);
+  const trunks = new THREE.InstancedMesh(trunkG, mat, N), crowns = new THREE.InstancedMesh(crownG, mat, N);
+  for (let i = 0; i < N; i++) {
+    const h = 8 + Math.random() * 7, lean = (Math.random() - 0.5) * 0.35 - 0.12, yaw = Math.random() * Math.PI * 2;
+    const x = -700 + i * 8.2 + (Math.random() - .5) * 5, z = 222 + Math.random() * 12;
+    q.setFromEuler(new THREE.Euler(lean, yaw, (Math.random() - .5) * 0.3));
+    trunks.setMatrixAt(i, m4.compose(ps.set(x, 1.8, z), q, sc.set(1, h, 1)));
+    const top = new THREE.Vector3(0, h, 0).applyQuaternion(q).add(ps);
+    crowns.setMatrixAt(i, m4.compose(top, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.random() * 6, 0)), sc.set(1, 1, 1).multiplyScalar(0.9 + Math.random() * 0.4)));
+  }
+  group.add(trunks, crowns);
+  // Mount Agung, far inland: a broad volcanic cone
+  // (placed inside the 900 m sky dome at the same apparent size it would have 30 km away)
+  const agung = new THREE.ConeGeometry(470, 165, 40, 6, true); { const p = agung.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const n = Math.sin(p.getX(i) * 0.03) * Math.cos(p.getZ(i) * 0.04) * 10; p.setX(i, p.getX(i) * (1 + n / 470)); p.setY(i, y + (y < 60 ? n * 0.3 : 0)); } agung.computeVertexNormals(); }
+  group.add(at(new THREE.Mesh(colorize(agung, [0.26, 0.3, 0.3], 0.1), mat), -230, 80, 820));
+  scene.add(group);
+  return group;
+}
+function at(mesh, x, y, z) { mesh.position.set(x, y, z); return mesh; }
+function mergeGeos(list) {
+  // join simple non-indexed-compatible geometries into one (positions + normals)
+  const parts = list.map((g) => g.index ? g.toNonIndexed() : g);
+  let n = 0; for (const g of parts) n += g.attributes.position.count;
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3); let o = 0;
+  for (const g of parts) { pos.set(g.attributes.position.array, o * 3); g.computeVertexNormals(); nor.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; }
+  const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  return out;
+}

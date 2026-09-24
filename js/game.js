@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=29';
-import { Rider, Profile, waterAt, heightAt } from './surf.js?v=41';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
+import { Rider, Profile, waterAt, heightAt } from './surf.js?v=42';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -19,7 +19,7 @@ const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.08, 2
 // keep roughly 80-85 degrees across the screen whatever the shape, so a wide phone doesn't push everything into the distance
 const fitFov = () => { camera.aspect = innerWidth / innerHeight; camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(39)) / Math.min(camera.aspect, 1.9))); camera.updateProjectionMatrix(); };
 fitFov();
-skyDome(scene); ocean(scene);
+skyDome(scene); ocean(scene); coast(scene);
 const fx = new WeatherFX(scene);
 const audio = new SurfAudio();
 fx.onFlash = () => audio.thunder(Math.random());
@@ -180,19 +180,25 @@ const cam = { a: 0, r: 3, y: 1.3, va: 0, vr: 0, vy: 0, vl: new THREE.Vector3() }
 const camOff = new THREE.Vector3(0, 1.3, 3), lookOff = new THREE.Vector3(), _anc = new THREE.Vector3(), anchorS = new THREE.Vector3(), anchorV = new THREE.Vector3();
 const smooth01 = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 const _wq2 = {};
+// how high the wave reaches at a point for sight-line purposes, including a lip overhanging in front of the face
+const _sq = {};
+function solidAt(x, z) {
+  const q = waterAt(waves, x, z, _sq);
+  if (!q.w) return q.y;
+  const sl = q.w.prof.slice(q.s);
+  if (q.zl > sl.topZ - 0.5 && q.zl < Math.max(sl.lipZ, sl.topZ) + 0.6) return Math.max(q.y, sl.top * (q.w.fade || 1));
+  return q.y;
+}
 function updateCamera(dt) {
   const p = pose.pos, st = rider.state;
   const want = _want, look = _look;
   if (st === 'WIPE' && W.on && surfer) {
-    // follow the body from the beach side; never below the water
+    // wiping out: the same camera, behind you, pulling back and up so you see yourself go over and the board fly
     const b = surfer.getWorldPosition(_cv);
-    // from down the line and a little toward the beach (where a filmer stands), high enough to see the lip and the board fly;
-    // it rises ahead of any water rolling toward it so the wave never swallows the camera
-    const cx = b.x + 6.5, cz = b.z + 2.5;
-    let wy = heightAt(waves, cx, cz);
-    for (const w of waves) for (const ta of [0.3, 0.7, 1.2]) wy = Math.max(wy, heightAt(waves, cx, cz - w.cond.speed * ta));
-    want.set(cx, Math.max(wy + 1.0, Math.min(b.y, 2) + 1.8), cz);
-    look.set(b.x, Math.max(b.y + (W.t > 1.4 ? 1.3 : 0.2), 0.3), b.z);
+    const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
+    let wy = heightAt(waves, b.x - dx * 5, b.z - dz * 5);
+    want.set(b.x - dx * 5, Math.max(wy + 1.2, Math.min(b.y, 2) + 2.2), b.z - dz * 5);
+    look.set(b.x, Math.max(b.y + (W.t > 1.4 ? 1.1 : 0.3), 0.3), b.z);
   } else {
     // follow the direction you're travelling when you're up and moving, the way the board points when you're lying
     const standing = rider.standing, moving = rider.v > 2.5 && standing;
@@ -206,35 +212,17 @@ function updateCamera(dt) {
     camYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * (standing ? 6 : 3)))); if (snapCam) camYaw = yaw;
     const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
     const tube = rider.inBarrel ? 1 : 0;
-    const back = standing ? 3.9 - 1.5 * tube : 3.0, height = standing ? 1.75 - 0.85 * tube : 1.2;
+    // heading toward the beach (the drop), come in close over your shoulder so you stay on the same face as the surfer;
+    // turning along the wave, ease back out to the normal chase distance
+    const shore = standing ? Math.max(0, Math.sin(lookYaw)) : 0;
+    const back = standing ? (3.9 - 1.5 * tube) * (1 - 0.5 * shore) : 3.0, height = standing ? 1.75 - 0.85 * tube - 0.55 * shore : 1.2;
     want.set(p.x - dx * back, p.y + height, p.z - dz * back);
     // look just ahead of you (from the side or front during the drop, at you)
     const ol = Math.hypot(camOff.x, camOff.z) || 1, behind = Math.max(0, Math.min(1, -(camOff.x * dx + camOff.z * dz) / ol));
     const lead = standing ? 0.3 + 2.4 * behind : 0.5 + 4.5 * behind * behind;
     const lx = standing ? Math.cos(lookYaw) : dx, lz = standing ? Math.sin(lookYaw) : dz;   // look where you're actually going
     look.set(p.x + lx * lead, p.y + (standing ? 0.55 : 0.4), p.z + lz * lead);
-    // lying and facing the beach with a wave coming: look back over your shoulder at it; on the face, swing beside you for the drop
-    if (!standing && st === 'LIE') {
-      const inc = incoming(), facingIn = Math.sin(rider.th) > 0.4;
-      const onWave = rider.y > 0.25 * (rider.wave ? rider.wave.cond.H : 1);
-      const lookBack = facingIn && inc.w && inc.t < 6 ? smooth01(1 - (inc.t - 2.2) / 3) : 0;   // full by ~2 s out, starts ~5 s out
-      lookBackK += ((onWave ? 2 : lookBack) - lookBackK) * Math.min(1, dt * 3);
-      // pick one framing at a time; the arc smoother below swings the camera between them round the surfer (never through)
-      if (lookBackK > 1.4) {          // on the face: in front of you and down the line, looking back up at the drop
-        want.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); look.set(p.x - 0.3, p.y + 0.6, p.z - 0.5);
-      } else if (lookBackK > 0.5) {   // wave coming: in front of you (shoreward), looking back past you at it
-        want.set(p.x + 1.4, p.y + 1.25, p.z + 4.4); look.set(p.x - 0.4, p.y + 0.55, p.z - 4);
-      }
-    } else if (standing && lookBackK > 0.01) {
-      // just up: hold the filmer's view a moment, then hand over to the riding camera
-      lookBackK = Math.max(0, lookBackK - dt * 1.6);
-      if (lookBackK > 1.2) { want.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); look.set(p.x - 0.3, p.y + 0.6, p.z - 0.5); }
-    } else lookBackK = 0;
-    // ride over: settle on a calm, wider shot of you from the side, a little above
-    if (st === 'OUT') {
-      const sx = Math.cos(rider.th + 1.2), sz = Math.sin(rider.th + 1.2);
-      want.set(p.x + sx * 4.5, p.y + 1.7, p.z + sz * 4.5); look.set(p.x, p.y + 0.45, p.z);
-    }
+    lookBackK = 0;                                                     // one camera, always behind you, like being the surfer
     // stay out of the water: above the surface here, in front of the face at the camera's height, inside the tube in the barrel
     const q = waterAt(waves, want.x, want.z, _wq2);
     if (q.w) {
@@ -245,16 +233,32 @@ function updateCamera(dt) {
         const wall = q.w.prof.frontZAt(q.s, want.y) + q.w.zW;
         want.z = Math.max(wall + 0.5, Math.min(want.z, sl.lipZ + q.w.zW - 0.5));
       }
-      else if (!standing && q.zl > sl.topZ - 0.3 && want.y < sl.top + 0.3) {
-        const fz = q.w.prof.frontZAt(q.s, want.y) + q.w.zW;
-        if (want.z < fz + 0.7) want.z = fz + 0.7;                  // pushed out in front of the wall, never inside it
-      } else if (standing && q.zl < sl.topZ + 0.3) want.y = Math.max(want.y, sl.top * (q.w.fade || 1) + 0.6);   // behind you over the top of the wave: rise above it, don't swing sideways
+      // behind you is up the wave (you're dropping toward the beach): rise over the crest and look down over your
+      // shoulder, a bit closer, so the wave never blocks your view of yourself
+      if (!tube && q.zl < sl.topZ + 1.5 && q.y > 0.15) {
+        const top = sl.top * (q.w.fade || 1);
+        want.y = Math.max(want.y, top + 1.1);
+        want.x += (p.x - want.x) * 0.25; want.z += (p.z - want.z) * 0.25;
+        look.set(p.x + (look.x - p.x) * 0.35, p.y + 0.35, p.z + (look.z - p.z) * 0.35);   // high up: look down at you, not past you
+      }
     }
     // stay above the water that's here now and the water that's about to arrive (a wave passing under shouldn't shove the camera)
     let wy = heightAt(waves, want.x, want.z);
     if (!standing) for (const w of waves) { const zl = want.z - w.zW; if (zl > -3 && zl < 16) for (const ta of [0.3, 0.6, 1.0]) wy = Math.max(wy, heightAt(waves, want.x, want.z - w.cond.speed * ta)); }
     if (!tube) want.y = Math.max(want.y, wy + 0.45);
     if (tube) look.y = p.y + 0.55;                                     // level gaze down the tube toward the opening
+    // keep a clear line of sight to the surfer: if water sits between the camera and them, lift the camera until it clears
+    if (!tube) for (let k = 0; k < 8; k++) {
+      let blocked = false;
+      for (let j = 1; j < 7; j++) {
+        const f = j / 7, sx = want.x + (p.x - want.x) * f, sy = want.y + (p.y + 0.9 - want.y) * f, sz = want.z + (p.z - want.z) * f;
+        if (solidAt(sx, sz) > sy) { blocked = true; break; }
+      }
+      if (!blocked) break;
+      want.y += 0.45;
+    }
+    // whenever the camera sits well above you, aim at you so you never drop out of the bottom of the screen
+    { const above = want.y - p.y; if (above > 2) { const k = Math.min(1, (above - 2) / 1.5); look.x += (p.x - look.x) * 0.6 * k; look.z += (p.z - look.z) * 0.6 * k; look.y += (p.y + 0.35 - look.y) * k; } }
   }
   // the camera follows a smoothed version of the surfer (a spring about 0.15 s behind): the board's little hops never shake it
   const tgt = st === 'WIPE' && W.on && surfer ? surfer.getWorldPosition(_anc) : p;
@@ -273,7 +277,8 @@ function updateCamera(dt) {
     const w0 = st === 'WIPE' ? 3.2 : rider.standing && lookBackK < 0.01 ? 6.5 : 3.6, damp = Math.max(0, 1 - 2 * w0 * dt), w2 = w0 * w0 * dt;
     cam.va = (cam.va + Math.atan2(Math.sin(ta - cam.a), Math.cos(ta - cam.a)) * w2) * damp; cam.va = Math.max(-2.5, Math.min(2.5, cam.va)); cam.a += cam.va * dt;
     cam.vr = (cam.vr + (tr - cam.r) * w2) * damp; cam.vr = Math.max(-3, Math.min(3, cam.vr)); cam.r += cam.vr * dt;
-    cam.vy = (cam.vy + (_cv.y - cam.y) * w2) * damp; cam.vy = Math.max(-3, Math.min(3, cam.vy)); cam.y += cam.vy * dt;
+    { const wy0 = 7, dy0 = Math.max(0, 1 - 2 * wy0 * dt);             // height follows faster: rise with the wave, never lag under a crest
+      cam.vy = (cam.vy + (_cv.y - cam.y) * wy0 * wy0 * dt) * dy0; cam.vy = Math.max(-3, Math.min(9, cam.vy)); } cam.y += cam.vy * dt;
     // the point we look at: same kind of spring, a little quicker
     const l0 = 4.2, ld = Math.max(0, 1 - 2 * l0 * dt);
     _lk.subVectors(look, anchor).sub(lookOff).multiplyScalar(l0 * l0 * dt);
@@ -467,7 +472,6 @@ const W = { on: false, bv: new THREE.Vector3(), bw: new THREE.Vector3(), rv: new
 const _e = new THREE.Euler(), _dq = new THREE.Quaternion();
 function startWipe() {
   W.on = true; W.t = 0; W.under = 0;
-  wipeCut = true;                                                     // a clean cut to the wipeout camera, like a broadcast
   const v = rider.v, lip = /lip|falls|closed|whitewater|broke/i.test(rider.why);
   // body: carried by its own speed, pitched forward; the lip throws you down toward the flats
   surfer.getWorldPosition(W.bp = new THREE.Vector3()); surfer.getWorldQuaternion(W.bq = new THREE.Quaternion());
