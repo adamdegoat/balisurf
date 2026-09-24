@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
-import { Rider, Profile, waterAt, heightAt } from './surf.js?v=42';
+import { Rider, Profile, waterAt, heightAt } from './surf.js?v=43';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -67,6 +67,7 @@ function addWave(tBreak) {
   return w;
 }
 function updateWaves(dt) {
+  for (const pr of PROFILES.values()) pr.warm(24);
   // keep the next wave lined up out to sea; a swell period apart, give or take
   // swell arrives in sets: 3-4 waves one period apart, the bigger ones in the middle, then a lull (shortened for play)
   while (nextBreak - T < 150 / 6) {
@@ -154,6 +155,17 @@ function readInput(dt) {
   return { paddle: input.paddle, pump: input.paddle, steer: input.steer };    // same button: paddle lying down, pump once standing; steer + = turn right
 }
 
+// your best ride per level, kept on this phone (quietly does nothing if storage is blocked)
+const bestFor = (m) => { try { return +localStorage.getItem('balisurf.best.' + m) || 0; } catch (e) { return 0; } };
+const saveBest = (m, v) => { try { localStorage.setItem('balisurf.best.' + m, String(v)); } catch (e) {} showBests(); };
+function showBests() {
+  for (const b of document.querySelectorAll('[data-mode]')) {
+    let el = b.querySelector('.best'); const v = bestFor(b.dataset.mode);
+    if (!el) { el = document.createElement('em'); el.className = 'best'; b.appendChild(el); }
+    el.textContent = v ? `Best ${v}` : '';
+  }
+}
+showBests();
 for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => start(b.dataset.mode));
 let starting = false;
 async function start(m) {
@@ -599,13 +611,14 @@ function updateHUD(dt) {
   if ((st === 'WIPE' || st === 'OUT') && endT < 0) {
     endT = 0;
     const r = rider.ride;
-    const newBest = r.t > 0 && r.score > session.best && session.waves > 0;
+    const prevBest = bestFor(mode), newBest = r.t > 0 && r.score > prevBest && prevBest > 0;
+    if (r.t > 0 && r.score > prevBest) saveBest(mode, r.score);
     if (r.t > 0 || st === 'WIPE') { session.waves++; session.total += r.score; session.best = Math.max(session.best, r.score); }
     ui.msgT.textContent = rider.why;
     ui.msgN.innerHTML = r.t > 0 ? `${r.score}${newBest ? '<small>NEW BEST</small>' : ''}` : '';
     const stat = (v, l) => `<div>${v}<span>${l}</span></div>`;
     ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
-    ui.sess.textContent = session.waves ? `Rides ${session.waves}  ·  best ${session.best}  ·  total ${session.total}` : '';
+    ui.sess.textContent = session.waves ? `Rides ${session.waves}  ·  session best ${session.best}  ·  all-time best ${Math.max(bestFor(mode), r.score)}` : '';
     ui.msg.style.display = 'flex';
   }
   if (endT >= 0) { endT += dt; if (endT > (st === 'WIPE' ? 3.4 : 2.6)) spawnRider(); }

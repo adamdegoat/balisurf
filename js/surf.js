@@ -45,6 +45,11 @@ export class Profile {
     this.cache.set(key, c);
     return c;
   }
+  // work out the shape a little at a time in quiet frames, so the first time a wave reaches you there's no hitch
+  warm(n) {
+    if (this.warmK === undefined) this.warmK = -50 * 5;
+    for (let i = 0; i < n && this.warmK <= 66 * 5; i++, this.warmK++) this.slice(this.warmK / 5);
+  }
   // height blended between the two nearest slices, so the surface is continuous along the wave (no 20 cm steps)
   height(s, zl) {
     const k = s * 5, k0 = Math.floor(k), t = k - k0;
