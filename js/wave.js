@@ -13,11 +13,15 @@ import * as THREE from 'three';
 // sqrt(g(d + H/2)); good surf breaks peel at 45-66 degrees, so the peel rate is c / tan(angle) and a surfer needs c / sin(angle).
 //   H = breaking height (m), speed = how fast it comes in (m/s), peel = how fast it breaks along the reef (m/s), period = s between waves
 export const CONDITIONS = {
-  // bigger swells all round (his call): speed from shallow-water physics c ~ sqrt(g(d+H/2)) with d = H/0.78, ~4.2*sqrt(H)
-  easy:    { H: 1.8, speed: 5.6,  peel: 2.7, angle: 62, period: 12, hollow: 0.4,  forgive: 0.6, name: 'Easy' },      // head high, soft
-  medium:  { H: 3.0, speed: 7.2,  peel: 5.0, angle: 55, period: 14, hollow: 0.75, forgive: 1,   name: 'Medium' },    // well overhead, barrels
-  hard:    { H: 4.5, speed: 8.9,  peel: 7.6, angle: 48, period: 16, hollow: 1.0,  forgive: 1,   name: 'Hard' },      // double overhead plus, fast
-  extreme: { H: 7.0, speed: 11.1, peel: 9.8, angle: 46, period: 18, hollow: 1.0,  forgive: 1,   name: 'Extreme' },   // a big-wave day
+  // each level is a different kind of wave, not just a taller one (his call):
+  //   len   = how long the swell is along the reef (shoulder, tube and whitewater all stretch with it)
+  //   width = how wide the wave is front to back (fat and soft vs narrow and steep)
+  //   fat   = how gently the lower face ramps out in front (soft ramp vs near-vertical wall)
+  // speed from shallow-water physics c ~ sqrt(g(d+H/2)) with d = H/0.78, ~4.2*sqrt(H)
+  easy:    { H: 1.8,  speed: 5.6,  peel: 2.7,  angle: 62, period: 12, hollow: 0.3,  forgive: 0.6, len: 1,   width: 1.3,  fat: 1.5, name: 'Easy' },     // fat, soft, crumbly
+  medium:  { H: 3.0,  speed: 7.2,  peel: 5.0,  angle: 55, period: 14, hollow: 0.75, forgive: 1,   len: 1.1, width: 1.1,  fat: 1.1, name: 'Medium' },   // clean peeling walls
+  hard:    { H: 4.5,  speed: 8.9,  peel: 7.6,  angle: 48, period: 16, hollow: 1.0,  forgive: 1,   len: 1.5, width: 0.95, fat: 0.8, name: 'Hard' },     // steep, hollow, heavy
+  extreme: { H: 15,   speed: 13.5, peel: 11,   angle: 45, period: 20, hollow: 1.0,  forgive: 1,   len: 4,   width: 1.25, fat: 1.1, name: 'Extreme' },  // a 15 m mountain of water; a giant reef wave breaks in shallower water (H/d ~1.1) and runs ~13-14 m/s, like Jaws
 };
 
 // Cross-section keyframes (units of wave height H; z toward the beach, y up). Every keyframe lists the SAME 12
@@ -56,7 +60,7 @@ export class Wave {
     if (shared) {
       this.geo = shared.geo; this.xs = shared.xs; this.shared = true;
       this.mesh = new THREE.Mesh(shared.geo, shared.mat); this.mesh.frustumCulled = false; scene.add(this.mesh);
-      this.initSpray(scene); this.initMist(scene);
+      this.initSpray(scene); this.initMist(scene); this.initVeil(scene);
       return;
     }
     const g = new THREE.BufferGeometry();
@@ -77,20 +81,23 @@ export class Wave {
     this.mesh.frustumCulled = false;
     scene.add(this.mesh);
     this.initSpray(scene);
-    this.initMist(scene);
+    this.initMist(scene); this.initVeil(scene);
     this.xs = new Float32Array(NX);
     this.build();
     SHARED.set(cond, { geo: this.geo, mat: this.mesh.material, xs: this.xs }); this.shared = true;
   }
 
+  // how tall the wave stands at distance s from the break: tallest at the peak, fading down the line (scaled by swell length)
+  amp(s) { const L = this.cond.len || 1; return s > 0 ? 1 - 0.55 * smooth(8 * L, 70 * L, s) : 1 - 0.15 * smooth(0, 40 * L, -s); }
   // which blend of keyframes a slice at distance s ahead of the break has, plus how broken it is
   shapeAt(s) {
     const { H, hollow } = this.cond;
     const barrel = lerpK(K.peak, K.barrel, Math.min(1, hollow * 1.25));  // gentle waves never get a full round tube
     let P, curl = 0, broken = 0;
-    if (s >= 45) P = K.swell;
-    else if (s >= 15) P = lerpK(K.shoulder, K.swell, smooth(15, 45, s));
-    else if (s >= 0) P = lerpK(K.peak, K.shoulder, smooth(0, 15, s));
+    const L = this.cond.len || 1;
+    if (s >= 45 * L) P = K.swell;
+    else if (s >= 15 * L) P = lerpK(K.shoulder, K.swell, smooth(15 * L, 45 * L, s));
+    else if (s >= 0) P = lerpK(K.peak, K.shoulder, smooth(0, 15 * L, s));
     else if (s >= -1.1 * H) { curl = smooth(0, 1.1 * H, -s); P = lerpK(K.peak, barrel, curl); }
     else if (s >= -4.5 * H) { curl = 1; P = barrel; }                      // a long open tube behind the throw
     else { curl = 1; broken = smooth(4.5 * H, 8 * H, -s); P = lerpK(barrel, K.white, broken); }
@@ -101,7 +108,7 @@ export class Wave {
   section(s, out) {
     const { H } = this.cond;
     const { P, curl, broken } = this.shapeAt(s);
-    const amp = s > 0 ? 1 - 0.55 * smooth(8, 70, s) : 1 - 0.15 * smooth(0, 40, -s);   // tallest at the peak, fading down the line
+    const amp = this.amp(s), Wd = this.cond.width || 1, Fat = this.cond.fat || 1, L = this.cond.len || 1;
     let k = 0;
     for (let j = 0; j < NU; j++) {
       const [z, y, i, t] = catmull(P, j / (NU - 1));
@@ -113,9 +120,9 @@ export class Wave {
       // are pushed out in front (more on the shoulder, less under a pitching lip so the tube stays open) and the back
       // of the wave is made thicker.
       const below = i < 5 ? 1 : i === 5 ? 1 - t * t * (3 - 2 * t) : 0;
-      const push = (0.45 + 0.3 * smooth(0, 30, s)) * (1 - 0.8 * curl) * Math.pow(1 - smooth(0, 0.85, y), 1.3) * below;
+      const push = (0.45 + 0.3 * smooth(0, 30 * L, s)) * Fat * (1 - 0.8 * curl) * Math.pow(1 - smooth(0, 0.85, y), 1.3) * below;
       const back = i >= 9 ? 1.6 : i === 8 ? 1 + 0.6 * t : 1;
-      out[k++] = (z * back + push) * H; out[k++] = Math.max(0, y) * H * amp;
+      out[k++] = (z * back + push) * H * Wd; out[k++] = Math.max(0, y) * H * amp;
       out[k++] = Math.min(1, broken * 0.9 + spray * curl * 0.7);
       out[k++] = thin * (1 - broken * 0.7);
     }
@@ -128,12 +135,12 @@ export class Wave {
     for (let i = 0; i < NX; i++) {
       const u = i / (NX - 1);
       const w = u * 2 - 1;                                            // -1..1
-      const s = w < 0 ? -BEHIND * Math.pow(-w, 1.6) : AHEAD * Math.pow(w, 1.6);
+      const Lx = this.cond.len || 1, s = w < 0 ? -BEHIND * Lx * Math.pow(-w, 1.6) : AHEAD * Lx * Math.pow(w, 1.6);   // a longer swell is drawn longer
       this.xs[i] = s;
       this.section(s, tmp);
       for (let j = 0; j < NU; j++) {
         const p = (i * NU + j) * 3, a = (i * NU + j) * 2;
-        const bend = 0.004 * s * s * Math.sign(s) * -0.5 + 0.0015 * s * s;       // crest line wraps slightly toward the beach
+        const sb = s / Lx, bend = (0.004 * sb * sb * Math.sign(sb) * -0.5 + 0.0015 * sb * sb) * Lx;   // crest line wraps slightly toward the beach (in proportion to the swell)
         this.pos[p] = s; this.pos[p + 1] = tmp[j * 4 + 1]; this.pos[p + 2] = tmp[j * 4] + bend;
         this.brk[i * NU + j] = s < -4.5 * this.cond.H ? Math.min(1, (-s - 4.5 * this.cond.H) / (3.5 * this.cond.H)) * Math.sin(Math.PI * j / (NU - 1)) : 0;
         this.attr[a] = tmp[j * 4 + 2]; this.attr[a + 1] = tmp[j * 4 + 3];
@@ -163,8 +170,8 @@ export class Wave {
         if (Math.random() > 0.2) { P[i * 3 + 1] = -99; continue; }
         // born along the top of the whitewater and where the lip hits the water
         const s = -(4 + Math.random() * 10) * H;
-        if (s < -50) continue;
-        const sh = this.shapeAt(s), crest = sh.P[9], amp = 1 - 0.15 * smooth(0, 40, -s);
+        if (s < -50 * (this.cond.len || 1)) continue;
+        const sh = this.shapeAt(s), crest = sh.P[9], amp = this.amp(s);
         const atLip = Math.random() < 0.4 && sh.broken < 0.5;
         P[i * 3] = this.peelX + s + (Math.random() - .5) * 2;
         P[i * 3 + 1] = atLip ? 0.2 * H : crest[1] * H * amp * (0.7 + Math.random() * 0.4);
@@ -180,6 +187,42 @@ export class Wave {
     this.mist.geometry.attributes.position.needsUpdate = true;
     this.mist.material.opacity = 0.38 * this.fade;
   }
+  // offshore spray: the land breeze blows a thin veil of spray back off the top of the standing face (the Bali look)
+  initVeil(scene) {
+    const N = 260; this.veilN = N;
+    this.vp = new Float32Array(N * 3); this.vv = new Float32Array(N * 3); this.vl = new Float32Array(N).fill(-1);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.vp, 3));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,.7)'); gr.addColorStop(0.45, 'rgba(255,255,255,.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
+    this.veil = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.55 * Math.sqrt(this.cond.H), map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0.3, depthWrite: false }));
+    this.veil.frustumCulled = false; scene.add(this.veil);
+  }
+  updateVeil(dt) {
+    const H = this.cond.H, P = this.vp, V = this.vv;
+    for (let i = 0; i < this.veilN; i++) {
+      if (this.vl[i] <= 0) {
+        if (Math.random() > 0.35) { P[i * 3 + 1] = -99; continue; }
+        // along the crest of the standing face, from the curl out onto the shoulder, where the wave is tall and steep
+        const s = -H + Math.random() * 14 * H;
+        const sh = this.shapeAt(s), crest = sh.P[9];
+        if (crest[1] < 0.55 || sh.broken > 0.3) { P[i * 3 + 1] = -99; continue; }
+        const amp = this.amp(s);
+        P[i * 3] = this.peelX + s + (Math.random() - .5) * 1.5;
+        P[i * 3 + 1] = crest[1] * H * amp + Math.random() * 0.15 * H;
+        P[i * 3 + 2] = crest[0] * H + this.zW;
+        V[i * 3] = (Math.random() - .5) * 0.8; V[i * 3 + 1] = 0.6 + Math.random() * 1.2; V[i * 3 + 2] = this.cond.speed - 3 - Math.random() * 4;   // rides in with the wave, blown back off its top
+        this.vl[i] = 0.8 + Math.random() * 1.2;
+      }
+      this.vl[i] -= dt;
+      V[i * 3 + 1] -= 0.9 * dt;
+      P[i * 3] += V[i * 3] * dt; P[i * 3 + 1] += V[i * 3 + 1] * dt; P[i * 3 + 2] += V[i * 3 + 2] * dt;
+      if (this.vl[i] <= 0) P[i * 3 + 1] = -99;
+    }
+    this.veil.geometry.attributes.position.needsUpdate = true;
+    this.veil.material.opacity = 0.55 * this.fade;
+  }
   initSpray(scene) {
     const N = 900; this.sprayN = N;
     this.sp = new Float32Array(N * 3); this.sv = new Float32Array(N * 3); this.sl = new Float32Array(N);
@@ -190,7 +233,7 @@ export class Wave {
     gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
     cx.fillStyle = gr; cx.fillRect(0, 0, 32, 32);
     const tex = new THREE.CanvasTexture(cv);
-    this.spray = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xfff1e0, size: 0.05, map: tex, alphaMap: tex, transparent: true, opacity: 0.6, depthWrite: false, fog: false }));
+    this.spray = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xfff1e0, size: 0.1, map: tex, alphaMap: tex, transparent: true, opacity: 0.6, depthWrite: false, fog: false }));
     this.spray.frustumCulled = false; scene.add(this.spray);
     for (let i = 0; i < N; i++) this.sl[i] = -1;
   }
@@ -201,6 +244,7 @@ export class Wave {
     if (!this.shared) { this.geo.dispose(); this.mesh.material.dispose(); }   // shared shapes stay for the next wave
     this.spray.geometry.dispose(); this.spray.material.map.dispose(); this.spray.material.dispose();
     scene.remove(this.mist); this.mist.geometry.dispose(); this.mist.material.map.dispose(); this.mist.material.dispose();
+    scene.remove(this.veil); this.veil.geometry.dispose(); this.veil.material.map.dispose(); this.veil.material.dispose();
   }
   lipAt(s) {                                          // world position of the lip tip for the slice at s
     // the shape for a given s never changes, so remember it (per 10 cm); only x moves with the peel
@@ -211,8 +255,7 @@ export class Wave {
   }
   _lipAt(s) {
     const { P } = this.shapeAt(s); const H = this.cond.H;
-    const amp = s > 0 ? 1 - 0.55 * smooth(8, 70, s) : 1 - 0.15 * smooth(0, 40, -s);
-    return [this.peelX + s, P[7][1] * H * amp, P[7][0] * H];
+    return [this.peelX + s, P[7][1] * H * this.amp(s), P[7][0] * H * (this.cond.width || 1)];
   }
   updateSpray(dt) {
     if (!this.spray) return;
@@ -247,6 +290,7 @@ export class Wave {
     this.mesh.material.uniforms.uH.value = this.cond.H;
     this.updateSpray(dt);
     this.updateMist(dt);
+    this.updateVeil(dt);
   }
 }
 
@@ -343,23 +387,26 @@ export function waterMaterial({ wave = false } = {}) {
         float back = pow(max(dot(-V, uSun), 0.), 3.);                // looking toward the sun through the water
         vec3 body = mix(deep, turq, thin * .8) + turq * thin * back * 1.6 * uSunVis + uSunCol * thin * back * .25 * uSunVis + turq * thin * .25 * (1. - uSunVis);
         body *= .55 + .45 * base;
+        ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);' : ''}
         vec3 col = mix(body, refl, fres);
         // sun glint
         col += uSunCol * pow(max(dot(R, uSun), 0.), 220.) * 3. * uSunVis;
         ${wave ? `
         // foam: churned white where the lip throws and the whitewater rolls
-        float foamN = fbm(vec2(vW.x, vW.y + vW.z) * 1.4 + vec2(0., uTime * 1.3));
+        // foam features scale with the wave: a 15 m wave boils in big lumps, not a fine repeating pattern
+        float fk = pow(2. / max(uH, 2.), .65);
+        float foamN = fbm(vec2(vW.x, vW.y + vW.z) * 1.4 * fk + vec2(0., uTime * 1.3 * fk));
         float foamMask = smoothstep(.35, .75, vFT.x + (foamN - .5) * .6);
         // thin lace of old foam drifting on the face
         // lacework: thin wandering foam lines (contours of a noise field), not blobs
-        float ln = fbm(vec2(vW.x * 1.3 + vW.z * .4, vW.y * 1.1 + vW.z * .7) * 1.8 + vec2(0., uTime * .04));
+        float ln = fbm(vec2(vW.x * 1.3 + vW.z * .4, vW.y * 1.1 + vW.z * .7) * 1.8 * fk + vec2(0., uTime * .04));
         // lines stay about a pixel or two wide at any distance, and soften right up close so they don't read as scribbles
         float lw = min(fwidth(ln) * 1.3 + .003, .022);
         float lace = (1. - smoothstep(.0, lw, abs(ln - .5))) * smoothstep(.35, .6, fbm(vec2(vW.x, vW.y + vW.z) * .7));
         lace *= .45 + .55 * smoothstep(2., 10., length(cameraPosition - vW));
         foamMask = max(foamMask, lace * .3 * step(.02, vFT.y) * (1. - base * .5));   // faint: old foam lines, not chalk marks
         // whitewater is lumpy boiling foam, not a white slab: churning lumps with grey shadows between them, lit by the sky
-        vec2 fp = vec2(vW.x * 1.7 + vW.z * .5, vW.y * 2.2 + vW.z * 1.3) + vec2(uTime * .35, -uTime * 1.1);
+        vec2 fp = vec2(vW.x * 1.7 + vW.z * .5, vW.y * 2.2 + vW.z * 1.3) * fk + vec2(uTime * .35, -uTime * 1.1) * fk;
         float lump = fbm(fp) * .65 + fbm(fp * 2.7 + 5.3) * .35;
         float shade = .55 + .45 * smoothstep(.25, .75, lump);
         vec3 foamCol = vec3(.93, .92, .9) * shade * (.72 + .28 * max(dot(N, uSun), 0.)) + mix(uHor, uZen, .5) * .12 * (1. - shade * .5);

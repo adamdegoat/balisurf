@@ -42,17 +42,18 @@ export class Profile {
     for (; j < 64; j++) { const z = o[j * 4], y = o[j * 4 + 1], p = F[F.length - 1]; if (z >= p[0] - 1e-4 || y < p[1] - 1e-3) break; F.push([z, y]); }
     const B = [[o[63 * 4], o[63 * 4 + 1]]];
     for (let k = 62; k > j; k--) { const z = o[k * 4], y = o[k * 4 + 1], p = B[B.length - 1]; if (z <= p[0] + 1e-4 || y < p[1] - 1e-3) break; B.push([z, y]); }
-    const sh = w.shapeAt(sk), amp = sk > 0 ? 1 - 0.55 * smooth(8, 70, sk) : 1 - 0.15 * smooth(0, 40, -sk);
+    const sh = w.shapeAt(sk), amp = w.amp(sk);
     c = { F, B, top: Math.max(F[F.length - 1][1], B[B.length - 1][1]), topZ: F[F.length - 1][0], broken: sh.broken, curl: sh.curl,
-      lipY: sh.P[7][1] * H * amp, lipZ: sh.P[7][0] * H };
+      lipY: sh.P[7][1] * H * amp, lipZ: sh.P[7][0] * H * (w.cond.width || 1) };
     if (this.cache.size > 6000) this.cache.clear();
     this.cache.set(key, c);
     return c;
   }
   // work out the shape a little at a time in quiet frames, so the first time a wave reaches you there's no hitch
   warm(n) {
-    if (this.warmK === undefined) this.warmK = -50 * 5;
-    for (let i = 0; i < n && this.warmK <= 66 * 5; i++, this.warmK++) this.slice(this.warmK / 5);
+    const L = this.w.cond.len || 1;
+    if (this.warmK === undefined) this.warmK = Math.round(-50 * L * 5);
+    for (let i = 0; i < n && this.warmK <= 66 * L * 5; i++, this.warmK++) this.slice(this.warmK / 5);
   }
   // height blended between the two nearest slices, so the surface is continuous along the wave (no 20 cm steps)
   height(s, zl) {
@@ -247,7 +248,9 @@ export class Rider {
       if (onFront && y > 0.8 * sl.top && s < 0.6 * H && s > -2 * H && zl < sl.topZ + 0.4) return this.wipe('Too late: it pulled you over the falls');
       // the catch: on the face, heading for the beach, and going as fast as the wave
       // (once you're sliding down a steep enough face at a good share of its speed, it has you: you pop up and gravity does the rest)
-      if (this.onFace && this.recentPaddle > 0 && Math.sin(this.th) > 0.2 && this.vz > C.speed * 0.5 && slope > 0.4) { this.catchT += h; if (this.catchT > 0.1) { this.set('POP'); this.catchT = 0; } }
+      // (on a huge wave you get in earlier, lower on the face, like a big-wave gun: the speed you need is capped)
+      const catchV = Math.min(C.speed * 0.5, 3.2 + 0.1 * C.speed);
+      if (this.onFace && this.recentPaddle > 0 && Math.sin(this.th) > 0.2 && this.vz > catchV && slope > 0.4) { this.catchT += h; if (this.catchT > 0.1) { this.set('POP'); this.catchT = 0; } }
       else this.catchT = 0;
       return;
     }
