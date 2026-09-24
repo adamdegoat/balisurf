@@ -33,4 +33,4 @@ export function outside(side = 1, dist = 2.6, up = 0.7) {
   c.position.set(r.x - Math.sin(th) * dist * side + Math.cos(th) * 0.4, r.y + up, r.z + Math.cos(th) * dist * side + Math.sin(th) * 0.4);
   c.lookAt(r.x, r.y + 0.45, r.z); g.CUT.value = 0; g.surfer.traverse((o) => { if (o.name === 'head') o.scale.setScalar(1); });
 }
-export function inside() { const g = G(); if (saved) { g.camera.position.copy(saved.p); g.camera.quaternion.copy(saved.q); } g.CUT.value = 0.26; g.surfer.traverse((o) => { if (o.name === 'head') o.scale.setScalar(0.001); }); }
+export function inside() { const g = G(); if (saved) { g.camera.position.copy(saved.p); g.camera.quaternion.copy(saved.q); } g.CUT.value = 0.21; g.surfer.traverse((o) => { if (o.name === 'head') o.scale.setScalar(0.001); }); }

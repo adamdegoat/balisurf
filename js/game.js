@@ -44,14 +44,14 @@ fit();
 const rig = new THREE.Group(); scene.add(rig);           // board frame: +z along the board, +y out of the deck
 const board = makeBoard(); rig.add(board);
 let surfer = null, mixer = null, clips = {}, curClip = null;
-// first-person cutaway: any part of your own body closer than this to your eyes isn't drawn (your neck, shoulders
+// first-person cutaway: your own head, neck, chest and shoulders (a column from your eyes down, this wide) aren't drawn (your neck, shoulders
 // and upper arms are right at the camera and would fill the screen); hands, forearms, legs and the board stay
-const CUT = { value: 0.17 };   // just the neck and head (at 42 cm it cut your arms off at the elbow: floating hands)
+const CUT = { value: 0.21 };   // just the neck and head (at 42 cm it cut your arms off at the elbow: floating hands)
 function cutaway(m) {
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uCut = CUT;
     sh.vertexShader = 'varying vec3 vCutW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = 'uniform float uCut;\nvarying vec3 vCutW;\n' + sh.fragmentShader.replace('void main() {', 'void main() {\n  if (distance(vCutW, cameraPosition) < uCut) discard;');
+    sh.fragmentShader = 'uniform float uCut;\nvarying vec3 vCutW;\n' + sh.fragmentShader.replace('void main() {', 'void main() {\n  vec3 cq = vCutW - cameraPosition; float cy = clamp(cq.y, -0.75, 0.); if (length(cq - vec3(0., cy, 0.)) < uCut || length(cq) < uCut * 1.6) discard;');   // a column from your eyes down through your body
   };
   m.side = THREE.FrontSide;   // (so a cut shows nothing behind it, not the inside of the arm)
   m.customProgramCacheKey = () => 'cutaway';
@@ -255,7 +255,7 @@ const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 // Eyes at the head, looking where you're going and a little down so the board's nose and the wave ahead are in view.
 // A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
 // and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
-const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.3, drop: 0.3 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
+const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.5, drop: 0.18 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
 const _pq2 = new THREE.Quaternion();
 const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
 function povCamera(dt) {
@@ -267,7 +267,7 @@ function povCamera(dt) {
   const travel = moving ? Math.atan2(rider.vz, rider.vx) : rider.th;
   // look mostly where you're travelling, partly where the board points (you see the nose swing in a turn/drift)
   const dh = Math.atan2(Math.sin(rider.th - travel), Math.cos(rider.th - travel));
-  const yawT = travel + dh * (standing ? 0.35 : 0.8);
+  const yawT = travel + dh * (standing ? 0.7 : 0.8);   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
   const ef = standing ? POVCAM.fwd : -0.05, eu = standing ? POVCAM.up : 0.2;   // lying: eyes at the head, a bit up, so your paddling hands pass below them
   _eye.x += Math.cos(yawT) * ef; _eye.z += Math.sin(yawT) * ef; _eye.y += eu;   // camera just in front of the face, like a surfer's mouth-mounted camera
   // smooth the eye's position relative to the board (not in the world, or at speed it would trail behind your head)
@@ -375,7 +375,7 @@ function updateRig(dt, t) {
   if (standing) {
     pose.up.lerp(WORLD_UP, 0.45).normalize();
     const roll = rider.lean * 0.8;                                      // the board on its rail: the lean you're carving with
-    pose.up.applyAxisAngle(pose.fwd, -roll);
+    pose.up.applyAxisAngle(pose.fwd, roll);   // (+lean turns right, toward +z; rolling up toward +z puts the right rail in the water)
   }
   pose.up.addScaledVector(pose.fwd, -pose.up.dot(pose.fwd)).normalize();
   xAxis.crossVectors(pose.up, pose.fwd).normalize();
@@ -744,7 +744,7 @@ function surfStance() {
     const front = s === frontArm, sway = Math.sin(bodyT * 1.7 + (front ? 0 : 1.3)) * 0.03;
     const P = _ap;
     if (front) {
-      at(P, chest ? 0.58 : 0.55, (chest ? 0.4 : 0.36) - sway - pumpUp, chest ? 0.2 : -0.16);                       // trim
+      at(P, chest ? 0.5 : 0.46, (chest ? 0.46 : 0.44) - sway - pumpUp, chest ? 0.2 : -0.2);                       // trim
       if (bt) P.lerp(chest ? at(_aq, 0.6, 0.26, 0.26) : at(_aq, 0.45, 0.7, 0.34), bt);                               // bottom turn
       if (tt) P.lerp(at(_aq, 0.55, 0.5, -0.32), tt);                                                                  // top turn / cutback: leads round, points down the face
       if (deep) P.lerp(chest ? at(_aq, 0.52, 0.4, 0.32) : at(_aq, 0.3, 0.85, -0.14), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
@@ -767,7 +767,10 @@ function surfStance() {
     const sm = armSm[s]; P.sub(eye); if (!sm.ok || snapCam) { sm.p.copy(P); sm.ok = true; } else sm.p.lerp(P, Math.min(1, dtArm * 14)); P.copy(sm.p).add(eye);
     // never into the lens
     const cd = P.distanceTo(eye); if (cd < 0.45) P.addScaledVector(F, 0.45 - cd);
-    const ua = bones['upperarm_' + s], la = bones['lowerarm_' + s], hd = bones['hand_' + s];
+    const ua = bones['upperarm_' + s], la = bones['lowerarm_' + s], hd = bones['hand_' + s], cl = bones['clavicle_' + s];
+    // the shoulder follows the reach (collarbone rolls forward/down toward the hand), so the upper arm doesn't have to
+    // twist to an extreme angle and stretch the skin at the shoulder into a fin
+    if (cl) { cl.getWorldPosition(_ik1); aimBone(cl, ua, _ik3.subVectors(P, _ik1).normalize(), 0.8 * w); }
     reachArm(ua, la, hd, P, _aq.copy(WORLD_UP).multiplyScalar(-1).addScaledVector(R, (s === 'l' ? -1 : 1) * 0.6), st === 'POP' ? 0.95 : 0.92 * w);   // elbows down and out
     hd.quaternion.slerp(_hq.identity(), 0.85 * w); hd.updateMatrixWorld(true);   // a relaxed straight wrist (the clip's wrist bends read as limp, twisted hands)
   }
