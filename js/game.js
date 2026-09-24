@@ -207,7 +207,7 @@ function solidAt(x, z) {
   if (q.zl > sl.topZ - 0.5 && q.zl < Math.max(sl.lipZ, sl.topZ) + 0.6) return Math.max(q.y, sl.top * (q.w.fade || 1));
   return q.y;
 }
-let camStandK = 0, tubeK = 0, CAM_OUT = 0;
+let camStandK = 0, tubeK = 0;
 const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 function updateCamera(dt) {
   const p = pose.pos, st = rider.state;
@@ -245,9 +245,6 @@ function updateCamera(dt) {
     const frame = (tube, want, look) => {
       const back = standing ? 3.6 + (1.6 - 2.1 * tube) * ks : 3.6, height = standing ? 1.4 + (0.25 - 0.6 * tube) * ks + 1.6 * dropK : 1.4;   // during the drop: lift over the crest, don't move in   // at the drop: just behind your head
       want.set(p.x - dx * back, p.y + height, p.z - dz * back);
-      // on bigger waves sit a little out in front of the face (toward the beach): the curl behind you then doesn't
-      // block the view, so the camera can stay low instead of climbing over it
-      if (standing && rider.wave) want.z += CAM_OUT * rider.wave.cond.H ** 2 * ks * (1 - tube);   // ~0.5 m easy, 1.5 m medium, 4.4 m hard
       // look just ahead of you (from the side or front during the drop, at you)
       const ol = Math.hypot(camOff.x, camOff.z) || 1, behind = Math.max(0, Math.min(1, -(camOff.x * dx + camOff.z * dz) / ol));
       const lead = standing ? 1 + 3.5 * behind : 0.5 + 4.5 * behind * behind;   // look down your line so you can read what's coming
@@ -761,4 +758,4 @@ renderer.setAnimationLoop(() => {
   if (!window.__g.paused && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
-window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, camOut: (v) => (CAM_OUT = v), want: () => _want };
+window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };

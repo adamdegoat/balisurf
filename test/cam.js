@@ -4,7 +4,12 @@
 import { brain } from './sim2.js';
 import * as THREE from 'three';
 const ray = new THREE.Raycaster(), UP = new THREE.Vector3(0, 1, 0), up = new THREE.Vector3();
-export function camCheck(mode, n = 2) {
+export function camCheck(mode, n = 2, seed = 7) {
+  // same waves every run (seeded random) so two camera settings can be compared fairly
+  const rnd0 = Math.random; let st = seed >>> 0; Math.random = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296);
+  try { return run(mode, n); } finally { Math.random = rnd0; }
+}
+function run(mode, n) {
   const G = window.__g; G.paused = true; G.setMode(mode);
   document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); G.spawnRider();
   const br = brain({}), A = { pop: { d: [], u: [], v: 0, t: 0, wet: 0 }, ride: { d: [], u: [], v: 0, t: 0, wet: 0 } }; let rides = 0;
