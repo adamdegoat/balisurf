@@ -250,8 +250,10 @@ export class Rider {
   pose(out) {
     const dx = Math.cos(this.th), dz = Math.sin(this.th);
     out.pos.set(this.x, this.y + (this.standing ? 0.04 : 0.02), this.z);
-    out.fwd.set(dx, Math.max(-1.25, Math.min(1.25, this.gAlong)), dz).normalize();   // a board never pitches past ~50 deg: the nose and rail bite the water
-    const k = Math.min(1, 2.2 / Math.max(2.2, Math.hypot(this.hx, this.hz)));   // same limit for how far the deck tips
+    // a board never pitches past ~50 deg standing (nose and rail bite the water); lying or sitting it floats flatter, ~25 deg
+    const lim = this.standing ? 1.25 : this.onFace ? 0.85 : 0.47;   // catching, it follows the face more
+    out.fwd.set(dx, Math.max(-lim, Math.min(lim, this.gAlong)), dz).normalize();
+    const k = Math.min(1, (this.standing ? 2.2 : 0.8) / Math.max(0.01, Math.hypot(this.hx, this.hz)));   // same limit for how far the deck tips
     out.up.set(-this.hx * k, 1, -this.hz * k).normalize();
     return out;
   }

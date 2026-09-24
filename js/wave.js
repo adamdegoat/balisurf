@@ -106,7 +106,7 @@ export class Wave {
       const thin = THIN[i] + (THIN[Math.min(11, i + 1)] - THIN[i]) * t;
       const spray = SPRAY[i] + (SPRAY[Math.min(11, i + 1)] - SPRAY[i]) * t;
       // the lower face runs further out in front than the keyframes say: steep near the lip, easing into the flats like a real wave
-      const wide = i < 4 && z > 0 ? 1 + 0.55 * (1 - smooth(0, 0.6, y)) : 1;
+      const wide = z > 0 ? 1 + 0.55 * (1 - smooth(0, 0.6, y)) * (i < 4 ? 1 : i === 4 ? 1 - t * t * (3 - 2 * t) : 0) : 1;   // eased out, no crease
       out[k++] = z * H * wide; out[k++] = Math.max(0, y) * H * amp;
       out[k++] = Math.min(1, broken * 0.9 + spray * curl * 0.7);
       out[k++] = thin * (1 - broken * 0.7);
@@ -312,6 +312,14 @@ export function waterMaterial({ wave = false } = {}) {
         vec2 q = mix(vW.xz, vec2(vW.x, vW.y + vW.z), smoothstep(.75, .35, abs(N.y))) * .45 + vec2(uTime*.12, uTime*.07);
         float n1 = fbm(q), n2 = fbm(q*2.3 + 7.1);
         N = normalize(N + vec3(n1 - .5, 0., n2 - .5) * .28 * uChop);
+        ${wave ? `
+        // fine texture on the face: water being drawn up the wall leaves streaky ripples that stream upward;
+        // strongest on steep faces, fading with distance (it would only shimmer far away)
+        float wallK = smoothstep(.85, .3, abs(N.y)) * smoothstep(18., 4., length(cameraPosition - vW));
+        vec2 fq = vec2(vW.x * 2.6, (vW.y + vW.z) * 1.1 - uTime * 1.4);
+        float f1 = fbm(fq), f2 = fbm(fq * 2.1 + 3.7);
+        vec3 T = normalize(cross(N, vec3(1., 0., 0.)));
+        N = normalize(N + (vec3(1., 0., 0.) * (f1 - .5) * .35 + T * (f2 - .5) * .5) * wallK);` : ''}
         float fres = .03 + .97 * pow(1. - max(dot(N, V), 0.), 5.);
         vec3 R = reflect(-V, N); R.y = abs(R.y);
         vec3 refl = sky(R);

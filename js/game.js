@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=23';
-import { Rider, Profile, waterAt, heightAt } from './surf.js?v=40';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=25';
+import { Rider, Profile, waterAt, heightAt } from './surf.js?v=41';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=3';
 
@@ -51,7 +51,7 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
 
 // ---------- the surf: a reef with the peak at x=0, z=0. Waves come in from the sea one swell period apart.
 // Each wave breaks at the peak when it gets there and peels off to the right. You sit in the lineup and pick your own.
-let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0 }, nextBreak = 0;
+let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0 }, nextBreak = 0, setLeft = 0, setPos = 0;
 const REEF = { xEnd: 150, zBeach: 120 }, PROFILES = new Map();
 function condFor(m) { return m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {
@@ -64,14 +64,19 @@ function addWave(tBreak) {
 }
 function updateWaves(dt) {
   // keep the next wave lined up out to sea; a swell period apart, give or take
+  // swell arrives in sets: 3-4 waves one period apart, the bigger ones in the middle, then a lull (shortened for play)
   while (nextBreak - T < 150 / 6) {
     const w = addWave(nextBreak);
-    nextBreak += w.cond.period * (0.85 + Math.random() * 0.3);
+    if (setLeft <= 0) { setLeft = 3 + (Math.random() < 0.5 ? 1 : 0); setPos = 0; }
+    const n = setPos / Math.max(1, setLeft + setPos - 1);
+    w.size = 0.82 + 0.28 * Math.sin(Math.PI * Math.min(1, n + 0.15)) + (Math.random() - 0.5) * 0.08;
+    setPos++; setLeft--;
+    nextBreak += setLeft > 0 ? w.cond.period * (0.9 + Math.random() * 0.2) : w.cond.period * (1.8 + Math.random() * 0.8);
   }
   for (let i = waves.length - 1; i >= 0; i--) {
     const w = waves[i], C = w.cond, t = T - w.tBreak;
     w.place(C.peel * t, C.speed * t);
-    w.fade = Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40)) * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));   // far out it's a small swell; past the end of the reef it backs off
+    w.fade = (w.size || 1) * Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40)) * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));   // far out it's a small swell; past the end of the reef it backs off
     w.update(dt);
     if (w.zW > REEF.zBeach + 40 || w.peelX > REEF.xEnd + 45) { w.dispose(scene); waves.splice(i, 1); }
   }
@@ -103,7 +108,7 @@ addEventListener('keydown', (e) => keys.add(e.code)); addEventListener('keyup', 
 const ui = {
   paddle: document.getElementById('paddle'), pad: document.getElementById('pad'), guide: document.getElementById('guide'), knob: document.querySelector('#guide b'),
   speed: document.getElementById('speed'), score: document.getElementById('score'), cond: document.getElementById('cond'),
-  msg: document.getElementById('msg'), msgT: document.getElementById('msg-t'), msgS: document.getElementById('msg-s'),
+  msg: document.getElementById('msg'), msgT: document.getElementById('msg-t'), msgN: document.getElementById('msg-n'), msgS: document.getElementById('msg-s'),
   tube: document.getElementById('tube'), hint: document.getElementById('hint'), load: document.getElementById('load'), start: document.getElementById('start'), sess: document.getElementById('sess'),
 };
 const hold = (el, on, off) => {
@@ -161,7 +166,7 @@ if (Q.get('mode')) start(Q.get('mode'));
 // ---------- camera: a chase camera over your shoulder, looking where you're going; tight and low in the barrel
 const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3(), _lk = new THREE.Vector3(), _want = new THREE.Vector3(), _look = new THREE.Vector3();
 const camPos = new THREE.Vector3(0, 2, 10), camLook = new THREE.Vector3(), pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() };
-let camYaw = 0, lookBackK = 0, wipeCut = false;
+let camYaw = 0, lookBackK = 0, wipeCut = false, camRoll = 0;
 const cam = { a: 0, r: 3, y: 1.3, va: 0, vr: 0, vy: 0, vl: new THREE.Vector3() };
 const camOff = new THREE.Vector3(0, 1.3, 3), lookOff = new THREE.Vector3(), _anc = new THREE.Vector3(), anchorS = new THREE.Vector3(), anchorV = new THREE.Vector3();
 const smooth01 = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
@@ -261,6 +266,10 @@ function updateCamera(dt) {
   camera.position.copy(camPos);
   if (st === 'WIPE') { const sh = 0.12 * Math.exp(-(W.t || 0) * 2.5); camera.position.x += (Math.random() - .5) * sh; camera.position.y += (Math.random() - .5) * sh; }
   camera.lookAt(camLook);
+  // a touch of roll with the carve (a few degrees at most), smoothed: you feel the turn without getting seasick
+  const wantRoll = rider.standing && st !== 'WIPE' ? Math.max(-0.07, Math.min(0.07, -rider.turn * rider.v * 0.006)) : 0;
+  camRoll += (wantRoll - camRoll) * Math.min(1, dt * 4);
+  camera.rotateZ(camRoll);
 }
 
 // ---------- surfer pose on the board
@@ -275,7 +284,7 @@ function updateRig(dt, t) {
   // standing, the board rides on its rail (partway between the face and level) and rolls into the carve
   if (standing) {
     pose.up.lerp(WORLD_UP, 0.45).normalize();
-    const roll = Math.atan(rider.turn * rider.v / 9.8) * 0.6;
+    const roll = Math.atan(rider.turn * rider.v / 9.8) * 0.85;          // bank into the carve like a real rail turn
     pose.up.applyAxisAngle(pose.fwd, -roll);
   }
   pose.up.addScaledVector(pose.fwd, -pose.up.dot(pose.fwd)).normalize();
@@ -540,9 +549,12 @@ function updateHUD(dt) {
   if ((st === 'WIPE' || st === 'OUT') && endT < 0) {
     endT = 0;
     const r = rider.ride;
+    const newBest = r.t > 0 && r.score > session.best && session.waves > 0;
     if (r.t > 0 || st === 'WIPE') { session.waves++; session.total += r.score; session.best = Math.max(session.best, r.score); }
     ui.msgT.textContent = rider.why;
-    ui.msgS.textContent = r.t > 0 ? `${r.score} points  ·  ${r.t.toFixed(1)}s riding  ·  top ${Math.round(r.top)} km/h${r.barrel > 0.2 ? `  ·  ${r.barrel.toFixed(1)}s in the barrel` : ''}` : '';
+    ui.msgN.innerHTML = r.t > 0 ? `${r.score}${newBest ? '<small>NEW BEST</small>' : ''}` : '';
+    const stat = (v, l) => `<div>${v}<span>${l}</span></div>`;
+    ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
     ui.sess.textContent = session.waves ? `Rides ${session.waves}  ·  best ${session.best}  ·  total ${session.total}` : '';
     ui.msg.style.display = 'flex';
   }
