@@ -245,12 +245,14 @@ function updateCamera(dt) {
   const p = pose.pos, st = rider.state;
   const want = _want, look = _look;
   if (st === 'WIPE' && W.on && surfer) {
-    // wiping out: the same camera, behind you, pulling back and up so you see yourself go over and the board fly
+    // wiping out: filmed from in front, toward the beach, looking back at you and the wave
     const b = surfer.getWorldPosition(_cv);
-    const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
-    let wy = heightAt(waves, b.x - dx * 5, b.z - dz * 5);
-    want.set(b.x - dx * 5, Math.max(wy + 1.2, Math.min(b.y, 2) + 2.2), b.z - dz * 5);
-    look.set(b.x, Math.max(b.y + (W.t > 1.4 ? 1.1 : 0.3), 0.3), b.z);
+    // as the whitewater rolls in, back off toward the beach and rise, so you look down on it instead of being swallowed
+    const k = Math.min(1, W.t / 1.2);
+    const ox = W.camOff ? W.camOff.x : 0, oz = (W.camOff ? W.camOff.z : 6) + 4 * k;
+    const wy = heightAt(waves, b.x + ox, b.z + oz), H = rider.wave ? rider.wave.cond.H : 1.5;
+    want.set(b.x + ox, Math.max(wy + 1.4, Math.min(Math.max(b.y, 0), 2) + 1.8 + (0.6 + 0.7 * H) * k), b.z + oz);
+    look.set(b.x, Math.max(b.y + 0.4, 0.3), b.z);
   } else {
     // follow the direction you're travelling when you're up and moving, the way the board points when you're lying
     const standing = rider.standing, moving = rider.v > 2.5 && standing;
@@ -554,6 +556,9 @@ const W = { on: false, bv: new THREE.Vector3(), bw: new THREE.Vector3(), rv: new
 const _e = new THREE.Euler(), _dq = new THREE.Quaternion();
 function startWipe() {
   W.on = true; W.t = 0; W.under = 0;
+  // cut to a filmer's angle: a few metres ahead of you along your line and out toward the beach, looking back,
+  // so you see the wave land on you and the board fly (not a view from behind into the wall of water)
+  { const tx = Math.cos(camYaw), tz = Math.sin(camYaw); W.camOff = new THREE.Vector3(tx * 3.5, 0, Math.max(0, tz) * 3.5 + 5.5); wipeCut = true; }
   const v = rider.v, lip = /lip|falls|closed|whitewater|broke/i.test(rider.why);
   // body: carried by its own speed, pitched forward; the lip throws you down toward the flats
   surfer.getWorldPosition(W.bp = new THREE.Vector3()); surfer.getWorldQuaternion(W.bq = new THREE.Quaternion());
@@ -718,7 +723,7 @@ function updateHUD(dt) {
   // a wipeout plays out first (you see yourself go over), then the summary fades in
   if (endT >= 0) {
     endT += dt;
-    const showAt = st === 'WIPE' ? 0 : 0.2;   // TODO: 1.4 for WIPE once the wipeout camera shows the fall (today it's a wall of water)
+    const showAt = st === 'WIPE' ? 1.4 : 0.2;
     if (endT >= showAt && ui.msg.style.display !== 'flex') { ui.msg.style.opacity = 0; ui.msg.style.display = 'flex'; requestAnimationFrame(() => (ui.msg.style.opacity = 1)); }
     if (endT > showAt + (st === 'WIPE' ? 3.4 : 2.6)) spawnRider();
   }
