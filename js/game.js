@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=37';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=58';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=59';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -166,31 +166,40 @@ function readInput(dt) {
   return { paddle: input.paddle, pump: input.paddle, steer: input.steer, up: input.up };    // same button: paddle lying down, pump once standing; steer + = turn right
 }
 
-// Riding: the thumb says where you want to go on the wave, like in a surf game.
-//   up / down  = carve up the face toward the lip / drop to the bottom (how far you push = how hard you carve)
-//   sideways   = lean the board that way yourself (cutbacks, free turns); it overrides up/down while you hold it
-//   let go     = nothing: the board runs where it points, and staying on the wave is up to you
-// Underneath it's the same physics: this only picks the lean a surfer would use to head there.
-const SURF = { range: 0.3, push: 0.9, ahead: 0.35 };   // how far up/down the face the thumb reaches, and how hard it pushes you there
-function surfSteer(sx, sy) {
-  const r = rider, w = r.wave;
-  if (!w || r.v < 1.5) return sx;
+// Riding, like True Surf / Kelly Slater's Pro Surfer, laid out for a camera behind you (the wave rises on your left):
+//   left / right = carve up the face toward the lip / drop to the bottom (how far you push = how hard you carve)
+//   up           = speed: run down the line, pumping
+//   down         = brake: back foot + trailing hand dragged in the face, you slow so the barrel can catch you
+//   down, held hard at speed = swing round into a cutback toward the curl; push up to swing back down the line
+//   let go       = nothing: the board runs where it points, and staying on the wave is up to you
+// Underneath it's the same physics: this only picks the lean a surfer would use, and how hard they drag.
+const SURF = { range: 0.3, push: 0.9, ahead: 0.35 };   // how far up/down the face the thumb reaches, how hard it pushes, how far ahead it judges
+let lineDir = 1, brakeT = 0;
+function surfSteer(sx, sy, dt) {
+  const r = rider, w = r.wave, out = { steer: 0, pump: false, stall: 0 };
+  const forward = Math.max(0, -sy), brake = Math.max(0, sy);
+  out.pump = forward > 0.3;
+  if (!w || r.v < 1.5) { out.steer = -sx; return out; }
   const c = w.cond.speed, v = Math.max(r.v, 0.5);
-  const push = Math.min(1, Math.abs(sy) * 1.5);                    // the help is only as strong as your push
-  if (r.state !== 'RIDE' || r.stateT < 0.9) sy = Math.max(sy, 0);   // make the drop first: pushing up still steers you, but to mid-face, not back into the lip
-  // the thumb picks a height on the face: up = high under the lip, centre = mid-face, down = the bottom.
-  // Heading there is a speed toward the beach: slower than the wave = climbing its face, faster = dropping down it
-  // (judged a moment ahead: if you're already climbing fast you'll get there anyway, so start turning early)
+  // which way along the wave you want to run: a long hard brake at speed turns you back to the curl, pushing up turns you back
+  brakeT = brake > 0.8 && r.v > 0.6 * c ? brakeT + dt : 0;
+  if (brakeT > 0.25 && lineDir > 0) lineDir = -1; else if (forward > 0.4) lineDir = 1;
+  let up = -sx;                                                      // + = up the face (the wave is on your left)
+  if (r.state !== 'RIDE' || r.stateT < 0.9) up = Math.min(up, 0);   // make the drop first: no climbing straight back into the lip
+  const push = Math.min(1, Math.abs(sx) * 1.5);
+  // the thumb picks a height on the face; heading there is a speed toward the beach: slower than the wave = climbing
+  // its face, faster = dropping down it (judged a moment ahead, so a fast climb starts turning early)
   const top = Math.max(w.prof.slice(r.s).top, 0.3), climb = (c - r.vz) * Math.hypot(r.hx, r.hz);
-  const hRel = (r.y + climb * SURF.ahead) / top, hT = 0.5 - SURF.range * sy;
-  const want = c + (hRel - hT) * 0.76 * c * (1 + SURF.push * Math.abs(sy));   // scaled to the wave: a small wave needs a gentler push
-  // too slow to hold the face yet (the drop): angle down it to pick up speed
+  const hRel = (r.y + climb * SURF.ahead) / top, hT = 0.5 + SURF.range * up;
+  const want = c + (hRel - hT) * 0.76 * c * (1 + SURF.push * Math.abs(up));
   let target = r.v < c * 0.95 ? 1.1 : Math.asin(Math.max(-0.6, Math.min(0.97, want / v)));
-  if (Math.cos(r.th) < 0) target = Math.PI - target;               // facing back toward the curl (after a cutback): same, mirrored
+  if (lineDir < 0) target = Math.PI - target;                      // running back toward the curl: same, mirrored
   const err = Math.atan2(Math.sin(target - r.th), Math.cos(target - r.th));
-  const side = Math.min(1, Math.abs(sx) * 1.4);                     // pushing sideways: you're steering yourself
-  // let go and the board just runs where it points (no hidden steering)
-  return Math.max(-1, Math.min(1, Math.max(-1, Math.min(1, err * 2.2)) * push * (1 - side) + sx));
+  // swinging round (cutback / back down the line) steers fully; otherwise the help is only as strong as your push
+  const turning = Math.cos(r.th) * lineDir < 0.3, auth = turning ? 1 : push;
+  out.stall = lineDir > 0 && !turning ? brake : 0;              // no dragging while you swing round (it would kill the turn)
+  out.steer = Math.max(-1, Math.min(1, err * 2.2)) * auth;
+  return out;
 }
 
 // your best ride per level, kept on this phone (quietly does nothing if storage is blocked)
@@ -444,7 +453,7 @@ function updateRig(dt, t) {
     // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
     pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
     // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
-    const deep = Math.min(0.85, (rider.inBarrel ? 0.62 : 0.4 + 0.1 * Math.min(1, rider.v / 10)) + 0.28 * pumpC + 0.3 * gLoad);
+    const deep = Math.min(0.85, (rider.inBarrel ? 0.62 : 0.4 + 0.1 * Math.min(1, rider.v / 10)) + 0.28 * pumpC + 0.3 * gLoad + 0.25 * (rider.stalling || 0));
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     clips.crouch.weight = deep; clips.stand.weight = 1 - deep;
     setStance();
@@ -685,6 +694,8 @@ function surfStance() {
     const sway = Math.sin(bodyT * 1.7 + (sgn > 0 ? 0 : 1.3)) * 0.08;
     if (sgn > 0) _t.copy(bodyFwd).multiplyScalar(0.85).addScaledVector(_in, 0.55 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.35 : -0.3) + 0.4 * Math.abs(leanN) + sway);
     else _t.copy(bodyFwd).multiplyScalar(-0.7).addScaledVector(_in, -0.35 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.3 : -0.2) + 0.5 * Math.abs(leanN) + sway);   // relaxed: arms low and loose; they rise for balance in a turn
+    // braking: the trailing hand reaches down and drags in the face
+    if (sgn <= 0 && rider.stalling > 0.05) _t.lerp(_d.copy(bodyFwd).multiplyScalar(-0.35).addScaledVector(INTO_WAVE, 0.7).addScaledVector(bodyUp, -0.9), Math.min(1, rider.stalling * 1.3));
     _t.addScaledVector(INTO_WAVE, 0.2).normalize();
     aimBone(bones['upperarm_' + s], bones['lowerarm_' + s], _t, 0.8 * w);
   }
@@ -717,9 +728,9 @@ function updateHUD(dt) {
     else if (onWave) hint = rider.paddling ? 'Keep paddling!' : 'Paddle now!';
     else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
-  } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Push your thumb left to angle along the wave' : 'Up!';
-  else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Thumb up: carve up to the lip. Thumb down: drop to the bottom' : rider.stateT < 5 ? 'Keep steering: let go and the board just runs straight' : 'Hold PUMP as you drop down the face for speed';
-  else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: push your thumb sideways toward the beach and hold till you face the breaking wave';
+  } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Push your thumb up to run along the wave' : 'Up!';
+  else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Thumb left: carve up to the lip. Right: drop to the bottom' : rider.stateT < 5 ? 'Thumb up: speed. Thumb down: brake and let the barrel catch you' : 'Keep steering: let go and the board just runs straight';
+  else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: hold your thumb all the way down at speed, then push up to swing back';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
   // the callout: BARREL while you're in it, or the move you just landed
   const call = st !== 'RIDE' ? '' : rider.inBarrel ? 'BARREL' : rider.trick ? rider.trick.name : '';
@@ -769,8 +780,11 @@ function tick(dt) {
   T += dt;
   ENV.uTime.value += dt;
   const inp = readInput(dt);
-  // in the barrel view the camera looks back at you, so your left is the screen's right: flip sideways so it matches the screen
-  if (rider && rider.standing && input.test == null) inp.steer = surfSteer(tubeK > 0.5 ? -inp.steer : inp.steer, inp.up);
+  // (in the barrel view the camera looks back at you, so left/right are flipped to match the screen)
+  if (rider && rider.standing && input.test == null) {
+    const o = surfSteer(tubeK > 0.5 ? -inp.steer : inp.steer, inp.up, dt);
+    inp.steer = o.steer; inp.pump = inp.pump || o.pump; inp.stall = o.stall;
+  } else { lineDir = 1; brakeT = 0; }
   if (rider) {
     updateWaves(dt);
     rider.update(dt, inp, waves);

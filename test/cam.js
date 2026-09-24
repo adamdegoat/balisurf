@@ -41,7 +41,7 @@ function slices(mode, n) {
   const G = window.__g; G.paused = true; G.setMode(mode);
   document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); G.spawnRider();
   const br = _brain({}), B = {}; let rides = 0;
-  const plan = (r) => (r.state === 'POP' || r.stateT < 0.9 ? { x: -0.7, y: 0 } : { x: 0, y: 0.3 });
+  const plan = (r) => (r.state === 'POP' || r.stateT < 0.9 ? { x: 0, y: -0.7 } : { x: 0.3, y: 0 });
   for (let i = 0; i < 60 * 80 && rides < n; i++) {
     const r = G.rider; if (r.state === 'WIPE' || r.state === 'OUT') { G.spawnRider(); rides++; continue; }
     if (!r.standing) { const o = br(r); G.input.stick = null; G.input.test = o.steer; G.input.paddleBtn = o.paddle; }
@@ -81,7 +81,7 @@ export function barrelView(mode = 'hard', rides = 2, seed = 5) {
     for (let i = 0; i < 60 * 150 && done < rides; i++) {
       const r = G.rider; if (r.state === 'WIPE' || r.state === 'OUT') { G.spawnRider(); done++; continue; }
       if (!r.standing) { const o = br(r); G.input.stick = null; G.input.test = o.steer; G.input.paddleBtn = o.paddle; }
-      else { G.input.test = null; G.input.paddleBtn = false; G.input.stick = r.state === 'POP' || r.stateT < 0.9 ? { x: -0.7, y: 0 } : { x: 0, y: 0.3 }; }
+      else { G.input.test = null; G.input.paddleBtn = false; G.input.stick = r.state === 'POP' || r.stateT < 0.9 ? { x: 0, y: -0.7 } : { x: 0.3, y: 0 }; }
       G.step(1 / 60, 1 / 60, false);
       if (!r.standing || i % 4) continue;
       const k = r.inBarrel ? 'barrel' : r.state === 'POP' || r.stateT < 2 ? 'drop' : 'ride';

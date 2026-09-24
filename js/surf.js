@@ -19,6 +19,7 @@ export const RIDE = {
   leanMax: 1.15, leanRate: 4.5, leanEase: 9, yawLag: 0.1,        // full thumb = ~66 deg on the rail (a ~2.3 g carve); how fast you can roll the board over (rad/s)
   finGrip: 4.2, gripMax: 20,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2): a buried rail holds ~2 g
   skidLoss: 0.16,                      // share of the excess sideways force lost as speed while the tail drifts
+  stallDrag: 3.0,                      // full brake (back foot + hand drag) slows you by this (m/s^2)
   pump: 0.5,                           // pumping adds this share of the downhill pull (and costs 1.2x that when climbing)
   popTime: 0.35,                       // seconds from lying to standing
   waterPush: 1.0,                      // how much the wave's moving water carries you
@@ -186,6 +187,9 @@ export class Rider {
       }
       const dr = P.drag * along + P.drag2 * along * Math.abs(along);
       ax += -dr * dx; az += -dr * dz;
+      // stalling: weight on the tail and the trailing hand dragged in the face, a strong brake (you let the wave catch you)
+      this.stalling = inp.stall || 0;
+      if (this.stalling) { const sd = P.stallDrag * this.stalling * Math.min(1, Math.abs(along) / 2) * Math.sign(along); ax -= sd * dx; az -= sd * dz; }
       // the harder you lay the rail over, the more the tail lets go: a little slide in an easy turn, a full drift at full thumb
       const release = 1 - 0.6 * smooth(0.3 * P.leanMax, P.leanMax, Math.abs(this.lean));   // the tail lets go gradually as you lean harder
       const latA = P.finGrip * Math.hypot(lx, lz), lim = P.gripMax * pop * release;

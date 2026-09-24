@@ -193,7 +193,7 @@ export function thumb(mode, plan, n = 2) {
     const r = G.rider;
     if (r.state === 'WIPE' || r.state === 'OUT') {
       const R = r.ride; hs.sort((a, b) => a - b);
-      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h avg ${Math.round(R.speed / Math.max(R.t, 0.1) * 3.6)}+peel turns ${R.turns} snaps ${R.snaps} cutbacks ${R.cutbacks} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
+      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h avg ${Math.round(R.speed / Math.max(R.t, 0.1) * 3.6)}+peel turns ${R.turns} snaps ${R.snaps} cutbacks ${R.cutbacks} barrel ${R.barrel.toFixed(1)}s score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
       hs = []; G.spawnRider(); continue;
     }
     if (!r.standing) { const o = br(r); G.input.stick = null; G.input.test = o.steer; G.input.paddleBtn = o.paddle; }
@@ -211,8 +211,9 @@ export function thumb(mode, plan, n = 2) {
 // a few ways a player might use the thumb
 export const PLANS = {
   handsOff: () => ({ x: 0, y: 0 }),
-  upDown: (r, t) => ({ x: 0, y: Math.floor(t / 1.1) % 2 ? 1 : -1 }),          // flick up to the lip, down to the bottom, repeat
-  upDownHalf: (r, t) => ({ x: 0, y: (Math.floor(t / 1.1) % 2 ? 1 : -1) * 0.5 }),
+  // (pad: x left(-) = up the face, right(+) = down; y up(-) = speed, down(+) = brake)
+  upDown: (r, t) => ({ x: Math.floor(t / 1.1) % 2 ? 1 : -1, y: 0 }),          // flick up to the lip, down to the bottom, repeat
+  upDownHalf: (r, t) => ({ x: (Math.floor(t / 1.1) % 2 ? 1 : -1) * 0.5, y: 0 }),
   // read the wave: go up when low, down when high (what a player watching the screen does)
-  reader: (r) => { if (!r.wave) return { x: 0, y: 0 }; const h = r.y / Math.max(r.wave.prof.slice(r.s).top, 0.3); r._ph = r._ph || 'up'; if (h > 0.7) r._ph = 'down'; else if (h < 0.25) r._ph = 'up'; return { x: 0, y: r._ph === 'up' ? -1 : 1 }; },
+  reader: (r) => { if (!r.wave) return { x: 0, y: 0 }; const h = r.y / Math.max(r.wave.prof.slice(r.s).top, 0.3); r._ph = r._ph || 'up'; if (h > 0.7) r._ph = 'down'; else if (h < 0.25) r._ph = 'up'; return { x: r._ph === 'up' ? -1 : 1, y: 0 }; },
 };
