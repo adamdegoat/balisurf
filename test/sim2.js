@@ -199,7 +199,7 @@ export function thumb(mode, plan, n = 2) {
     if (!r.standing) { const o = br(r); G.input.stick = null; G.input.test = o.steer; G.input.paddleBtn = o.paddle; }
     else {
       G.input.test = null; G.input.paddleBtn = false;
-      G.input.stick = r.state === 'RIDE' ? plan(r, r.stateT) : { x: 0, y: 0 };
+      G.input.stick = r.state === 'RIDE' ? plan(r, r.stateT) : plan.pop ? plan.pop(r) : { x: 0, y: 0 };
       if (r.wave && r.state === 'RIDE') hs.push(r.y / Math.max(r.wave.prof.slice(r.s).top, 0.3));
     }
     G.step(1 / 60, 1 / 60, false);

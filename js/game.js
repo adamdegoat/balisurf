@@ -169,14 +169,15 @@ function readInput(dt) {
 // Riding: the thumb says where you want to go on the wave, like in a surf game.
 //   up / down  = carve up the face toward the lip / drop to the bottom (how far you push = how hard you carve)
 //   sideways   = lean the board that way yourself (cutbacks, free turns); it overrides up/down while you hold it
-//   let go     = the board holds a gentle line mid-face (a surfer's trim), nothing more
+//   let go     = nothing: the board runs where it points, and staying on the wave is up to you
 // Underneath it's the same physics: this only picks the lean a surfer would use to head there.
 const SURF = { range: 0.3, push: 0.9, ahead: 0.35 };   // how far up/down the face the thumb reaches, and how hard it pushes you there
 function surfSteer(sx, sy) {
   const r = rider, w = r.wave;
   if (!w || r.v < 1.5) return sx;
   const c = w.cond.speed, v = Math.max(r.v, 0.5);
-  if (r.state !== 'RIDE' || r.stateT < 0.9) sy = Math.max(sy, 0);   // make the drop first: no climbing straight back into the lip
+  const push = Math.min(1, Math.abs(sy) * 1.5);                    // the help is only as strong as your push
+  if (r.state !== 'RIDE' || r.stateT < 0.9) sy = Math.max(sy, 0);   // make the drop first: pushing up still steers you, but to mid-face, not back into the lip
   // the thumb picks a height on the face: up = high under the lip, centre = mid-face, down = the bottom.
   // Heading there is a speed toward the beach: slower than the wave = climbing its face, faster = dropping down it
   // (judged a moment ahead: if you're already climbing fast you'll get there anyway, so start turning early)
@@ -188,7 +189,8 @@ function surfSteer(sx, sy) {
   if (Math.cos(r.th) < 0) target = Math.PI - target;               // facing back toward the curl (after a cutback): same, mirrored
   const err = Math.atan2(Math.sin(target - r.th), Math.cos(target - r.th));
   const side = Math.min(1, Math.abs(sx) * 1.4);                     // pushing sideways: you're steering yourself
-  return Math.max(-1, Math.min(1, Math.max(-1, Math.min(1, err * 2.2)) * (1 - side) + sx));
+  // let go and the board just runs where it points (no hidden steering)
+  return Math.max(-1, Math.min(1, Math.max(-1, Math.min(1, err * 2.2)) * push * (1 - side) + sx));
 }
 
 // your best ride per level, kept on this phone (quietly does nothing if storage is blocked)
@@ -692,9 +694,9 @@ function updateHUD(dt) {
     else if (onWave) hint = rider.paddling ? 'Keep paddling!' : 'Paddle now!';
     else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
-  } else if (st === 'POP') hint = 'Up!';
-  else if (st === 'RIDE' && rider.stateT < 5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Thumb up: carve up to the lip. Thumb down: drop to the bottom' : 'Hold PUMP as you drop down the face for speed';
-  else if (st === 'RIDE' && rider.stateT > 6 && rider.stateT < 10 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: push your thumb sideways toward the beach and hold till you face the breaking wave';
+  } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Push your thumb left to angle along the wave' : 'Up!';
+  else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Thumb up: carve up to the lip. Thumb down: drop to the bottom' : rider.stateT < 5 ? 'Keep steering: let go and the board just runs straight' : 'Hold PUMP as you drop down the face for speed';
+  else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: push your thumb sideways toward the beach and hold till you face the breaking wave';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
   // the callout: BARREL while you're in it, or the move you just landed
   const call = st !== 'RIDE' ? '' : rider.inBarrel ? 'BARREL' : rider.trick ? rider.trick.name : '';
