@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=61';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=67';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=90';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
@@ -311,7 +311,7 @@ function povCamera(dt) {
   snapCam = false;
   // head pitch: riding, look down the line and at the nose; lying, look ahead over the nose; at the drop, look down the face
   const dropK = st === 'POP' ? 7 : st === 'RIDE' ? 7 * Math.max(0, 1 - rider.stateT / 0.5) : 0;   // the pop: eyes down on the board between your hands, then back up to the line
-  let pitchLook = -9, pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : sitting ? -0.46 : -0.4;   // sitting: tipped down enough to see your knees and hands on the board   // take-off: look down at the board and the face; lying: down enough to see your arms paddling
+  let pitchLook = -9, pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : sitting ? -0.53 : -0.4;   // sitting: tipped down enough to see your knees and hands on the board   // take-off: look down at the board and the face; lying: down enough to see your arms paddling
   // sitting or lying facing out to sea: look up at a wave that's coming (a 15 m wave's crest is well above the horizon)
   if (!standing) {
     const inc = incoming();
@@ -715,7 +715,7 @@ function straddle() {
   const deckY = rig.getWorldPosition(_b).y + 0.07;
   for (const s of ['l', 'r']) {
     const ua = bones['upperarm_' + s], side = ua.getWorldPosition(_a).sub(_b).dot(_bs) > 0 ? 1 : -1;
-    _sT.copy(_sp).addScaledVector(_bf, 0.62).addScaledVector(_bs, side * 0.22); _sT.y = deckY;   // hands on the rails just ahead of your knees
+    _sT.copy(_sp).addScaledVector(_bf, 0.85).addScaledVector(_bs, side * 0.2); _sT.y = deckY;   // hands on the rails just ahead of your knees
     reachArm(ua, bones['lowerarm_' + s], bones['hand_' + s], _sT, _t.set(0, 0, 0).addScaledVector(_bs, side).addScaledVector(_bf, -0.3), 0.9);
   }
 }

@@ -357,9 +357,16 @@ export function waterMaterial({ wave = false } = {}) {
         float h = clamp(d.y, 0., 1.);
         vec3 c = mix(uHor, uZen, pow(h, .45));
         float s = max(dot(d, uSun), 0.);
-        c += uSunCol * (pow(s, 600.) * 6. * uSunVis + pow(s, 12.) * .35);
+        c += uSunCol * (pow(s, 600.) * 6. * uSunVis + pow(s, 12.) * .35);   // (the hard sun disk is left to the glitter term below: reflected at full strength it smeared into white blobs)
         c = mix(c, uHor * .8 + uZen * .2, uCloud * .6);               // overcast skies reflect flat grey light
         return c + uFlash;
+      }
+      // the sky as the water reflects it: no sun disk or glow (the sun on the water is drawn by the glitter below; the
+      // smooth glow reflected through ripples smeared into white blobs beside the board)
+      vec3 skyR(vec3 d){
+        float h = clamp(d.y, 0., 1.);
+        vec3 c = mix(uHor, uZen, pow(h, .45)) + uSunCol * pow(max(dot(d, uSun), 0.), 12.) * .08;
+        return mix(c, uHor * .8 + uZen * .2, uCloud * .6) + uFlash;
       }
       void main(){
         vec3 V = normalize(cameraPosition - vW);
@@ -386,7 +393,7 @@ export function waterMaterial({ wave = false } = {}) {
         N = normalize(N + (vec3(1., 0., 0.) * (f1 - .5) * .35 + T * (f2 - .5) * .5) * wallK);` : ''}
         float fres = .03 + .97 * pow(1. - max(dot(N, V), 0.), 5.);
         vec3 R = reflect(-V, N); R.y = abs(R.y);
-        vec3 refl = sky(R);
+        vec3 refl = skyR(R);
         // body colour: deep blue at the base, turquoise where the wall is thin and lit from behind
         float thin = vFT.y;
         vec3 deep = uDeep, turq = uTurq;
@@ -401,8 +408,8 @@ export function waterMaterial({ wave = false } = {}) {
         vec3 col = mix(body, refl, fres);
         // sun glint
         // (broken into glitter by the small ripples, as on real water; a smooth glint reads as a white smudge up close)
-        float glit = smoothstep(.52, .78, fbm(vW.xz * 5.5 + vec2(uTime * .9, -uTime * .6)));
-        col += uSunCol * pow(max(dot(R, uSun), 0.), 220.) * 3. * uSunVis * (.25 + 1.6 * glit);
+        float glit = smoothstep(.6, .74, fbm(vW.xz * 16. + vec2(uTime * 1.6, -uTime * 1.1))) * smoothstep(.3, .6, fbm(vW.xz * 3.1 - uTime * .3));   // fine sparkles, not blobs
+        col += uSunCol * min(.55, pow(max(dot(R, uSun), 0.), 220.) * 3. * (.04 + glit)) * uSunVis;   // (capped: unbounded it merged into white blobs)
         ${wave ? `
         // foam: churned white where the lip throws and the whitewater rolls
         // foam features scale with the wave: a 15 m wave boils in big lumps, not a fine repeating pattern
@@ -412,7 +419,7 @@ export function waterMaterial({ wave = false } = {}) {
         // whitewater ages: solid and churning just behind the curl, then it thins into drifting patches and lace with the
         // water showing through (a uniform white blanket read as a carpet)
         float patches = fbm(vW.xz * .28 * fk + vec2(uTime * .04, -uTime * .07)) + (foamN - .5) * .35;
-        foamMask *= mix(1., .15 + .85 * smoothstep(.44, .6, patches), vAge);
+        foamMask *= mix(1., (.1 + .9 * smoothstep(.46, .66, patches)) * (1. - .55 * smoothstep(.3, 1., vAge)), vAge);   // old foam: thinner, fainter patches the longer ago it broke
         // thin lace of old foam drifting on the face
         // lacework: thin wandering foam lines (contours of a noise field), not blobs
         float ln = fbm(vec2(vW.x * 1.3 + vW.z * .4, vW.y * 1.1 + vW.z * .7) * 1.8 * fk + vec2(0., uTime * .04));
