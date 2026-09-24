@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=50';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=53';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=75';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';

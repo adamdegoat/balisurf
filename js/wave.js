@@ -561,31 +561,60 @@ export function coast(scene) {
   const land = new THREE.PlaneGeometry(1800, 500, 90, 20); land.rotateX(-Math.PI / 2);
   { const p = land.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, 2 + 4 * Math.sin(x * 0.013) * Math.cos(z * 0.02) + (z + 250) * 0.03); } land.computeVertexNormals(); }
   group.add(at(new THREE.Mesh(colorize(land, [0.12, 0.2, 0.1], 0.2), mat), 0, 0, 475));
-  // jungle: big soft clumps behind the palms
-  const clump = colorize(new THREE.IcosahedronGeometry(1, 1), [0.1, 0.19, 0.09], 0.25);
-  const jungle = new THREE.InstancedMesh(clump, mat, 260); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
-  for (let i = 0; i < 260; i++) {
-    // uneven canopy: mostly low scrub and trees, now and then a tall one, never a neat row
-    const tall = Math.random() < 0.18, r = tall ? 9 + Math.random() * 6 : 3 + Math.random() * 6;
-    ps.set(-750 + Math.random() * 1500, 1 + r * (tall ? 0.9 : 0.4), 236 + Math.random() * 45); sc.set(r * (1 + Math.random() * 0.8), r * (0.45 + Math.random() * 0.5), r * (0.8 + Math.random() * 0.5));
-    jungle.setMatrixAt(i, m4.compose(ps, q.identity(), sc));
+  // jungle: layered tree canopies behind the palms. Each tree is a lumpy crown (a noise-dented blob, darker underneath
+  // where it's in shade) sitting on the ground or on a short trunk; neighbours overlap into one uneven forest edge.
+  const blob = new THREE.IcosahedronGeometry(1, 3);
+  { const p = blob.attributes.position, c = new Float32Array(p.count * 3), v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const n = 1 + 0.16 * Math.sin(v.x * 5.1 + v.y * 3.3) * Math.cos(v.z * 4.7 - v.y * 2.1) + 0.1 * Math.sin(v.x * 11 + v.z * 9);
+      v.multiplyScalar(n); if (v.y < -0.35) v.y = -0.35 + (v.y + 0.35) * 0.3;   // flatter underside
+      p.setXYZ(i, v.x, v.y, v.z);
+      const lit = 0.55 + 0.45 * Math.min(1, Math.max(0, (v.y + 0.6) / 1.4)), k = lit * (0.9 + Math.random() * 0.2);
+      c[i * 3] = 0.09 * k; c[i * 3 + 1] = 0.2 * k; c[i * 3 + 2] = 0.08 * k;
+    }
+    blob.setAttribute('color', new THREE.BufferAttribute(c, 3)); blob.computeVertexNormals(); }
+  const NJ = 1100, jungle = new THREE.InstancedMesh(blob, mat, NJ); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+  const NT = 90, jTrunk = new THREE.InstancedMesh(colorize(new THREE.CylinderGeometry(0.25, 0.45, 1, 6).translate(0, 0.5, 0), [0.22, 0.18, 0.14], 0.2), mat, NT);
+  let n = 0, nt = 0;
+  const crown = (x, y, z, r) => { if (n >= NJ) return; q.setFromEuler(new THREE.Euler(0, Math.random() * 6.3, 0));
+    jungle.setMatrixAt(n++, m4.compose(ps.set(x, y, z), q, sc.set(r * (1 + Math.random() * 0.4), r * (0.7 + Math.random() * 0.3), r * (0.9 + Math.random() * 0.4)))); };
+  // understory: a dense band of low bushes so no sky shows through at the foot of the forest
+  for (let i = 0; i < 700; i++) { const x = -750 + Math.random() * 1500, z = 232 + Math.random() * 60, r = 2 + Math.random() * 3.5; crown(x, 1.3 + (z - 230) * 0.04 + r * 0.4, z, r); }
+  // trees: a crown of two or three overlapping lumps; the tall ones stand on a trunk above the understory
+  while (n < NJ - 3) {
+    const tall = nt < NT && Math.random() < 0.3, r = tall ? 5 + Math.random() * 4 : 3 + Math.random() * 3;
+    const x = -750 + Math.random() * 1500, z = 238 + Math.random() * 55, ground = 1.3 + (z - 230) * 0.04, cy = ground + (tall ? r * (1.2 + Math.random() * 0.5) : r * 0.8);
+    for (let k = 0; k < 3; k++) crown(x + (Math.random() - 0.5) * r, cy + (k ? (Math.random() - 0.3) * r * 0.5 : 0), z + (Math.random() - 0.5) * r, r * (k ? 0.65 : 1));
+    if (tall) jTrunk.setMatrixAt(nt++, m4.compose(ps.set(x, ground - 0.5, z), q.identity(), sc.set(r * 0.08 + 0.3, cy - ground, r * 0.08 + 0.3)));
   }
-  group.add(jungle);
-  // coconut palms along the beach: leaning trunks and a spray of fronds
+  jungle.count = n; jTrunk.count = nt;
+  group.add(jungle, jTrunk);
+  // coconut palms along the beach: slender curving trunks and a crown of long drooping fronds
   const N = 170;
-  const trunkG = colorize(new THREE.CylinderGeometry(0.18, 0.3, 1, 5, 1).translate(0, 0.5, 0), [0.35, 0.29, 0.22]);
-  const frond = new THREE.ConeGeometry(0.7, 4.2, 3, 1).rotateX(Math.PI / 2).translate(0, 0, 2.1).scale(1, 0.25, 1);
-  const crownParts = [];
-  for (let k = 0; k < 8; k++) crownParts.push(frond.clone().rotateX(0.45 + (k % 2) * 0.25).rotateY(k * Math.PI / 4));
-  const crownG = colorize(mergeGeos(crownParts), [0.14, 0.27, 0.1], 0.2);
-  const trunks = new THREE.InstancedMesh(trunkG, mat, N), crowns = new THREE.InstancedMesh(crownG, mat, N);
+  const trunkG = colorize(new THREE.CylinderGeometry(0.16, 0.26, 1, 6, 6).translate(0, 0.5, 0), [0.4, 0.34, 0.26]);
+  { const p = trunkG.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) + 0.9 * y * y); } trunkG.computeVertexNormals(); }   // palms curve toward the sea
+  // one frond: a leaf blade arcing out and drooping, wide in the middle, tapering to a point, with a zig-zag edge of leaflets
+  const frondParts = [];
+  { const SEG = 10, pos = [], idx = [];
+    for (let j = 0; j <= SEG; j++) {
+      const t = j / SEG, x = t * 4.2, y = 0.9 * t - 2.2 * t * t, w = Math.sin(Math.PI * Math.min(1, t * 1.15)) * (0.75 + 0.25 * (j % 2));
+      pos.push(x, y, -w, x, y + 0.15 * (1 - t), 0, x, y, w);
+      if (j) { const a = (j - 1) * 3; idx.push(a, a + 3, a + 1, a + 1, a + 3, a + 4, a + 1, a + 4, a + 2, a + 2, a + 4, a + 5); }
+    }
+    const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); fg.setIndex(idx); fg.computeVertexNormals();
+    for (let k = 0; k < 9; k++) frondParts.push(fg.clone().rotateZ((k % 3 - 1) * 0.18).rotateY(k * Math.PI * 2 / 9 + (k % 2) * 0.2));
+  }
+  const leafMat = mat.clone(); leafMat.side = THREE.DoubleSide;   // fronds are thin blades, seen from above and below
+  const crownG = colorize(mergeGeos(frondParts), [0.15, 0.3, 0.1], 0.25);
+  const trunks = new THREE.InstancedMesh(trunkG, mat, N), crowns = new THREE.InstancedMesh(crownG, leafMat, N);
   for (let i = 0; i < N; i++) {
-    const h = 8 + Math.random() * 7, lean = (Math.random() - 0.5) * 0.35 - 0.12, yaw = Math.random() * Math.PI * 2;
+    const h = 8 + Math.random() * 7, lean = (Math.random() - 0.5) * 0.25 - 0.08, yaw = Math.PI / 2 + (Math.random() - 0.5) * 1.4;   // most lean out toward the sea
     const x = -700 + i * 8.2 + (Math.random() - .5) * 5, z = 222 + Math.random() * 12;
-    q.setFromEuler(new THREE.Euler(lean, yaw, (Math.random() - .5) * 0.3));
+    q.setFromEuler(new THREE.Euler(lean, yaw, 0));
     trunks.setMatrixAt(i, m4.compose(ps.set(x, 1.8, z), q, sc.set(1, h, 1)));
-    const top = new THREE.Vector3(0, h, 0).applyQuaternion(q).add(ps);
-    crowns.setMatrixAt(i, m4.compose(top, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.random() * 6, 0)), sc.set(1, 1, 1).multiplyScalar(0.9 + Math.random() * 0.4)));
+    const top = new THREE.Vector3(0.9, h, 0).applyQuaternion(q).add(ps);   // the top of the curved trunk
+    crowns.setMatrixAt(i, m4.compose(top, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.random() * 6, 0)), sc.set(1, 1, 1).multiplyScalar(0.85 + Math.random() * 0.4)));
   }
   group.add(trunks, crowns);
   // Mount Agung, far inland: a broad volcanic cone
