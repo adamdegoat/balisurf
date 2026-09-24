@@ -303,14 +303,14 @@ function povCamera(dt) {
   else {
     // (a plain exponential follow: stays glued to your head through the pop-up, just takes the jitter off; the old
     // spring was so over-damped it closed only ~2% of the gap a frame and left the camera inside your chest)
-    const k = st === 'POP' || (st === 'RIDE' && rider.stateT < 0.5) ? 30 : 16;
+    const k = st === 'POP' ? 8 + 50 * Math.min(1, rider.stateT / 0.35) : st === 'RIDE' && rider.stateT < 0.5 ? 30 : 16;   // (eases into the pop instead of snapping to the new eye height in one frame)
     pov.pos.lerp(_eye, 1 - Math.exp(-k * dt));
     const dy = Math.atan2(Math.sin(yawT - pov.yaw), Math.cos(yawT - pov.yaw)), maxY = 3.2 * dt;
     pov.yaw += Math.max(-maxY, Math.min(maxY, dy * Math.min(1, dt * 7)));
   }
   snapCam = false;
   // head pitch: riding, look down the line and at the nose; lying, look ahead over the nose; at the drop, look down the face
-  const dropK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - rider.stateT / 1.0) : 0;
+  const dropK = st === 'POP' ? 7 : st === 'RIDE' ? 7 * Math.max(0, 1 - rider.stateT / 0.5) : 0;   // the pop: eyes down on the board between your hands, then back up to the line
   let pitchLook = -9, pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : sitting ? -0.46 : -0.4;   // sitting: tipped down enough to see your knees and hands on the board   // take-off: look down at the board and the face; lying: down enough to see your arms paddling
   // sitting or lying facing out to sea: look up at a wave that's coming (a 15 m wave's crest is well above the horizon)
   if (!standing) {
@@ -321,7 +321,7 @@ function povCamera(dt) {
     }
   }
   if (pitchLook > pitchT) pitchT = pitchLook;
-  pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * (st === 'POP' ? 12 : 5));   // (the pop: eyes snap down to the board between your hands)
+  pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * (st === 'POP' ? 4 + 20 * Math.min(1, rider.stateT / 0.3) : 5));   // (the pop: eyes snap down to the board between your hands)
   pov.roll += ((standing ? -rider.lean * 0.28 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve
   // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
   _pe.set(pov.pitch, -pov.yaw - Math.PI / 2, pov.roll);
@@ -803,7 +803,9 @@ function surfStance() {
     bones['upperarm_' + s].getWorldPosition(_ik4);
     if (stallK) { if ((chest ? !front : front)) P.lerp(at(_aq, 0.55, 0.62, 0.46), stallK); else P.lerp(at(_aq, -0.15, 0.6, -0.3), stallK); }   // frontside the back hand drags, backside the front hand; ahead enough to see it trail through the face
     // pop-up: flat on the deck under your shoulders, beside your ribs
-    if (popK > 0) P.lerp(at(_aq, 0.46, 0.55, (s === 'l' ? -1 : 1) * ws * 0.15), popK);
+    // pop-up: hands flat on the deck either side of the stringer, just ahead of your chest (placed on the board itself)
+    if (popK > 0) { const sideSign = Math.sign(_cv.subVectors(bones['upperarm_' + s].getWorldPosition(_ik4), bones.spine_03.getWorldPosition(_ik1)).dot(_ik2.set(1, 0, 0).applyQuaternion(rig.quaternion))) || 1;
+      P.lerp(rig.localToWorld(_aq.set(0.17 * sideSign, 0.1, 0.35)), popK); }
     // smooth each hand's path (the pose blends above can jump between frames when the lean changes side)
     // (smoothed relative to your eyes: smoothing in the world would leave the hands trailing behind you at speed)
     const sm = armSm[s]; P.sub(eye); if (!sm.ok || snapCam) { sm.p.copy(P); sm.ok = true; } else sm.p.lerp(P, Math.min(1, dtArm * 14)); P.copy(sm.p).add(eye);
@@ -863,7 +865,7 @@ function updateHUD(dt) {
     ui.msgN.innerHTML = r.t > 0 ? `${r.score.toFixed(1)}${newBest ? '<small>NEW BEST</small>' : ''}` : '';
     const stat = (v, l) => `<div>${v}<span>${l}</span></div>`;
     ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.cutbacks ? stat(r.cutbacks, r.cutbacks > 1 ? 'CUTBACKS' : 'CUTBACK') : '') + (r.snaps ? stat(r.snaps, r.snaps > 1 ? 'SNAPS' : 'SNAP') : '') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
-    ui.sess.textContent = session.waves ? `Heat ${heat.toFixed(2)} / 20 (best two of ${session.waves})  ·  best wave ever ${Math.max(bestFor(mode), r.score).toFixed(1)}` : '';
+    ui.sess.textContent = session.waves ? `Heat ${heat.toFixed(2)} / 20 ${session.waves > 1 ? `(your best two of ${session.waves} waves)` : '(your best two waves count)'}  ·  best wave ever ${Math.max(bestFor(mode), r.score).toFixed(1)}` : '';
   }
   // a wipeout plays out first (you see yourself go over), then the summary fades in
   if (endT >= 0) {
