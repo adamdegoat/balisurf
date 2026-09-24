@@ -747,15 +747,19 @@ function surfStance() {
       at(P, chest ? 0.58 : 0.55, (chest ? 0.4 : 0.36) - sway - pumpUp, chest ? 0.2 : -0.16);                       // trim
       if (bt) P.lerp(chest ? at(_aq, 0.6, 0.26, 0.26) : at(_aq, 0.45, 0.7, 0.34), bt);                               // bottom turn
       if (tt) P.lerp(at(_aq, 0.55, 0.5, -0.32), tt);                                                                  // top turn / cutback: leads round, points down the face
-      if (!chest && stallK) P.lerp(at(_aq, 0.42, 0.72, 0.42), stallK);                                                  // backside stall: front hand drags
-      if (deep) P.lerp(chest ? at(_aq, 0.52, 0.4, 0.32) : at(_aq, 0.4, 0.6, -0.18), deep);                            // barrel (backside: grab the rail)
+      if (deep) P.lerp(chest ? at(_aq, 0.52, 0.4, 0.32) : at(_aq, 0.3, 0.85, -0.14), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
     } else {
       at(P, -0.22, 0.62 - sway, -0.25);                                                                                // trim: by the back hip
       if (bt) P.lerp(chest ? at(_aq, -0.08, 0.92, 0.35) : at(_aq, -0.2, 0.62, -0.25), bt);
       if (tt) P.lerp(at(_aq, 0.3, 0.75, -0.15), tt);                                                                  // comes across low
-      if (chest && stallK) P.lerp(at(_aq, -0.05, 0.85, 0.42), stallK);                                                // frontside stall: back hand drags in the face
       if (deep) P.lerp(chest ? at(_aq, -0.15, 0.7, 0.2) : at(_aq, -0.3, 0.6, 0.4), deep);                             // barrel (backside: trailing arm along the face)
     }
+    // a hand never reaches across your body (a whole arm across the view reads as broken): if its pose asks for the
+    // other side, it goes to its own side instead; in a stall the drag is done by the hand on the wave side
+    bones['upperarm_' + s].getWorldPosition(_ik4);
+    const own = Math.sign(_cv.subVectors(_ik4, eye).dot(R)) || 1, lat = _cv.subVectors(P, eye).dot(R);
+    if (stallK) { if (own === ws) P.lerp(at(_aq, 0.3, 0.8, 0.42), stallK); else P.lerp(at(_aq, -0.15, 0.6, -0.3), stallK); }
+    if (lat * own < 0.14) P.addScaledVector(R, own * 0.14 - lat);
     // pop-up: flat on the deck under your shoulders, beside your ribs
     if (popK > 0) P.lerp(at(_aq, 0.3, 0.6, (s === 'l' ? -1 : 1) * ws * 0.2), popK);
     // smooth each hand's path (the pose blends above can jump between frames when the lean changes side)
