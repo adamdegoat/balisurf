@@ -701,7 +701,7 @@ function autoQuality(dt) {
 
 // ---------- loop
 const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)');
-let last = performance.now(), T = 0, strokeT = 0, lastState = '', crashT = 1;
+let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1;
 function tick(dt) {
   T += dt;
   ENV.uTime.value += dt;
@@ -737,6 +737,9 @@ function tick(dt) {
       if (st === 'POP') audio.splash(0.35);
       lastState = st;
     }
+    // a snap or cutback rips spray off the rail: a sharp tearing hiss
+    if (rider.trick && rider.trick !== lastTrick) { audio.burst(0.3, 3200, 0.45, 'highpass'); audio.burst(0.2, 1300, 0.35); }
+    lastTrick = rider.trick;
 
     sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   } else {
