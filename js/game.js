@@ -233,6 +233,7 @@ const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 // Eyes at the head, looking where you're going and a little down so the board's nose and the wave ahead are in view.
 // A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
 // and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
+const POVCAM = { fwd: 0.32, up: 0.1, pitch: -0.3, drop: 0.25 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
 const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
 function povCamera(dt) {
   if (!bones.head && surfer) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -244,7 +245,7 @@ function povCamera(dt) {
   // look mostly where you're travelling, partly where the board points (you see the nose swing in a turn/drift)
   const dh = Math.atan2(Math.sin(rider.th - travel), Math.cos(rider.th - travel));
   const yawT = travel + dh * (standing ? 0.35 : 0.8);
-  _eye.x += Math.cos(yawT) * 0.18; _eye.z += Math.sin(yawT) * 0.18; _eye.y += 0.26;   // a head-mounted camera: a little above and in front of the head, clear of your shoulders
+  _eye.x += Math.cos(yawT) * POVCAM.fwd; _eye.z += Math.sin(yawT) * POVCAM.fwd; _eye.y += POVCAM.up;   // camera just in front of the face, like a surfer's mouth-mounted camera
   // smooth the eye's position relative to the board (not in the world, or at speed it would trail behind your head)
   _eye.sub(rig.position);
   if (!pov.ready || snapCam) { pov.pos.copy(_eye); pov.vel.set(0, 0, 0); pov.yaw = yawT; pov.ready = true; }
@@ -256,7 +257,7 @@ function povCamera(dt) {
   snapCam = false;
   // head pitch: riding, look down the line and at the nose; lying, look ahead over the nose; at the drop, look down the face
   const dropK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - rider.stateT / 1.0) : 0;
-  const pitchT = standing ? -0.3 - 0.3 * dropK : -0.3;   // at the take-off you look down at the board and the face you are dropping into   // lying: tipped down enough to see your arms and the nose
+  const pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : -0.3;   // at the take-off you look down at the board and the face you are dropping into   // lying: tipped down enough to see your arms and the nose
   pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * 5);
   pov.roll += ((standing ? -rider.lean * 0.28 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve
   // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
