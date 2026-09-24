@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=43';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=44';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=67';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=4';
@@ -233,7 +233,7 @@ const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 // Eyes at the head, looking where you're going and a little down so the board's nose and the wave ahead are in view.
 // A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
 // and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
-const POVCAM = { fwd: 0.32, up: 0.1, pitch: -0.3, drop: 0.25 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
+const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.3, drop: 0.25 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
 const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
 function povCamera(dt) {
   if (!bones.head && surfer) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -681,6 +681,19 @@ function paddleArms(dt) {
     aimBone(ua, la, _t, 0.9 * paddleW); aimBone(la, hd, _t, 0.8 * paddleW);
   }
 }
+// two-bone arm reach: put the hand on T (or as close as the arm allows), elbow bending toward the pole direction
+const _ik1 = new THREE.Vector3(), _ik2 = new THREE.Vector3(), _ik3 = new THREE.Vector3(), _ik4 = new THREE.Vector3();
+function reachArm(ua, la, hd, T, pole, w) {
+  ua.getWorldPosition(_ik1); la.getWorldPosition(_ik2); hd.getWorldPosition(_ik3);
+  const a = _ik1.distanceTo(_ik2), b = _ik2.distanceTo(_ik3);
+  const toT = _ik4.subVectors(T, _ik1); let d = toT.length(); d = Math.min(Math.max(d, Math.abs(a - b) + 0.01), a + b - 0.005); toT.normalize();
+  // elbow: along the reach by a*cos, out toward the pole by a*sin (law of cosines)
+  const ca = (a * a + d * d - b * b) / (2 * a * d), sa = Math.sqrt(Math.max(0, 1 - ca * ca));
+  const pp = _ik2.copy(pole).addScaledVector(toT, -pole.dot(toT)).normalize();
+  const elbow = _ik3.copy(_ik1).addScaledVector(toT, a * ca).addScaledVector(pp, a * sa);
+  aimBone(ua, la, _t.subVectors(elbow, _ik1).normalize(), w);
+  la.getWorldPosition(_ik1); aimBone(la, hd, _t.subVectors(T, _ik1).normalize(), w);
+}
 // swing a leg sideways (about the axis the rider faces) so its foot moves toward sgn * board-forward; keeps the knee bend
 const _ax = new THREE.Vector3();
 function swingBone(bone, end, sgn, ang) {
@@ -716,7 +729,8 @@ function turnBone(bone, axis, ang) {
   bone.updateMatrixWorld(true);
 }
 const _in = new THREE.Vector3(), _fw = new THREE.Vector3();
-let bodyT = 0, gLoad = 0; const STOOP = 0.25; const _sideAx = new THREE.Vector3();
+let bodyT = 0, gLoad = 0; const STOOP = 0.25; const ARM = { ff: 0.62, fd: 0.45, bf: 0.47, bd: 0.5 };   // hand targets ahead of / below the eyes (front hand, back hand), vetted in first-person
+const _af = new THREE.Vector3(), _ar = new THREE.Vector3(), _ah = new THREE.Vector3(), _ap = new THREE.Vector3(), _aq = new THREE.Vector3(); const _sideAx = new THREE.Vector3();
 function surfStance() {
   if (sitting) straddle();
   const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POP' ? Math.min(1, rider.stateT / 0.45) : 0;
@@ -736,15 +750,6 @@ function surfStance() {
   for (const [s, sgn] of [['l', side], ['r', -side]]) {
     // legs: feet about shoulder-and-a-half apart, front foot toward the nose
     swingBone(bones['thigh_' + s], bones['foot_' + s], sgn, (0.36 + 0.06 * deep) * w);
-    // arms: the front arm leads into the turn and points where you're going, the back arm swings out for balance;
-    // both drop low and in when tucked in the barrel, and never sit still
-    const sway = Math.sin(bodyT * 1.7 + (sgn > 0 ? 0 : 1.3)) * 0.08;
-    if (sgn > 0) _t.copy(bodyFwd).multiplyScalar(0.85).addScaledVector(_in, 0.55 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.35 : -0.3) + 0.4 * Math.abs(leanN) + sway);
-    else _t.copy(bodyFwd).multiplyScalar(0.15).addScaledVector(INTO_WAVE, -0.6).addScaledVector(_in, -0.35 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.3 : -0.25) + 0.45 * Math.abs(leanN) + sway);   // the trailing arm out wide and a little forward for balance (you see both hands)
-    // braking: the trailing hand reaches down and drags in the face
-    if (sgn <= 0 && rider.stalling > 0.05) _t.lerp(_d.copy(bodyFwd).multiplyScalar(-0.35).addScaledVector(INTO_WAVE, 0.7).addScaledVector(bodyUp, -0.9), Math.min(1, rider.stalling * 1.3));
-    _t.addScaledVector(INTO_WAVE, 0.2).normalize();
-    aimBone(bones['upperarm_' + s], bones['lowerarm_' + s], _t, 0.8 * w);
   }
   // upper body: shoulders twist into the turn and the chest bends toward the inside; a slow balance sway on top
   const twist = (leanN * 0.45 + Math.sin(bodyT * 1.1) * 0.05) * w;
@@ -755,6 +760,32 @@ function surfStance() {
   _sideAx.crossVectors(bodyFwd, bodyUp).normalize(); turnBone(bones.spine_02, _sideAx, STOOP * w);
   // head: look ahead along your line (surfers always look where they're going)
   turnBone(bones.head, bodyUp, side * 0.55 * w - twist * 0.6);
+  // arms last (after the torso has twisted and leaned), posed for what you see from your own eyes, like head-cam footage:
+  //   trimming: leading hand out in front, a little toward the wave; back hand low at your side
+  //   carving:  the inside hand reaches down toward the water, the outside arm swings up and back for balance
+  //   stalling: the trailing hand drags in the wave face;  pop-up: hands low, never up in your face
+  //   barrel:   leading hand toward the wall, low and in
+  const F = _af.set(Math.cos(pov.yaw), 0, Math.sin(pov.yaw)), R = _ar.set(-F.z, 0, F.x);
+  const ws = Math.sign(INTO_WAVE.dot(R)) || -1, L = Math.abs(leanN), stallK = Math.min(1, (rider.stalling || 0) * 1.3);
+  const popK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - rider.stateT / 0.6) : 0;
+  bones.head.getWorldPosition(_ah);
+  for (const [s, sgn] of [['l', side], ['r', -side]]) {
+    const front = sgn > 0, sway = Math.sin(bodyT * 1.7 + (front ? 0 : 1.3)) * 0.05;
+    const P = _ap.copy(_ah);
+    if (front) {
+      P.addScaledVector(F, ARM.ff).addScaledVector(R, ws * 0.25 * (1 - L)).addScaledVector(_in, 0.45 * L).addScaledVector(WORLD_UP, -ARM.fd - 0.3 * L + sway);
+      P.lerp(_aq.copy(_ah).addScaledVector(F, ARM.ff).addScaledVector(R, ws * 0.45).addScaledVector(WORLD_UP, -ARM.fd - 0.3), deep);   // tucked low in the tube, reaching toward the wall
+      P.lerp(_aq.copy(_ah).addScaledVector(F, ARM.ff - 0.1).addScaledVector(R, ws * 0.15).addScaledVector(WORLD_UP, -ARM.fd - 0.15), popK);
+    } else {
+      P.addScaledVector(F, ARM.bf - 0.2 * L).addScaledVector(R, -ws * 0.3 * (1 - L)).addScaledVector(_in, -0.5 * L).addScaledVector(WORLD_UP, -ARM.bd + 0.35 * L + sway);
+      P.lerp(_aq.copy(_ah).addScaledVector(F, 0.3).addScaledVector(R, ws * 0.62).addScaledVector(WORLD_UP, -ARM.bd - 0.6), stallK);   // low and out to the side, fingers in the face
+      P.lerp(_aq.copy(_ah).addScaledVector(F, ARM.bf).addScaledVector(R, -ws * 0.35).addScaledVector(WORLD_UP, -ARM.bd - 0.1), popK);
+    }
+    // never into the lens: keep the hand at least 45 cm from your eyes
+    const cd = P.distanceTo(camera.position); if (cd < 0.5) P.addScaledVector(F, 0.5 - cd);
+    const ua = bones['upperarm_' + s], la = bones['lowerarm_' + s], hd = bones['hand_' + s];
+    reachArm(ua, la, hd, P, _aq.copy(WORLD_UP).multiplyScalar(-1).addScaledVector(R, (front ? ws : -ws) * 0.5), 0.9 * w);   // elbows bend down and out
+  }
 }
 
 // ---------- HUD + end of ride
