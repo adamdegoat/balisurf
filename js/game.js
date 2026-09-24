@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=44';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=67';
 import { makeBoard } from './board.js?v=3';
-import { SurfAudio } from './audio.js?v=4';
+import { SurfAudio } from './audio.js?v=7';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -249,6 +249,9 @@ function povCamera(dt) {
   _eye.x += Math.cos(yawT) * ef; _eye.z += Math.sin(yawT) * ef; _eye.y += eu;   // camera just in front of the face, like a surfer's mouth-mounted camera
   // smooth the eye's position relative to the board (not in the world, or at speed it would trail behind your head)
   _eye.sub(rig.position);
+  // eyes never lower than this above the board; during the pop it rises with you instead of snapping up in one frame
+  const popT = st === 'POP' ? Math.min(1, rider.stateT / 0.4) : standing ? 1 : 0, eyeFloor = 0.25 + 0.35 * popT * popT * (3 - 2 * popT);
+  if (_eye.y < eyeFloor) _eye.y = eyeFloor;
   if (!pov.ready || snapCam) { pov.pos.copy(_eye); pov.vel.set(0, 0, 0); pov.yaw = yawT; pov.ready = true; }
   else {
     const w0 = 14; pov.vel.addScaledVector(_cv.subVectors(_eye, pov.pos), w0 * w0 * dt).multiplyScalar(Math.max(0, 1 - 2 * w0 * dt)); pov.pos.addScaledVector(pov.vel, dt);
@@ -265,9 +268,17 @@ function povCamera(dt) {
   _pe.set(pov.pitch, -pov.yaw - Math.PI / 2, pov.roll);
   camera.quaternion.setFromEuler(_pe);
   camera.position.copy(pov.pos).add(rig.position);
+  // feel the water: small quick bumps through the board (chop under you), stronger with speed and chop, and a
+  // rattle when the tail slides; tiny, so it reads as texture, never as shake
+  if (standing && st === 'RIDE') {
+    const chop = ENV.weather ? ENV.weather.chop : 1, sp = Math.min(1, rider.v / 9), rattle = Math.min(1, (rider.slide || 0) * 2.5 + rider.skid);
+    const t = T, n1 = Math.sin(t * 11.3) * 0.6 + Math.sin(t * 17.9 + 1.3) * 0.4, n2 = Math.sin(t * 23.7 + 0.7) * 0.5 + Math.sin(t * 31.1 + 2.1) * 0.5;
+    const amp = (0.006 + 0.006 * chop) * sp + 0.008 * rattle;
+    camera.position.y += n1 * amp; camera.rotateX(n2 * amp * 0.6); camera.rotateZ(n1 * amp * 0.4);
+  }
   // the eyes are always above your own board (never ask the water height here: under a lip or in the barrel the
   // 'surface' overhead is the lip, and pushing above it would lift you out of the tube)
-  const minY = rig.position.y + (standing ? 0.6 : 0.25); if (camera.position.y < minY) camera.position.y = minY;
+  const minY = rig.position.y + (st === 'RIDE' ? 0.5 : 0.22); if (camera.position.y < minY) camera.position.y = minY;
 }
 
 function updateCamera(dt) {
@@ -853,7 +864,7 @@ function autoQuality(dt) {
 
 // ---------- loop
 const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)');
-let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1;
+let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1, lastPump = false;
 function tick(dt) {
   T += dt;
   ENV.uTime.value += dt;
@@ -883,7 +894,7 @@ function tick(dt) {
     for (const v of waves) { const s = rider.x - v.peelX, zl = rider.z - v.zW; if (zl > -20 && zl < 25) near = Math.max(near, Math.max(0, 1 - Math.hypot(s < 0 ? s * 0.4 : s, zl) / (7 * v.cond.H))); }
     let underwater = false;
     if (st === 'WIPE' && W.on && surfer) { const b = surfer.position; underwater = W.t < 1.4 && b.y < heightAt(waves, b.x, b.z) - 0.2; }
-    audio.update({ H: w ? w.cond.H : 1.5, near, barrel: rider.inBarrel && st === 'RIDE', riding: rider.standing, v: rider.v, turn: rider.turn + Math.max(rider.skid, (rider.slide || 0) * 2) * 2.5, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
+    audio.update({ H: w ? w.cond.H : 1.5, near, barrel: rider.inBarrel && st === 'RIDE', riding: rider.standing, v: rider.v, turn: rider.turn, lean: rider.lean, slide: Math.max(rider.skid, (rider.slide || 0) * 2.5), stall: !!(inp.stall), dt, chop: ENV.weather ? ENV.weather.chop : 1, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
     // the nearest breaking wave thumps each time a new stretch of lip lands (every second or two, faster in big surf)
     crashT -= dt;
     if (crashT <= 0) {
@@ -900,6 +911,7 @@ function tick(dt) {
     // a snap or cutback rips spray off the rail: a sharp tearing hiss
     if (rider.trick && rider.trick !== lastTrick) { audio.burst(0.3, 3200, 0.45, 'highpass'); audio.burst(0.2, 1300, 0.35); }
     lastTrick = rider.trick;
+    const pumpNow = !!(rider.standing && st === 'RIDE' && inp.pump); if (pumpNow && !lastPump) audio.pump(); lastPump = pumpNow;
 
     sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   } else {

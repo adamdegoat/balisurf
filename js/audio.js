@@ -31,6 +31,15 @@ export class SurfAudio {
     this.hiss = layer('highpass', 1800, 0.6);     // board rail through the water
     this.wind = layer('bandpass', 700, 0.4);      // wind, stronger in the storm
     this.rain = layer('highpass', 4000, 0.3);     // rain on the water
+    this.spray = layer('bandpass', 2600, 1.4);    // tail sliding: gritty sheet of spray, not the clean rail hiss
+    this.drag = layer('bandpass', 750, 1.8);      // stalling: your hand and tail dragging in the face (a gurgle)
+    // inside the barrel everything rings: a short echo off the curtain, fed from the whole mix
+    const dl = ctx.createDelay(0.5); dl.delayTime.value = 0.085;
+    const fb = ctx.createGain(); fb.gain.value = 0.42;
+    const ef = ctx.createBiquadFilter(); ef.type = 'lowpass'; ef.frequency.value = 2200;
+    this.echo = ctx.createGain(); this.echo.gain.value = 0;
+    this.master.connect(dl); dl.connect(ef).connect(fb).connect(dl); ef.connect(this.echo).connect(this.under);
+    this.slapT = 0;
   }
   set(p, v, t = 0.12) { if (this.ok) p.setTargetAtTime(v, this.ctx.currentTime, t); }
   // one-off burst of filtered noise: splashes, paddle strokes, thunder
@@ -49,9 +58,22 @@ export class SurfAudio {
     this.set(this.roar.g.gain, Math.min(0.9, (0.08 + 0.55 * o.near) * (0.6 + 0.2 * o.H)));
     this.set(this.roar.fl.frequency, 200 + 160 * o.near);
     this.set(this.tube.g.gain, o.barrel ? 0.9 : 0, 0.25);
-    this.set(this.hiss.g.gain, o.riding ? Math.min(0.45, 0.015 * o.v + 0.05 * Math.abs(o.turn) * o.v / 5) : 0, 0.06);
-    this.set(this.hiss.fl.frequency, 1200 + 90 * o.v);
-    this.set(this.wind.g.gain, 0.04 + 0.2 * o.storm + 0.006 * o.v);
+    const lean = Math.abs(o.lean || 0), slide = Math.min(1, o.slide || 0), sp = Math.min(1, o.v / 10);
+    // the rail: steady hiss with speed, brighter and louder as you lay it over
+    this.set(this.hiss.g.gain, o.riding ? Math.min(0.45, 0.015 * o.v + 0.12 * lean * sp) : 0, 0.06);
+    this.set(this.hiss.fl.frequency, 1200 + 90 * o.v + 900 * lean);
+    // the tail letting go: a rougher spray noise comes in on top
+    this.set(this.spray.g.gain, o.riding ? Math.min(0.5, 0.55 * slide * (0.4 + sp)) : 0, 0.05);
+    this.set(this.spray.fl.frequency, 1900 + 1400 * slide);
+    this.set(this.drag.g.gain, o.riding && o.stall ? 0.22 * Math.min(1, o.v / 4) : 0, 0.08);
+    this.set(this.echo.gain, o.barrel ? 0.55 : 0, 0.2);
+    // chop slapping the bottom of the board: little low taps, more often the faster you go and the rougher the sea
+    if (o.riding && o.dt) {
+      this.slapT -= o.dt * (0.6 + 2.4 * sp) * (0.6 + 0.4 * (o.chop || 1));
+      if (this.slapT <= 0) { this.slapT = 0.6 + Math.random() * 0.8; if (o.v > 3) this.burst(0.05 + 0.07 * sp, 160 + Math.random() * 80, 0.1, 'lowpass'); }
+    }
+    this.set(this.wind.g.gain, 0.04 + 0.2 * o.storm + 0.012 * o.v);   // the faster you go, the louder the wind past your ears
+    this.set(this.wind.fl.frequency, 600 + 40 * o.v);
     this.set(this.rain.g.gain, 0.25 * o.rain);
     this.set(this.under.frequency, o.underwater ? 420 : 18000, o.underwater ? 0.05 : 0.3);
   }
@@ -62,6 +84,7 @@ export class SurfAudio {
     this.burst(0.55 * k * Math.min(1.3, H / 2), 70 + 30 / H, 0.9 + 0.25 * H, 'lowpass');
     this.burst(0.22 * k, 1600, 0.7 + 0.2 * H, 'bandpass', 0.05);
   }
+  pump() { this.burst(0.12, 500, 0.35, 'lowpass'); this.burst(0.07, 1800, 0.3); }   // weighting the board: a push of water off the rails
   paddle() { this.burst(0.18, 900 + Math.random() * 400, 0.25); }
   splash(size = 1) { this.burst(0.5 * size, 700, 0.9 * size); this.burst(0.35 * size, 2500, 0.5 * size, 'highpass'); }
   thunder(dist = 1) { this.burst(0.9, 90, 3.5, 'lowpass', 0.4 + dist * 1.5); this.burst(0.4, 260, 1.2, 'lowpass', 0.35 + dist * 1.5); }
