@@ -655,8 +655,32 @@ function reachArm(ua, la, hd, T, pole, w) {
   const ca = (a * a + d * d - b * b) / (2 * a * d), sa = Math.sqrt(Math.max(0, 1 - ca * ca));
   const pp = _ik2.copy(pole).addScaledVector(toT, -pole.dot(toT)).normalize();
   const elbow = _ik3.copy(_ik1).addScaledVector(toT, a * ca).addScaledVector(pp, a * sa);
-  aimBone(ua, la, _t.subVectors(elbow, _ik1).normalize(), w);
-  la.getWorldPosition(_ik1); aimBone(la, hd, _t.subVectors(T, _ik1).normalize(), w);
+  // set both bones' full orientation (not just their aim), so the elbow is a true hinge: this rig's bones run along
+  // their local +Y and the elbow folds the forearm toward the upper arm's local +Z. Aiming alone left the arm's roll to
+  // chance, and the elbow crease could face in (it read as a twisted, inward elbow). Here the elbow point faces the pole.
+  const Y = _hY.subVectors(elbow, _ik1).normalize();
+  const tgt = _hT.copy(_ik1).addScaledVector(toT, d), f = _hF.subVectors(tgt, elbow).normalize();
+  const Z = _hZ.copy(f).addScaledVector(Y, -f.dot(Y)); if (Z.lengthSq() < 1e-6) Z.copy(pp).negate(); Z.normalize();
+  const X = _hX.crossVectors(Y, Z).normalize();
+  setWorldBasis(ua, X, Y, Z, w);
+  const Z2 = _hZ.crossVectors(X, f).normalize();
+  setWorldBasis(la, X, f, Z2, w);
+  hd.quaternion.slerp(_hQ.identity(), 0.8 * w); hd.updateMatrixWorld(true);   // wrist in line with the forearm, relaxed (the clip's wrist bend on a re-posed arm reads as a flexed-back 'stop' hand)
+  // then roll the hand about its own length so the palm faces the water (this rig's palm is the hand's local +X on the
+  // left, -X on the right), relaxed a little inward
+  hd.getWorldQuaternion(_hQ);
+  const ay = _hY.set(0, 1, 0).applyQuaternion(_hQ), palm = _hX.set(hd.name.endsWith('_l') ? 1 : -1, 0, 0).applyQuaternion(_hQ);
+  const want = _hZ.set(0, -1, 0).addScaledVector(ay, ay.y); if (want.lengthSq() > 1e-4) {
+    want.normalize(); palm.addScaledVector(ay, -palm.dot(ay)).normalize();
+    const ang = Math.atan2(_hF.crossVectors(palm, want).dot(ay), palm.dot(want));
+    hd.quaternion.multiply(_hP.setFromAxisAngle(_hT.set(0, 1, 0), ang * 0.85 * w)); hd.updateMatrixWorld(true);
+  }
+}
+const _hX = new THREE.Vector3(), _hY = new THREE.Vector3(), _hZ = new THREE.Vector3(), _hF = new THREE.Vector3(), _hT = new THREE.Vector3(), _hM = new THREE.Matrix4(), _hQ = new THREE.Quaternion(), _hP = new THREE.Quaternion();
+function setWorldBasis(bone, X, Y, Z, w) {
+  _hQ.setFromRotationMatrix(_hM.makeBasis(X, Y, Z));
+  bone.parent.getWorldQuaternion(_hP); _hQ.premultiply(_hP.invert());
+  bone.quaternion.slerp(_hQ, w); bone.updateMatrixWorld(true);
 }
 // swing a leg sideways (about the axis the rider faces) so its foot moves toward sgn * board-forward; keeps the knee bend
 const _ax = new THREE.Vector3();
