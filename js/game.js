@@ -207,7 +207,7 @@ function solidAt(x, z) {
   if (q.zl > sl.topZ - 0.5 && q.zl < Math.max(sl.lipZ, sl.topZ) + 0.6) return Math.max(q.y, sl.top * (q.w.fade || 1));
   return q.y;
 }
-let camStandK = 0, tubeK = 0;
+let camStandK = 0, tubeK = 0, CAM_OUT = 0;
 const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 function updateCamera(dt) {
   const p = pose.pos, st = rider.state;
@@ -235,7 +235,8 @@ function updateCamera(dt) {
     camYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * (3 + 8 * ks)))); if (snapCam) camYaw = yaw;   // stays right behind you through a carve
     const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
     // the barrel framing blends in and out over ~0.35 s instead of switching in one frame
-    tubeK += ((rider.inBarrel ? 1 : 0) - tubeK) * Math.min(1, dt / 0.35); if (snapCam) tubeK = rider.inBarrel ? 1 : 0;
+    const tubeWant = rider.inBarrel ? 1 : 0;
+    tubeK += (tubeWant - tubeK) * Math.min(1, dt / 0.35); if (snapCam) tubeK = tubeWant;
     // heading toward the beach (the drop), come in close over your shoulder so you stay on the same face as the surfer;
     // turning along the wave, ease back out to the normal chase distance
     // chase distance: far enough to read the wave ahead (surfer ~a third of the screen), a little closer in the tube
@@ -244,6 +245,9 @@ function updateCamera(dt) {
     const frame = (tube, want, look) => {
       const back = standing ? 3.6 + (1.6 - 2.1 * tube) * ks : 3.6, height = standing ? 1.4 + (0.25 - 0.6 * tube) * ks + 1.6 * dropK : 1.4;   // during the drop: lift over the crest, don't move in   // at the drop: just behind your head
       want.set(p.x - dx * back, p.y + height, p.z - dz * back);
+      // on bigger waves sit a little out in front of the face (toward the beach): the curl behind you then doesn't
+      // block the view, so the camera can stay low instead of climbing over it
+      if (standing && rider.wave) want.z += CAM_OUT * rider.wave.cond.H ** 2 * ks * (1 - tube);   // ~0.5 m easy, 1.5 m medium, 4.4 m hard
       // look just ahead of you (from the side or front during the drop, at you)
       const ol = Math.hypot(camOff.x, camOff.z) || 1, behind = Math.max(0, Math.min(1, -(camOff.x * dx + camOff.z * dz) / ol));
       const lead = standing ? 1 + 3.5 * behind : 0.5 + 4.5 * behind * behind;   // look down your line so you can read what's coming
@@ -264,7 +268,7 @@ function updateCamera(dt) {
         // shoulder, a bit closer, so the wave never blocks your view of yourself
         if (!tube && q.zl < sl.topZ + 1.5 && q.y > 0.15) {
           const top = sl.top * (q.w.fade || 1);
-          want.y = Math.max(want.y, top + 1.1);
+          want.y = Math.max(want.y, top + 1.1 + 0.3 * q.w.cond.H);   // bigger wave, more margin: the camera sits metres back
   
         }
       }
@@ -274,15 +278,15 @@ function updateCamera(dt) {
       if (!tube) want.y = Math.max(want.y, wy + 0.45);
       if (tube) look.y = p.y + 0.55;                                     // level gaze down the tube toward the opening
       // keep a clear line of sight to the surfer: if water sits between the camera and them, lift the camera until it clears
-      if (!tube) for (let k = 0; k < 10; k++) {
+      if (!tube) for (let k = 0; k < 14; k++) {
         let blocked = false;
         for (let j = 1; j < 7; j++) {
           const f = j / 7, sx = want.x + (p.x - want.x) * f, sy = want.y + (p.y + 0.9 - want.y) * f, sz = want.z + (p.z - want.z) * f;
           if (solidAt(sx, sz) > sy) { blocked = true; break; }
         }
         if (!blocked) break;
-        // come a little closer and rise (the curl behind you on a big wave needs both)
-        want.x += (p.x - want.x) * 0.12; want.z += (p.z - want.z) * 0.12; want.y += 0.22;
+          if (k < 8) { want.z += 0.3; want.y += 0.1; }                // out in front of the lip first (a curl behind you blocks the view)
+        else { want.x += (p.x - want.x) * 0.12; want.z += (p.z - want.z) * 0.12; want.y += 0.3; }   // then closer and up
       }
       // whenever the camera sits well above you, aim at you so you never drop out of the bottom of the screen
       { const above = want.y - p.y; if (above > 1.3) { const k = Math.min(1, (above - 1.3) / 1.1);   // the higher the camera, the more it aims at you
@@ -757,4 +761,4 @@ renderer.setAnimationLoop(() => {
   if (!window.__g.paused && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
-window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; } };
+window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, camOut: (v) => (CAM_OUT = v), want: () => _want };
