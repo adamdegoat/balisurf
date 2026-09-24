@@ -16,7 +16,7 @@ export const RIDE = {
   drag: 0.09, drag2: 0.013,            // planing drag along the board
   // carving works like a skier or a leaning bike: you tip the board onto its rail and the lean makes the turn,
   // turn rate = g * tan(lean) / speed. The fins hold up to gripMax sideways; lean past that and the tail drifts out.
-  leanMax: 1.15, leanRate: 4.5, leanEase: 9, yawLag: 0.1,        // full thumb = ~66 deg on the rail (a ~2.3 g carve); how fast you can roll the board over (rad/s)
+  leanMax: 1.15, leanRate: 4.0, leanEase: 7, yawLag: 0.15, railBite: 0.3, tailLet: 0.35, tailBack: 0.3,        // full thumb = ~66 deg on the rail (a ~2.3 g carve); how fast you can roll the board over (rad/s)
   finGrip: 4.2, gripMax: 20,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2): a buried rail holds ~2 g
   skidLoss: 0.16,                      // share of the excess sideways force lost as speed while the tail drifts
   glide: 0.7,                          // share of the fins' braking given back in a carve (0 = raw physics, 1 = no loss)
@@ -101,7 +101,7 @@ export class Rider {
     this.x = x; this.z = z; this.y = 0; this.vx = 0; this.vz = 0; this.th = th;
     this.state = 'LIE'; this.stateT = 0; this.why = ''; this.washed = false;
     this.paddling = false; this.paddleT = 0; this.catchT = 0;
-    this.turn = 0; this.lean = 0; this.skid = 0; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
+    this.turn = 0; this.lean = 0; this.skid = 0; this.relS = 1; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
     this.wave = null; this.s = 99; this.zl = 99; this.inBarrel = false; this.onFace = false; this.lowT = 0;
     this.pumpHold = 0; this.pumping = false;
     this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, cutbacks: 0, snaps: 0, speed: 0, end: 0, score: 0 }; this.turnSign = 0; this.cbArmed = false; this.snapArm = 0; this.trick = null;
@@ -173,7 +173,10 @@ export class Rider {
       const wantLean = inp.steer * P.leanMax * pop, dl = wantLean - this.lean, maxRoll = P.leanRate * h;
       this.lean += Math.max(-maxRoll, Math.min(maxRoll, dl * Math.min(1, h * P.leanEase)));
       // the board has momentum: its turning builds up and flows out over a fraction of a second, it doesn't switch on and off
-      const wantTurn = P.g * Math.tan(this.lean) / Math.max(speed, 3.2);
+      // the rail has to bite before the board turns: a flat board glides straight, a small lean barely turns,
+      // a deep lean carves hard (not a steering wheel)
+      const bite = smooth(0.06, P.railBite, Math.abs(this.lean));
+      const wantTurn = bite * P.g * Math.tan(this.lean) / Math.max(speed, 3.2);
       this.turn += (wantTurn - this.turn) * Math.min(1, h / P.yawLag);
       this.th += this.turn * h;
       // the tail can swing out, but the fins drag the nose back toward where the board is going through the water:
@@ -192,7 +195,11 @@ export class Rider {
       this.stalling = inp.stall || 0;
       if (this.stalling) { const sd = P.stallDrag * this.stalling * Math.min(1, Math.abs(along) / 2) * Math.sign(along); ax -= sd * dx; az -= sd * dz; }
       // the harder you lay the rail over, the more the tail lets go: a little slide in an easy turn, a full drift at full thumb
-      const release = 1 - 0.6 * smooth(0.3 * P.leanMax, P.leanMax, Math.abs(this.lean));   // the tail lets go gradually as you lean harder
+      // the harder you lay it over, the more the tail lets go, but not at once: in a hard turn the tail holds for a moment,
+      // then slides out; straighten up and it eases back in (a drift that builds, not a switch)
+      const relT = 1 - 0.6 * smooth(0.3 * P.leanMax, P.leanMax, Math.abs(this.lean));
+      this.relS += (relT - this.relS) * Math.min(1, h / (relT < this.relS ? P.tailLet : P.tailBack));
+      const release = this.relS;
       const latA = P.finGrip * Math.hypot(lx, lz), lim = P.gripMax * pop * release;
       this.skid = latA > lim ? Math.min(1, latA / lim - 1) : 0;
       const sc = latA > lim ? lim / latA : 1;

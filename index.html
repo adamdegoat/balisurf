@@ -37,22 +37,19 @@
     border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(10,30,40,.28); display: grid; place-items: center;
     font-weight: 700; letter-spacing: .1em; font-size: 12px; touch-action: none; }
   #paddle.down { background: rgba(255,255,255,.3); }
-  /* riding only: hold to brake (weight on the tail, hand in the face); above the PUMP button, same thumb */
+  /* riding only: hold to brake (weight on the tail, hand in the face) */
   #stall { position: fixed; left: max(34px, calc(env(safe-area-inset-left) + 12px)); bottom: max(136px, calc(env(safe-area-inset-bottom) + 116px)); width: 80px; height: 80px;
     border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(10,30,40,.28); display: none; place-items: center;
     font-weight: 700; letter-spacing: .1em; font-size: 11px; touch-action: none; }
   body.riding #stall { display: grid; } #stall.down { background: rgba(255,255,255,.3); }
-  /* thumb pad: the whole right half of the screen; the guide shows where your thumb is and which way the board leans */
+  /* riding, like driving: PUMP (gas) on top, STALL (brake) underneath, both the same size */
+  body.riding #paddle { width: 88px; height: 88px; left: max(30px, calc(env(safe-area-inset-left) + 8px)); bottom: max(122px, calc(env(safe-area-inset-bottom) + 102px)); }
+  body.riding #stall { width: 88px; height: 88px; left: max(30px, calc(env(safe-area-inset-left) + 8px)); bottom: max(20px, env(safe-area-inset-bottom)); }
+  /* thumb: touch anywhere on the right half and drag left/right; a faint ring where you touched, a dot for the lean */
   #pad { position: fixed; top: 0; right: 0; bottom: 0; width: 50%; touch-action: none; }
-  #guide { position: fixed; right: max(40px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom)); width: 64px; height: 150px; margin: 0; pointer-events: none;
-    border-radius: 32px; border: 2px solid rgba(255,255,255,.5); background: rgba(10,30,40,.2); transition: opacity .2s; }
-  #guide.live { border-color: rgba(255,255,255,.75); }
-  #guide b { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-  #guide svg { position: absolute; width: 16px; height: 10px; opacity: .8; display: none; }
-  #guide svg.u { left: 50%; top: 10px; margin-left: -8px; } #guide svg.d { left: 50%; bottom: 10px; margin-left: -8px; transform: rotate(180deg); }
-  #guide svg.l { top: 50%; left: 12px; margin-top: -5px; transform: rotate(-90deg); } #guide svg.r { top: 50%; right: 12px; margin-top: -5px; transform: rotate(90deg); }
-  /* paddling: a left/right bar. riding: a round pad, up = up the face, down = to the bottom, sideways = turn */
-  #guide.side { width: 150px; height: 64px; } #guide.side svg.l, #guide.side svg.r { display: block; }
+  #touch { position: fixed; left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); pointer-events: none; opacity: 0; transition: opacity .15s; }
+  #touch.live { opacity: 1; }
+  #touch b { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: rgba(255,255,255,.75); }
   #msg { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; padding: 0 30px; }
   #msg { transition: opacity .35s; }
   #msg { background: radial-gradient(ellipse at center, rgba(5,12,18,.45), rgba(5,12,18,0) 70%); }
@@ -87,7 +84,8 @@
 <div class="ctl" id="paddle">PADDLE</div>
 <div class="ctl" id="stall">STALL</div>
 <div class="ctl" id="pad"></div>
-<div class="ctl side" id="guide"><svg class="u" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="d" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="l" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="r" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><b></b></div>
+<!-- thumb: no slider drawn; where you touch appears as a faint ring, the dot shows how far you're leaning -->
+<div class="ctl" id="touch"><b></b></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
   <h1>Bali Surf</h1>
@@ -101,11 +99,11 @@
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260924-2003</small>
+<small id="build">build 260924-2015</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=232"></script>
+<script type="module" src="js/game.js?v=242"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=37';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=62';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=64';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -16,8 +16,10 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure
 document.getElementById('view').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.08, 2000);
-// keep roughly 80-85 degrees across the screen whatever the shape, so a wide phone doesn't push everything into the distance
-const fitFov = () => { camera.aspect = innerWidth / innerHeight; camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(39)) / Math.min(camera.aspect, 1.9))); camera.updateProjectionMatrix(); };
+// POV: a wide, GoPro-like view (about 100 degrees across); the outside wipeout shot uses a normal ~80
+let hfovHalf = 50;
+const fitFov = () => { camera.aspect = innerWidth / innerHeight; camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(hfovHalf)) / Math.min(camera.aspect, 2.0))); camera.updateProjectionMatrix(); };
+const setHfov = (h) => { if (h !== hfovHalf) { hfovHalf = h; fitFov(); } };
 fitFov();
 skyDome(scene); ocean(scene); coast(scene);
 const fx = new WeatherFX(scene);
@@ -122,7 +124,7 @@ const input = { paddle: false, steer: 0 };
 const keys = new Set();
 addEventListener('keydown', (e) => keys.add(e.code)); addEventListener('keyup', (e) => keys.delete(e.code));
 const ui = {
-  paddle: document.getElementById('paddle'), stall: document.getElementById('stall'), pad: document.getElementById('pad'), guide: document.getElementById('guide'), knob: document.querySelector('#guide b'),
+  paddle: document.getElementById('paddle'), stall: document.getElementById('stall'), pad: document.getElementById('pad'), touch: document.getElementById('touch'), knob: document.querySelector('#touch b'),
   speed: document.getElementById('speed'), score: document.getElementById('score'), cond: document.getElementById('cond'),
   msg: document.getElementById('msg'), msgT: document.getElementById('msg-t'), msgN: document.getElementById('msg-n'), msgS: document.getElementById('msg-s'),
   tube: document.getElementById('tube'), hint: document.getElementById('hint'), load: document.getElementById('load'), start: document.getElementById('start'), sess: document.getElementById('sess'),
@@ -135,10 +137,10 @@ const hold = (el, on, off) => {
 };
 hold(ui.paddle, () => { audio.wake(); input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
 hold(ui.stall, () => { audio.wake(); input.stallBtn = true; ui.stall.classList.add('down'); }, () => { input.stallBtn = false; ui.stall.classList.remove('down'); });
-// thumb pad: touch anywhere on the right half; the spot you first touch is the centre.
+// thumb: touch anywhere on the right half and drag; the spot you first touch is the centre.
 // Left/right turns the board left/right, like leaning on a real board: lying, it points you where you paddle; standing, it carves.
 let padTouch = null, padX = 0, padY = 0, lastPadTouch = undefined, lastKnob = '', steerF = 0, stickY = 0, lastStickMode = null;
-const PAD_R = 62;                                                   // thumb travel (px) for a full lean
+const PAD_R = 80;                                                   // thumb travel (px) for a full lean
 const padMove = (x, y) => { if (!padTouch) return; padX = Math.max(-1, Math.min(1, (x - padTouch.x0) / PAD_R)); padY = Math.max(-1, Math.min(1, (y - padTouch.y0) / PAD_R)); };
 ui.pad.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); if (padTouch) return; const t = e.changedTouches[0]; padTouch = { id: t.identifier, x0: t.clientX, y0: t.clientY }; padX = padY = 0; }, { passive: false });
 ui.pad.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (padTouch && t.identifier === padTouch.id) padMove(t.clientX, t.clientY); }, { passive: false });
@@ -162,8 +164,12 @@ function readInput(dt) {
   input.paddle = !!input.paddleBtn || keys.has('Space');
   const riding = !!(rider && rider.standing);
   if (riding !== lastStickMode) { document.body.classList.toggle('riding', riding); lastStickMode = riding; }
-  if (padTouch !== lastPadTouch) { ui.guide.classList.toggle('live', !!padTouch); lastPadTouch = padTouch; }
-  const kt = `translate(${Math.round(padX * 42)}px,0px)`; if (kt !== lastKnob) { ui.knob.style.transform = kt; lastKnob = kt; }
+  if (padTouch !== lastPadTouch) {
+    ui.touch.classList.toggle('live', !!padTouch);
+    if (padTouch) { ui.touch.style.left = padTouch.x0 + 'px'; ui.touch.style.top = padTouch.y0 + 'px'; }
+    lastPadTouch = padTouch;
+  }
+  const kt = `translate(${Math.round(padX * PAD_R)}px,0px)`; if (kt !== lastKnob) { ui.knob.style.transform = kt; lastKnob = kt; }
   return { paddle: input.paddle, pump: input.paddle, steer: input.steer, up: input.up };    // same button: paddle lying down, pump once standing; steer + = turn right
 }
 
@@ -223,8 +229,51 @@ function solidAt(x, z) {
 }
 let camStandK = 0, tubeK = 0; const CAM = { back: 4.8, h: 1.4, lookY: 1.1, lead: 1.3, level: true };   // riding camera: distance, height, aim height, look-ahead; level = no lift over the crest while riding
 const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
+// ---------- first-person view (his call: the game is played from the surfer's eyes)
+// Eyes at the head, looking where you're going and a little down so the board's nose and the wave ahead are in view.
+// A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
+// and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
+const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
+function povCamera(dt) {
+  if (!bones.head && surfer) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  const standing = rider.standing, st = rider.state;
+  // the eye point: just in front of the head, where the eyes are
+  if (bones.head) bones.head.getWorldPosition(_eye); else _eye.copy(pose.pos).y += standing ? 1.4 : 0.35;
+  const moving = rider.v > (standing ? 2 : 0.6);
+  const travel = moving ? Math.atan2(rider.vz, rider.vx) : rider.th;
+  // look mostly where you're travelling, partly where the board points (you see the nose swing in a turn/drift)
+  const dh = Math.atan2(Math.sin(rider.th - travel), Math.cos(rider.th - travel));
+  const yawT = travel + dh * (standing ? 0.35 : 0.8);
+  _eye.x += Math.cos(yawT) * 0.18; _eye.z += Math.sin(yawT) * 0.18; _eye.y += 0.26;   // a head-mounted camera: a little above and in front of the head, clear of your shoulders
+  // smooth the eye's position relative to the board (not in the world, or at speed it would trail behind your head)
+  _eye.sub(rig.position);
+  if (!pov.ready || snapCam) { pov.pos.copy(_eye); pov.vel.set(0, 0, 0); pov.yaw = yawT; pov.ready = true; }
+  else {
+    const w0 = 14; pov.vel.addScaledVector(_cv.subVectors(_eye, pov.pos), w0 * w0 * dt).multiplyScalar(Math.max(0, 1 - 2 * w0 * dt)); pov.pos.addScaledVector(pov.vel, dt);
+    const dy = Math.atan2(Math.sin(yawT - pov.yaw), Math.cos(yawT - pov.yaw)), maxY = 3.2 * dt;
+    pov.yaw += Math.max(-maxY, Math.min(maxY, dy * Math.min(1, dt * 7)));
+  }
+  snapCam = false;
+  // head pitch: riding, look down the line and at the nose; lying, look ahead over the nose; at the drop, look down the face
+  const dropK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - rider.stateT / 1.0) : 0;
+  const pitchT = standing ? -0.3 - 0.3 * dropK : -0.3;   // at the take-off you look down at the board and the face you are dropping into   // lying: tipped down enough to see your arms and the nose
+  pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * 5);
+  pov.roll += ((standing ? -rider.lean * 0.28 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve
+  // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
+  _pe.set(pov.pitch, -pov.yaw - Math.PI / 2, pov.roll);
+  camera.quaternion.setFromEuler(_pe);
+  camera.position.copy(pov.pos).add(rig.position);
+  // never under the water
+  const sy = heightAt(waves, camera.position.x, camera.position.z) + 0.12; if (camera.position.y < sy && !rider.inBarrel) camera.position.y = sy;
+}
+
 function updateCamera(dt) {
   const p = pose.pos, st = rider.state;
+  const inPov = !(st === 'WIPE' && W.on && surfer);
+  if (bones.head) bones.head.scale.setScalar(inPov ? 0.001 : 1);   // hide your own head from your own eyes
+  setHfov(inPov ? 55 : 39);
+  if (inPov) { tubeK = 0; povCamera(dt); return; }
+  pov.ready = false;
   const want = _want, look = _look;
   if (st === 'WIPE' && W.on && surfer) {
     // wiping out: filmed from in front, toward the beach, looking back at you and the wave

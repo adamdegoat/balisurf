@@ -181,7 +181,8 @@ export function feel(mode, amt = 0.8) {
   const settle = (tr.find((x) => x.t > 1 && x.turn < 0.1 * peak)?.t ?? NaN) - 1;
   const slips = tr.filter((x) => x.t < 1.3).map((x) => x.slip);
   const v0 = tr[0].v, v1 = tr.find((x) => x.t > 1.3)?.v ?? NaN;
-  return `${mode} thumb ${amt}: keeps ${Math.round(v1 / v0 * 100)}% of speed through the turn; turn bites in ${bite.toFixed(2)}s, stops ${settle.toFixed(2)}s after letting go, peak ${(peak * 57.3).toFixed(0)} deg/s, tail slide max ${Math.max(...slips).toFixed(0)} deg`;
+  const slideAt = (t) => (tr.find((x) => x.t >= t)?.slip ?? NaN).toFixed(0);
+  return `${mode} thumb ${amt}: keeps ${Math.round(v1 / v0 * 100)}% of speed through the turn; turn bites in ${bite.toFixed(2)}s, stops ${settle.toFixed(2)}s after letting go, peak ${(peak * 57.3).toFixed(0)} deg/s, tail slide max ${Math.max(...slips).toFixed(0)} deg (at 0.3s ${slideAt(0.3)}, 0.6s ${slideAt(0.6)}, 1.0s ${slideAt(1.0)}, 1.4s ${slideAt(1.4)})`;
 }
 
 // ride with the real thumb pad (input.stick: x sideways, y up(-)/down(+)), like a player would. `plan(r, t)` gives the
