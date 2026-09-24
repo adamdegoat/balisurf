@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=57';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=60';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=90';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
@@ -791,7 +791,7 @@ function surfStance() {
       at(P, chest ? 0.5 : 0.46, (chest ? 0.5 : 0.48) - sway - pumpUp, chest ? 0.36 : -0.36);   // out over the rail, beside the board                       // trim
       if (bt) P.lerp(chest ? at(_aq, 0.6, 0.26, 0.26) : at(_aq, 0.45, 0.7, 0.34), bt);                               // bottom turn
       if (tt) P.lerp(at(_aq, 0.55, 0.5, -0.32), tt);                                                                  // top turn / cutback: leads round, points down the face
-      if (deep) P.lerp(chest ? at(_aq, 0.52, 0.4, 0.32) : at(_aq, 0.3, 0.85, -0.14), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
+      if (deep) P.lerp(chest ? at(_aq, 0.48, 0.55, 0.48) : at(_aq, 0.38, 0.7, -0.4), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
     } else {
       at(P, -0.22, 0.62 - sway, -0.25);                                                                                // trim: by the back hip
       if (bt) P.lerp(chest ? at(_aq, -0.08, 0.92, 0.35) : at(_aq, -0.2, 0.62, -0.25), bt);

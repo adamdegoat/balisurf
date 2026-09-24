@@ -375,7 +375,7 @@ export function waterMaterial({ wave = false } = {}) {
         // fine wind ripples close to you (the big ripple pattern alone leaves the water glassy up close)
         float nearK = smoothstep(30., 3., length(cameraPosition - vW)) * step(.6, abs(N.y));
         vec2 rq = vW.xz * 3.2 + vec2(uTime * .5, uTime * .35);
-        N = normalize(N + vec3(fbm(rq) - .5, 0., fbm(rq * 1.7 + 4.3) - .5) * .5 * nearK * (.6 + .4 * uChop));
+        N = normalize(N + vec3(fbm(rq) - .5, 0., fbm(rq * 1.7 + 4.3) - .5) * .32 * nearK * (.7 + .3 * min(uChop, 1.)));   // (capped: in the storm it made bright squiggles)
         ${wave ? `
         // fine texture on the face: water being drawn up the wall leaves streaky ripples that stream upward;
         // strongest on steep faces, fading with distance (it would only shimmer far away)
@@ -417,10 +417,10 @@ export function waterMaterial({ wave = false } = {}) {
         // lacework: thin wandering foam lines (contours of a noise field), not blobs
         float ln = fbm(vec2(vW.x * 1.3 + vW.z * .4, vW.y * 1.1 + vW.z * .7) * 1.8 * fk + vec2(0., uTime * .04));
         // lines stay about a pixel or two wide at any distance, and soften right up close so they don't read as scribbles
-        float lw = min(fwidth(ln) * 1.3 + .003, .022);
+        float lw = min(fwidth(ln) * 2.2 + .006, .03);   // (soft, faint streaks: thin bright lines read as scribbles)
         float lace = (1. - smoothstep(.0, lw, abs(ln - .5))) * smoothstep(.35, .6, fbm(vec2(vW.x, vW.y + vW.z) * .7));
         lace *= .45 + .55 * smoothstep(2., 10., length(cameraPosition - vW));
-        foamMask = max(foamMask, lace * .3 * step(.02, vFT.y) * (1. - base * .5));   // faint: old foam lines, not chalk marks
+        // (the drifting foam-line lace is off: from the rider's eye it read as white scribbles on the face)
         // whitewater is lumpy boiling foam, not a white slab: churning lumps with grey shadows between them, lit by the sky
         vec2 fp = vec2(vW.x * 1.7 + vW.z * .5, vW.y * 2.2 + vW.z * 1.3) * fk + vec2(uTime * .35, -uTime * 1.1) * fk;
         float lump = fbm(fp) * .65 + fbm(fp * 2.7 + 5.3) * .35;
