@@ -46,7 +46,7 @@ const board = makeBoard(); rig.add(board);
 let surfer = null, mixer = null, clips = {}, curClip = null;
 // first-person cutaway: any part of your own body closer than this to your eyes isn't drawn (your neck, shoulders
 // and upper arms are right at the camera and would fill the screen); hands, forearms, legs and the board stay
-const CUT = { value: 0.42 };
+const CUT = { value: 0.16 };   // just the neck and head (at 42 cm it cut your arms off at the elbow: floating hands)
 function cutaway(m) {
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uCut = CUT;
@@ -254,7 +254,8 @@ const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 // Eyes at the head, looking where you're going and a little down so the board's nose and the wave ahead are in view.
 // A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
 // and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
-const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.3, drop: 0.25 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
+const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.3, drop: 0.3 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
+const _pq2 = new THREE.Quaternion();
 const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
 function povCamera(dt) {
   if (!bones.head && surfer) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -273,6 +274,12 @@ function povCamera(dt) {
   // eyes never lower than this above the board; during the pop it rises with you instead of snapping up in one frame
   const popT = st === 'POP' ? Math.min(1, rider.stateT / 0.4) : standing ? 1 : 0, eyeFloor = 0.25 + 0.35 * popT * popT * (3 - 2 * popT);
   if (_eye.y < eyeFloor) _eye.y = eyeFloor;
+  // pop-up: the clip throws the head out over the rail; a real pop keeps your head over the stringer, eyes on the
+  // board between your hands, so the camera stays over the middle of the board while you come up
+  if (st === 'POP' || (st === 'RIDE' && rider.stateT < 0.4)) {
+    const k = st === 'POP' ? 0.8 : 0.8 * (1 - rider.stateT / 0.4);
+    _pq2.copy(rig.quaternion).invert(); _eye.applyQuaternion(_pq2); _eye.x *= 1 - k; _eye.applyQuaternion(rig.quaternion);
+  }
   if (!pov.ready || snapCam) { pov.pos.copy(_eye); pov.vel.set(0, 0, 0); pov.yaw = yawT; pov.ready = true; }
   else {
     // (a plain exponential follow: stays glued to your head through the pop-up, just takes the jitter off; the old
@@ -286,7 +293,7 @@ function povCamera(dt) {
   // head pitch: riding, look down the line and at the nose; lying, look ahead over the nose; at the drop, look down the face
   const dropK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - rider.stateT / 1.0) : 0;
   const pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : sitting ? -0.54 : -0.4;   // sitting: tipped down enough to see your knees and hands on the board   // take-off: look down at the board and the face; lying: down enough to see your arms paddling
-  pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * 5);
+  pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * (st === 'POP' ? 12 : 5));   // (the pop: eyes snap down to the board between your hands)
   pov.roll += ((standing ? -rider.lean * 0.28 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve
   // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
   _pe.set(pov.pitch, -pov.yaw - Math.PI / 2, pov.roll);
@@ -369,12 +376,12 @@ function updateRig(dt, t) {
   // the sitting tilt eases in and out too; smoothing runs on its own copy so extra tilts never pile up
   const sitK = rider.state === 'LIE' && !rider.paddling || rider.state === 'OUT' ? 1 : 0;
   sitTilt += (sitK - sitTilt) * Math.min(1, dt * 4);
-  _tq.multiply(_yq.setFromAxisAngle(_xAxis, -0.25 * sitTilt));
+  _tq.multiply(_yq.setFromAxisAngle(_xAxis, -0.4 * sitTilt));   // ~23 deg: your weight on the tail lifts the nose clear of the water
   if (snapCam) rigQ.copy(_tq);
   else { const ang = rigQ.angleTo(_tq); rigQ.rotateTowards(_tq, Math.min(ang * Math.min(1, dt * (rider.state === 'POP' ? 9 : 16)), 6 * dt)); }   // eased, and never faster than ~340 deg/s
   rig.quaternion.copy(rigQ);
   rig.position.copy(pose.pos);
-  rig.position.y -= 0.05 * sitTilt;                                    // the rider's weight sinks the tail
+  rig.position.y += 0.1 * sitTilt;                                     // the rider's weight sinks the tail
   if (standing || (rider.state === 'WIPE' && rider.stateT < 0.1)) {
     // the rider stands on the deck, leaning into the turn and a little toward the wave
     const lean = 0.15 + (rider.inBarrel ? 0.12 : 0);
@@ -644,9 +651,9 @@ function straddle() {
   for (const [s, sg] of [['l', 1], ['r', -1]]) {
     const side = bones['thigh_' + s].getWorldPosition(_a).sub(rig.getWorldPosition(_b)).dot(_bs) > 0 ? 1 : -1;
     // thighs forward and down either side of the rails (your knees are what you see below you), shins hanging
-    _t.set(0, -0.6, 0).addScaledVector(_bs, side * 0.45).addScaledVector(_bf, 1.1).normalize();
+    _t.set(0, -0.3, 0).addScaledVector(_bs, side * 0.32).addScaledVector(_bf, 1.1).normalize();   // thighs along the rails, knees at the rail edge
     aimBone(bones['thigh_' + s], bones['calf_' + s], _t, 0.9);
-    _t.set(0, -1, 0).addScaledVector(_bf, -0.1).normalize();
+    _t.set(0, -1, 0).addScaledVector(_bf, 0.1).addScaledVector(_bs, side * 0.1).normalize();
     aimBone(bones['calf_' + s], bones['foot_' + s], _t, 0.8);
   }
   // hands resting on the deck in front of you, either side of the stringer: from your own eyes you see your
@@ -655,7 +662,7 @@ function straddle() {
   const deckY = rig.getWorldPosition(_b).y + 0.07;
   for (const s of ['l', 'r']) {
     const ua = bones['upperarm_' + s], side = ua.getWorldPosition(_a).sub(_b).dot(_bs) > 0 ? 1 : -1;
-    _sT.copy(_sp).addScaledVector(_bf, 0.66).addScaledVector(_bs, side * 0.16); _sT.y = deckY;   // leaning forward a little, hands on the deck ahead of your knees
+    _sT.copy(_sp).addScaledVector(_bf, 0.62).addScaledVector(_bs, side * 0.22); _sT.y = deckY;   // hands on the rails just ahead of your knees
     reachArm(ua, bones['lowerarm_' + s], bones['hand_' + s], _sT, _t.set(0, 0, 0).addScaledVector(_bs, side).addScaledVector(_bf, -0.3), 0.9);
   }
 }
@@ -729,6 +736,10 @@ function surfStance() {
     // the arm never points up through your eyes at an out-of-reach spot)
     if (popK > 0) { const ua0 = bones['upperarm_' + s]; ua0.getWorldPosition(_ik4); const out = Math.sign(_cv.subVectors(_ik4, _ah).dot(R)) || 1;
       P.lerp(_aq.copy(_ik4).addScaledVector(R, out * 0.14).addScaledVector(F, 0.18).addScaledVector(WORLD_UP, -0.5), popK); }
+    // each hand stays on its own side of your body (an arm reaching across the middle is a wall of arm in the view,
+    // and nobody surfs like that): at least 22 cm out to its own side of your eyes
+    { bones['upperarm_' + s].getWorldPosition(_ik4); const own = Math.sign(_cv.subVectors(_ik4, _ah).dot(R)) || 1;
+      const lat = _cv.subVectors(P, _ah).dot(R) * own; if (lat < 0.22) P.addScaledVector(R, own * (0.22 - lat)); }
     // never into the lens: keep the hand at least 45 cm from your eyes
     const cd = P.distanceTo(camera.position); if (cd < 0.5) P.addScaledVector(F, 0.5 - cd);
     const ua = bones['upperarm_' + s], la = bones['lowerarm_' + s], hd = bones['hand_' + s];
