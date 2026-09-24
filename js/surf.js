@@ -103,7 +103,7 @@ export class Rider {
     this.paddling = false; this.paddleT = 0; this.catchT = 0;
     this.turn = 0; this.lean = 0; this.skid = 0; this.relS = 1; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
     this.wave = null; this.s = 99; this.zl = 99; this.inBarrel = false; this.onFace = false; this.lowT = 0;
-    this.pumpHold = 0; this.pumping = false; this.foamT = 0; this.tubeOut = 0; this.turnHold = 0; this.recentPaddle = 0; this.slide = 0; this.stalling = 0;
+    this.pumpHold = 0; this.pumping = false; this.foamT = 0; this.wwFloatT = 0; this.tubeOut = 0; this.turnHold = 0; this.recentPaddle = 0; this.slide = 0; this.stalling = 0;
     this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, cutbacks: 0, snaps: 0, speed: 0, end: 0, score: 0, moves: [], tubeT: 0, leanPk: 0 }; this.turnSign = 0; this.cbArmed = false; this.snapArm = 0; this.trick = null;
   }
   set(state) { this.state = state; this.stateT = 0; }
@@ -264,7 +264,19 @@ export class Rider {
     // falling out of the whitewater
     // (a soft wave is forgiving: its whitewater is a gentle push you can ride, like beginners do; hollow waves knock you off)
     const fg = C.forgive || 1;
-    if (sl.broken > 0.4 / fg && onFront && y > 0.12 * H / fg) return this.wipe(C.hollow > 0.5 ? 'The whitewater caught you' : 'The whitewater knocked you off');
+    // a floater: meet the breaking section high on the face, with speed, heading down the line, and you ride up over
+    // the top of the foam and drop back onto the clean face. The foam drags at you: too slow, too low, or on it too long
+    // and it takes you. Otherwise the whitewater knocks you off as before.
+    const inFoam = sl.broken > 0.4 / fg && onFront && y > 0.12 * H / fg;
+    if (inFoam && riding) {
+      const hTopF = y / Math.max(sl.top, 0.3), along = Math.cos(this.th);
+      if (this.wwFloatT > 0 || (hTopF > 0.55 && along > 0.35 && this.v > 0.85 * C.speed)) {
+        this.wwFloatT = (this.wwFloatT || 0) + h;
+        const sp = Math.hypot(this.vx, this.vz); if (sp > 0.1) { const k = Math.max(0, 1 - 1.6 * h / sp); this.vx *= k; this.vz *= k; }   // foam drag ~1.6 m/s^2
+        if (this.wwFloatT > 1.5 || this.v < 0.55 * C.speed || hTopF < 0.35) return this.wipe('The whitewater caught you on the floater');
+      } else return this.wipe(C.hollow > 0.5 ? 'The whitewater caught you' : 'The whitewater knocked you off');
+    } else if (inFoam) return this.wipe(C.hollow > 0.5 ? 'The whitewater caught you' : 'The whitewater knocked you off');
+    else if (this.wwFloatT > 0) { if (this.wwFloatT > 0.35) this.move('FLOATER', Math.min(1, this.wwFloatT / 1.2)); this.wwFloatT = 0; }   // made it back onto the clean face
     // too high while it's throwing
     // (only a wave that pitches can throw you; a soft, crumbly one just breaks around you and the whitewater rule decides)
     if (C.hollow > 0.5 && onFront && y > 0.86 * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
@@ -319,7 +331,7 @@ export class Rider {
   // a judged move: worth more done fast, laid over hard, and close to the breaking part (critical)
   move(name, crit, dur = 0) {
     const C = this.wave.cond, spd = Math.min(1, this.v / (C.speed * 1.1)), pow = this.ride.leanPk;
-    let q = Math.min(1, 0.35 * spd + 0.3 * pow + 0.35 * crit), base = { TURN: 1.2, SNAP: 2.0, CUTBACK: 2.2 }[name] || 0;
+    let q = Math.min(1, 0.35 * spd + 0.3 * pow + 0.35 * crit), base = { TURN: 1.2, SNAP: 2.0, CUTBACK: 2.2, FLOATER: 1.8 }[name] || 0;
     if (name === 'BARREL') { base = 1.4 + 1.1 * Math.min(dur, 6); q = crit; }
     const pts = base * (0.4 + 0.6 * q) * (0.8 + 0.2 * Math.min(1.5, C.H / 3));   // bigger surf, bigger scores
     this.ride.moves.push({ name, pts, t: this.ride.t });
