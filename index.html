@@ -64,6 +64,7 @@
   #start h1 { margin: 0; font: 800 clamp(34px, 7vw, 64px)/0.95 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: -.02em; }
   #start p { margin: 8px 0 20px; color: var(--dim); max-width: 32em; }
   #start .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  #start .row button { flex: 1 1 0; min-width: 0; padding: 12px 12px; }   /* five levels on one row on a phone */
   #start button { font: 600 13px "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); background: rgba(8,14,20,.35); border: 1.5px solid rgba(253,247,238,.6); padding: 12px 16px; border-radius: 3px; min-width: 104px; text-align: left; }
   #start button small { display: block; font-weight: 400; color: var(--dim); margin-top: 3px; font-size: 11px; }
   #load { margin-top: 12px; min-height: 1.3em; color: var(--dim); }
@@ -91,19 +92,20 @@
   <h1>Bali Surf</h1>
   <p>A right-hand reef break in Bali. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: slide left and right to carve, like a steering wheel. On the left, hold PUMP for speed and STALL to brake and get barrelled.</p>
   <div class="row">
-    <button data-mode="easy">Easy<small>Sunny, small and soft</small></button>
-    <button data-mode="medium">Medium<small>Sunset, head-high barrels</small></button>
-    <button data-mode="hard">Hard<small>Storm, big and heavy</small></button>
-    <button data-mode="random">Random<small>Anything can roll in</small></button>
+    <button data-mode="easy">Easy<small>Sunny, head high and soft</small></button>
+    <button data-mode="medium">Medium<small>Sunny, overhead barrels</small></button>
+    <button data-mode="hard">Hard<small>Sunny, double overhead, fast</small></button>
+    <button data-mode="extreme">Extreme<small>Storm, huge and heavy</small></button>
+    <button data-mode="random">Random<small>Any sunny day</small></button>
   </div>
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260924-2015</small>
+<small id="build">build 260924-2023</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=242"></script>
+<script type="module" src="js/game.js?v=246"></script>
 </body>
 </html>

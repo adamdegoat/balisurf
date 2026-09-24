@@ -13,9 +13,11 @@ import * as THREE from 'three';
 // sqrt(g(d + H/2)); good surf breaks peel at 45-66 degrees, so the peel rate is c / tan(angle) and a surfer needs c / sin(angle).
 //   H = breaking height (m), speed = how fast it comes in (m/s), peel = how fast it breaks along the reef (m/s), period = s between waves
 export const CONDITIONS = {
-  easy:   { H: 1.1, speed: 4.4, peel: 2.1, angle: 64, period: 11, hollow: 0.35, forgive: 0.55, name: 'Easy' },    // waist-chest high, gentle
-  medium: { H: 2.0, speed: 5.9, peel: 4.1, angle: 55, period: 13, hollow: 0.75, forgive: 1, name: 'Medium' },     // overhead, a proper wave
-  hard:   { H: 3.4, speed: 7.7, peel: 7.2, angle: 47, period: 15, hollow: 1.0, forgive: 1, name: 'Hard' },        // double overhead and fast
+  // bigger swells all round (his call): speed from shallow-water physics c ~ sqrt(g(d+H/2)) with d = H/0.78, ~4.2*sqrt(H)
+  easy:    { H: 1.8, speed: 5.6,  peel: 2.7, angle: 62, period: 12, hollow: 0.4,  forgive: 0.6, name: 'Easy' },      // head high, soft
+  medium:  { H: 3.0, speed: 7.2,  peel: 5.0, angle: 55, period: 14, hollow: 0.75, forgive: 1,   name: 'Medium' },    // well overhead, barrels
+  hard:    { H: 4.5, speed: 8.9,  peel: 7.6, angle: 48, period: 16, hollow: 1.0,  forgive: 1,   name: 'Hard' },      // double overhead plus, fast
+  extreme: { H: 7.0, speed: 11.1, peel: 9.8, angle: 46, period: 18, hollow: 1.0,  forgive: 1,   name: 'Extreme' },   // a big-wave day
 };
 
 // Cross-section keyframes (units of wave height H; z toward the beach, y up). Every keyframe lists the SAME 12
@@ -253,10 +255,12 @@ export const SUN_DIR = new THREE.Vector3(0.25, 0.1, -1).normalize();   // low su
 
 // Weather follows the difficulty. Every water/sky material shares these uniforms, so switching weather is instant.
 export const WEATHER = {
-  easy:   { sun: [0.35, 0.62, -0.7], zen: 0x2e6db4, hor: 0xbfe0ee, sunCol: 0xfff4dc, fog: 0xc8e2ec, deep: 0x0b5a73, turq: 0x19b3a4, cloud: 0.18, chop: 0.8, fogFar: 320, rain: 0, sunVis: 1 },
-  medium: { sun: [0.25, 0.1, -1],    zen: 0x2a3a6e, hor: 0xf29a5c, sunCol: 0xffd8a0, fog: 0xd98a62, deep: 0x04172a, turq: 0x0d8c84, cloud: 0.35, chop: 1.0, fogFar: 260, rain: 0, sunVis: 1 },
-  hard:   { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
-  random: { sun: [0.3, 0.22, -1],    zen: 0x33415c, hor: 0xc49678, sunCol: 0xffd2a4, fog: 0xa88876, deep: 0x06202c, turq: 0x167e76, cloud: 0.62, chop: 1.5, fogFar: 210, rain: 0, sunVis: 0.55 },
+  // good weather on the three normal levels (his call): morning, midday, afternoon sun; the storm is Extreme only
+  easy:    { sun: [0.35, 0.62, -0.7], zen: 0x2e6db4, hor: 0xbfe0ee, sunCol: 0xfff4dc, fog: 0xc8e2ec, deep: 0x0b5a73, turq: 0x19b3a4, cloud: 0.18, chop: 0.8, fogFar: 320, rain: 0, sunVis: 1 },
+  medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2862a6, hor: 0xc4dfe9, sunCol: 0xfff7e6, fog: 0xcde3ea, deep: 0x094c66, turq: 0x15a99f, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
+  hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2d5c99, hor: 0xd6dcd2, sunCol: 0xffe6bf, fog: 0xd3dad3, deep: 0x083f55, turq: 0x149a90, cloud: 0.3, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
+  extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
+  random:  { sun: [0.3, 0.7, -0.6],  zen: 0x2b66aa, hor: 0xc2dde8, sunCol: 0xfff3dc, fog: 0xcbe1e9, deep: 0x0a4e69, turq: 0x16a6a0, cloud: 0.32, chop: 1.1, fogFar: 310, rain: 0, sunVis: 1 },
 };
 export const ENV = {
   uSun: { value: SUN_DIR.clone() }, uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSunCol: { value: new THREE.Color() },

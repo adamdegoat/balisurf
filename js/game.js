@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=37';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=38';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=64';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
@@ -64,7 +64,7 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
 // ---------- the surf: a reef with the peak at x=0, z=0. Waves come in from the sea one swell period apart.
 // Each wave breaks at the peak when it gets there and peels off to the right. You sit in the lineup and pick your own.
 let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0 }, nextBreak = 0, setLeft = 0, setPos = 0;
-const REEF = { xEnd: 150, zBeach: 120 }, PROFILES = new Map();
+const REEF = { xEnd: 190, zBeach: 150 }, PROFILES = new Map();   // room for the bigger swells to run (the sand starts ~185 m in)
 function condFor(m) { return m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {
   const cond = CONDITIONS[condFor(mode)];
@@ -90,7 +90,7 @@ function updateWaves(dt) {
     const w = waves[i], C = w.cond, t = T - w.tBreak;
     // the break doesn't peel at one steady speed: sections race ahead and slow down (more so in heavy surf), so a tube
     // opens and pinches and you have to keep adjusting. Integrated so it stays smooth.
-    const sg = C.name === 'Hard' ? 0.3 : C.name === 'Medium' ? 0.18 : 0.06;
+    const sg = C.name === 'Hard' || C.name === 'Extreme' ? 0.3 : C.name === 'Medium' ? 0.18 : 0.06;
     const rate = C.peel * (1 + sg * (0.6 * Math.sin(t * 0.55 + w.seed) + 0.4 * Math.sin(t * 1.3 + w.seed * 2.1)));
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
     w.place(w.px, C.speed * t);
@@ -162,7 +162,7 @@ function readInput(dt) {
   input.steer = input.test != null ? input.test : steerF;   // input.test: scripted steering for automated checks
   input.up = input.test != null ? 0 : stickY;              // thumb up (-) / down (+): where on the face you want to be
   input.paddle = !!input.paddleBtn || keys.has('Space');
-  const riding = !!(rider && rider.standing);
+  const riding = !!(rider && rider.standing && (rider.state === 'RIDE' || rider.state === 'POP'));
   if (riding !== lastStickMode) { document.body.classList.toggle('riding', riding); lastStickMode = riding; }
   if (padTouch !== lastPadTouch) {
     ui.touch.classList.toggle('live', !!padTouch);
@@ -182,8 +182,8 @@ function surfSteer(sx, stall) {
 }
 
 // your best ride per level, kept on this phone (quietly does nothing if storage is blocked)
-const bestFor = (m) => { try { return +localStorage.getItem('balisurf.best.' + m) || 0; } catch (e) { return 0; } };
-const saveBest = (m, v) => { try { localStorage.setItem('balisurf.best.' + m, String(v)); } catch (e) {} showBests(); };
+const bestFor = (m) => { try { return +localStorage.getItem('balisurf.best2.' + m) || 0; } catch (e) { return 0; } };
+const saveBest = (m, v) => { try { localStorage.setItem('balisurf.best2.' + m, String(v)); } catch (e) {} showBests(); };
 function showBests() {
   for (const b of document.querySelectorAll('[data-mode]')) {
     let el = b.querySelector('.best'); const v = bestFor(b.dataset.mode);
