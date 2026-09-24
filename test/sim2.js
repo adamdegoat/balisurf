@@ -74,7 +74,7 @@ export function carve(mode, n = 5, { hi = 0.7, lo = 0.25, dv = null, gain = 2.5 
     const r = G.rider;
     if (r.state === 'WIPE' || r.state === 'OUT') {
       const R = r.ride; hs.sort((a, b) => a - b);
-      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h turns ${R.turns} snaps ${R.snaps} cutbacks ${R.cutbacks} pocket ${R.pocket.toFixed(1)} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
+      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h avg ${Math.round(R.speed / Math.max(R.t, 0.1) * 3.6)}+peel turns ${R.turns} snaps ${R.snaps} cutbacks ${R.cutbacks} pocket ${R.pocket.toFixed(1)} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
       hs = []; phase = 'down'; G.spawnRider(); continue;
     }
     let o = br(r);
@@ -193,13 +193,14 @@ export function thumb(mode, plan, n = 2) {
     const r = G.rider;
     if (r.state === 'WIPE' || r.state === 'OUT') {
       const R = r.ride; hs.sort((a, b) => a - b);
-      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h turns ${R.turns} snaps ${R.snaps} cutbacks ${R.cutbacks} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
+      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h avg ${Math.round(R.speed / Math.max(R.t, 0.1) * 3.6)}+peel turns ${R.turns} snaps ${R.snaps} cutbacks ${R.cutbacks} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
       hs = []; G.spawnRider(); continue;
     }
     if (!r.standing) { const o = br(r); G.input.stick = null; G.input.test = o.steer; G.input.paddleBtn = o.paddle; }
     else {
-      G.input.test = null; G.input.paddleBtn = false;
+      G.input.test = null;
       G.input.stick = r.state === 'RIDE' ? plan(r, r.stateT) : plan.pop ? plan.pop(r) : { x: 0, y: 0 };
+      G.input.paddleBtn = !!G.input.stick.pump;   // the plan can hold PUMP too
       if (r.wave && r.state === 'RIDE') hs.push(r.y / Math.max(r.wave.prof.slice(r.s).top, 0.3));
     }
     G.step(1 / 60, 1 / 60, false);

@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=37';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=58';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
@@ -82,7 +82,7 @@ function updateWaves(dt) {
     const n = setPos / Math.max(1, setLeft + setPos - 1);
     w.size = 0.82 + 0.28 * Math.sin(Math.PI * Math.min(1, n + 0.15)) + (Math.random() - 0.5) * 0.08;
     setPos++; setLeft--;
-    nextBreak += setLeft > 0 ? w.cond.period * (0.9 + Math.random() * 0.2) : w.cond.period * (1.8 + Math.random() * 0.8);
+    nextBreak += setLeft > 0 ? w.cond.period * (0.9 + Math.random() * 0.2) : w.cond.period * (1.2 + Math.random() * 0.4);   // lull: long enough to paddle back and breathe, short enough not to bore
   }
   for (let i = waves.length - 1; i >= 0; i--) {
     const w = waves[i], C = w.cond, t = T - w.tBreak;

@@ -29,3 +29,33 @@ function run(mode, n) {
   const md = (x) => { x.sort((a, b) => a - b); return `${x[Math.floor(x.length * .5)].toFixed(1)} (max ${x[x.length - 1].toFixed(1)})`; };
   return mode + ': ' + ['pop', 'ride'].map((k) => `${k}: dist ${md(A[k].d)} above ${md(A[k].u)} visible ${(A[k].v / A[k].t * 100).toFixed(0)}% camera-in-water ${(A[k].wet / A[k].t * 100).toFixed(0)}%`).join(' | ');
 }
+
+// how often the surfer is visible, split by moment: being picked up, standing up, and the first seconds of the ride.
+// Uses the real thumb control: angle the take-off along the wave, then hold a line.
+import { brain as _brain } from './sim2.js';
+export function popSlices(mode, n = 3, seed = 11) {
+  const rnd0 = Math.random; let st = seed >>> 0; Math.random = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296);
+  try { return slices(mode, n); } finally { Math.random = rnd0; }
+}
+function slices(mode, n) {
+  const G = window.__g; G.paused = true; G.setMode(mode);
+  document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); G.spawnRider();
+  const br = _brain({}), B = {}; let rides = 0;
+  const plan = (r) => (r.state === 'POP' || r.stateT < 0.9 ? { x: -0.7, y: 0 } : { x: 0, y: 0.3 });
+  for (let i = 0; i < 60 * 80 && rides < n; i++) {
+    const r = G.rider; if (r.state === 'WIPE' || r.state === 'OUT') { G.spawnRider(); rides++; continue; }
+    if (!r.standing) { const o = br(r); G.input.stick = null; G.input.test = o.steer; G.input.paddleBtn = o.paddle; }
+    else { G.input.test = null; G.input.paddleBtn = false; G.input.stick = plan(r); }
+    G.step(1 / 60, 1 / 60, false);
+    const t = r.state === 'POP' ? -0.35 + r.stateT : r.state === 'RIDE' ? r.stateT : r.state === 'LIE' && r.onFace ? -1 : null;
+    if (t == null || t > 4) continue;
+    const k = t < -0.35 ? 'picked up' : t < 0 ? 'standing' : t < 1 ? 'ride 0-1s' : t < 2 ? 'ride 1-2s' : 'ride 2-4s';
+    G.scene.updateMatrixWorld();
+    const c = G.camera.position, p = G.rig.position.clone(); p.y += 0.8; const d = p.clone().sub(c), L = d.length();
+    ray.set(c.clone(), d.normalize()); ray.far = L - 0.3;
+    const b = (B[k] = B[k] || [0, 0, 0]); b[1]++; if (!ray.intersectObjects(G.waves.map((w) => w.mesh), false).length) b[0]++;
+    if (!r.inBarrel) { up.set(c.x, c.y, c.z); ray.set(up, UP); ray.far = 8; if (ray.intersectObjects(G.waves.map((w) => w.mesh), false).length) b[2]++; }
+  }
+  G.input.stick = null; G.input.test = null;
+  return mode + ': ' + Object.entries(B).map(([k, [v, t, wt]]) => `${k} ${(v / t * 100).toFixed(0)}%${wt ? ` (cam under water ${(wt / t * 100).toFixed(0)}%)` : ''}`).join(' | ');
+}
