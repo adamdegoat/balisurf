@@ -154,3 +154,31 @@ export function drift(mode, amt) {
   const p = (q) => slips.length ? slips[Math.floor(q * (slips.length - 1))].toFixed(0) : '-';
   return `${mode} thumb ${amt}: slide p50 ${p(.5)} p90 ${p(.9)} max ${p(1)} deg`;
 }
+
+// turn feel: mid-ride, push the thumb to `amt` for 1 s, then let go. How quickly the turn bites, how it lets go,
+// and how much the tail slides. (A stiff board: bites and stops almost instantly.)
+export function feel(mode, amt = 0.8) {
+  const G = g(); G.paused = true; G.setMode(mode);
+  document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); G.spawnRider();
+  const br = brain({}), tr = []; let t0 = -1;
+  for (let i = 0; i < 60 * 60; i++) {
+    const r = G.rider;
+    if (r.state === 'WIPE' || r.state === 'OUT') return `${mode}: ride ended (${r.why})`;
+    let o = br(r);
+    if (r.state === 'RIDE' && r.stateT > 4 && t0 < 0) t0 = r.stateT;
+    if (t0 >= 0) {
+      const t = r.stateT - t0;
+      o = { steer: t < 1 ? amt : 0, pump: false };
+      const slip = Math.abs(wrap(Math.atan2(r.vz, r.vx) - r.th)) * 57.3;
+      tr.push({ t, turn: Math.abs(r.turn), slip });
+      if (t > 2.2) break;
+    }
+    G.input.test = o.steer; G.input.paddleBtn = r.standing ? !!o.pump : !!o.paddle; G.step(1 / 60, 1 / 60, false);
+  }
+  G.input.test = null;
+  const peak = Math.max(...tr.filter((x) => x.t < 1).map((x) => x.turn));
+  const bite = tr.find((x) => x.turn >= 0.9 * peak)?.t ?? NaN;
+  const settle = (tr.find((x) => x.t > 1 && x.turn < 0.1 * peak)?.t ?? NaN) - 1;
+  const slips = tr.filter((x) => x.t < 1.3).map((x) => x.slip);
+  return `${mode} thumb ${amt}: turn bites in ${bite.toFixed(2)}s, stops ${settle.toFixed(2)}s after letting go, peak ${(peak * 57.3).toFixed(0)} deg/s, tail slide max ${Math.max(...slips).toFixed(0)} deg`;
+}

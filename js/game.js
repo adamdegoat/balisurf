@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=54';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=58';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -314,7 +314,8 @@ function updateCamera(dt) {
     { const wy0 = 7, dy0 = Math.max(0, 1 - 2 * wy0 * dt);             // height follows faster: rise with the wave, never lag under a crest
       cam.vy = (cam.vy + (_cv.y - cam.y) * wy0 * wy0 * dt) * dy0; cam.vy = Math.max(-3, Math.min(9, cam.vy)); } cam.y += cam.vy * dt;
     // the point we look at: same kind of spring, a little quicker
-    const l0 = rider.standing ? 8 : 4.2, ld = Math.max(0, 1 - 2 * l0 * dt);
+    // being picked up by a wave: aim keeps up with the drop
+    const l0 = rider.standing ? 8 : rider.onFace ? 7 : 4.2, ld = Math.max(0, 1 - 2 * l0 * dt);
     _lk.subVectors(look, anchor).sub(lookOff).multiplyScalar(l0 * l0 * dt);
     cam.vl.add(_lk).multiplyScalar(ld); if (cam.vl.length() > 8) cam.vl.setLength(8);
     lookOff.addScaledVector(cam.vl, dt);
@@ -446,8 +447,9 @@ const railSpray = (() => {
         }
         // drifting: the tail sprays a big fan to the outside of the slide
         const snapK = rider.trick && rider.trick.name === 'SNAP' && rider.trick.t < 0.3 ? 1 : 0;   // a snap throws a sheet of spray off the lip
-        if (rider.skid > 0.15 || snapK) {
-          fanAcc += (Math.max(rider.skid, 0.3) + 1.5 * snapK) * rider.v * 55 * dt;
+        const slideK = Math.max(rider.skid, Math.min(1, ((rider.slide || 0) - 0.12) * 2.2));   // tail hanging out ~7 deg+ starts to spray
+        if (slideK > 0.05 || snapK) {
+          fanAcc += (Math.max(slideK, 0.3 * snapK) + 1.5 * snapK) * rider.v * 55 * dt;
           const side = Math.sign(rider.lean) || 1;                     // spray goes to the outside of the turn
           while (fanAcc >= 1) {
             fanAcc--;
@@ -724,7 +726,7 @@ function tick(dt) {
     for (const v of waves) { const s = rider.x - v.peelX, zl = rider.z - v.zW; if (zl > -20 && zl < 25) near = Math.max(near, Math.max(0, 1 - Math.hypot(s < 0 ? s * 0.4 : s, zl) / (7 * v.cond.H))); }
     let underwater = false;
     if (st === 'WIPE' && W.on && surfer) { const b = surfer.position; underwater = W.t < 1.4 && b.y < heightAt(waves, b.x, b.z) - 0.2; }
-    audio.update({ H: w ? w.cond.H : 1.5, near, barrel: rider.inBarrel && st === 'RIDE', riding: rider.standing, v: rider.v, turn: rider.turn + rider.skid * 2.5, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
+    audio.update({ H: w ? w.cond.H : 1.5, near, barrel: rider.inBarrel && st === 'RIDE', riding: rider.standing, v: rider.v, turn: rider.turn + Math.max(rider.skid, (rider.slide || 0) * 2) * 2.5, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
     // the nearest breaking wave thumps each time a new stretch of lip lands (every second or two, faster in big surf)
     crashT -= dt;
     if (crashT <= 0) {

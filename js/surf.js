@@ -16,8 +16,8 @@ export const RIDE = {
   drag: 0.09, drag2: 0.013,            // planing drag along the board
   // carving works like a skier or a leaning bike: you tip the board onto its rail and the lean makes the turn,
   // turn rate = g * tan(lean) / speed. The fins hold up to gripMax sideways; lean past that and the tail drifts out.
-  leanMax: 1.15, leanRate: 5.0,        // full thumb = ~66 deg on the rail (a ~2.3 g carve); how fast you can roll the board over (rad/s)
-  finGrip: 14, gripMax: 20,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2): a buried rail holds ~2 g
+  leanMax: 1.15, leanRate: 4.5, leanEase: 9, yawLag: 0.1,        // full thumb = ~66 deg on the rail (a ~2.3 g carve); how fast you can roll the board over (rad/s)
+  finGrip: 4.2, gripMax: 20,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2): a buried rail holds ~2 g
   skidLoss: 0.16,                      // share of the excess sideways force lost as speed while the tail drifts
   pump: 0.5,                           // pumping adds this share of the downhill pull (and costs 1.2x that when climbing)
   popTime: 0.35,                       // seconds from lying to standing
@@ -169,21 +169,25 @@ export class Rider {
       const speed = Math.hypot(this.vx, this.vz);
       // roll the board toward the lean your thumb asks for (weight shifts take a moment), then the lean carves the turn
       const wantLean = inp.steer * P.leanMax * pop, dl = wantLean - this.lean, maxRoll = P.leanRate * h;
-      this.lean += Math.max(-maxRoll, Math.min(maxRoll, dl * Math.min(1, h * 12)));
-      this.turn = P.g * Math.tan(this.lean) / Math.max(speed, 3.2);
+      this.lean += Math.max(-maxRoll, Math.min(maxRoll, dl * Math.min(1, h * P.leanEase)));
+      // the board has momentum: its turning builds up and flows out over a fraction of a second, it doesn't switch on and off
+      const wantTurn = P.g * Math.tan(this.lean) / Math.max(speed, 3.2);
+      this.turn += (wantTurn - this.turn) * Math.min(1, h / P.yawLag);
       this.th += this.turn * h;
       // the tail can swing out, but the fins drag the nose back toward where the board is going through the water:
       // slip past ~17 deg is resisted, and it never passes ~35 deg (a drift, not a spin-out)
+      this.slide = 0;
       if (Math.hypot(rx, rz) > 1.5) {
         // measured against the water the board is sliding on, not the ground
         const vd = Math.atan2(rz, rx); let slip = this.th - vd; slip = Math.atan2(Math.sin(slip), Math.cos(slip));
         const a = Math.abs(slip), soft = 0.3, hard = 0.62;
+        this.slide = a;   // how far the tail is hanging out (rad): drives the spray fan and the hiss
         if (a > soft) { const na = a > hard ? hard : a - (a - soft) * Math.min(1, h * 6); this.th = vd + Math.sign(slip) * na; }
       }
       const dr = P.drag * along + P.drag2 * along * Math.abs(along);
       ax += -dr * dx; az += -dr * dz;
-      // past ~45 deg of lean the rail starts to release: the harder you lay it over, the more the tail lets go (drift)
-      const release = 1 - 0.55 * smooth(0.8 * P.leanMax, P.leanMax, Math.abs(this.lean));
+      // the harder you lay the rail over, the more the tail lets go: a little slide in an easy turn, a full drift at full thumb
+      const release = 1 - 0.6 * smooth(0.3 * P.leanMax, P.leanMax, Math.abs(this.lean));   // the tail lets go gradually as you lean harder
       const latA = P.finGrip * Math.hypot(lx, lz), lim = P.gripMax * pop * release;
       this.skid = latA > lim ? Math.min(1, latA / lim - 1) : 0;
       const sc = latA > lim ? lim / latA : 1;
