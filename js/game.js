@@ -604,7 +604,7 @@ function updateHUD(dt) {
     else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
   } else if (st === 'POP') hint = 'Up!';
-  else if (st === 'RIDE' && rider.stateT < 4 && session.waves < 3) hint = 'Steer along the wave. Hold PUMP going down for speed';
+  else if (st === 'RIDE' && rider.stateT < 5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Lean with your thumb: a little to carve, all the way to drift' : 'Hold PUMP as you drop down the face for speed';
   setText(ui.hint, session.waves < 4 || st === 'POP' ? hint : '');
   ui.tube.style.opacity = rider.inBarrel && st === 'RIDE' ? 1 : 0;
   setText(ui.score, st === 'RIDE' ? '' + rider.liveScore() : '');
@@ -641,7 +641,8 @@ function autoQuality(dt) {
 
 // ---------- loop
 const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)');
-let last = performance.now(), T = 0, strokeT = 0, lastState = '', crashT = 1;
+let last = performance.now(), T = 0, strokeT = 0, lastState = '', crashT = 1, wasSkid = false, wasBarrel = false;
+const buzz = (p) => { try { navigator.vibrate?.(p); } catch (e) {} };
 function tick(dt) {
   T += dt;
   ENV.uTime.value += dt;
@@ -673,7 +674,14 @@ function tick(dt) {
       crashT = 1.1 + Math.random() * 0.9 - (best ? best.cond.H * 0.1 : 0);
     }
     if (st === 'LIE' && rider.paddling) { strokeT -= dt * 1.6; if (strokeT <= 0) { strokeT = 0.55; audio.paddle(); } }
-    if (st !== lastState) { if (st === 'POP') audio.splash(0.35); lastState = st; }
+    if (st !== lastState) {
+      if (st === 'POP') { audio.splash(0.35); buzz(25); }
+      if (st === 'WIPE') buzz([60, 40, 90]);
+      lastState = st;
+    }
+    // feel it: a light tick when the tail breaks loose, a pulse when you get covered in the barrel (Android; iPhones don't allow it)
+    if (rider.skid > 0.3 && !wasSkid) buzz(12); wasSkid = rider.skid > 0.3;
+    if (rider.inBarrel && !wasBarrel) buzz([20, 30, 20]); wasBarrel = rider.inBarrel;
     sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   } else {
     // behind the start screen: a slow drift along a peeling wave
