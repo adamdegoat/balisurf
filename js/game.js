@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=19';
-import { Rider } from './surf.js?v=28';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=21';
+import { Rider, Profile, waterAt, heightAt } from './surf.js?v=35';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=2';
 
@@ -49,30 +49,50 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
   a.play(); curClip = a;
 }
 
-// ---------- session: pick conditions, one wave at a time
-let mode = null, wave = null, rider = null, session = { waves: 0, total: 0, best: 0 };
+// ---------- the surf: a reef with the peak at x=0, z=0. Waves come in from the sea one swell period apart.
+// Each wave breaks at the peak when it gets there and peels off to the right. You sit in the lineup and pick your own.
+let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0 }, nextBreak = 0;
+const REEF = { xEnd: 150, zBeach: 120 };
 function condFor(m) { return m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
-function newWave() {
-  if (wave) wave.dispose(scene);
-  pumpC = 0; stanceW = 0; lastState = '';
+function addWave(tBreak) {
+  const cond = CONDITIONS[condFor(mode)];
+  const w = new Wave(scene, cond);
+  w.tBreak = tBreak; w.prof = new Profile(w); w.xEnd = REEF.xEnd; w.zBeach = REEF.zBeach; w.seed = Math.random() * 100;
+  waves.push(w);
+  return w;
+}
+function updateWaves(dt) {
+  // keep the next wave lined up out to sea; a swell period apart, give or take
+  while (nextBreak - T < 150 / 6) {
+    const w = addWave(nextBreak);
+    nextBreak += w.cond.period * (0.85 + Math.random() * 0.3);
+  }
+  for (let i = waves.length - 1; i >= 0; i--) {
+    const w = waves[i], C = w.cond, t = T - w.tBreak;
+    w.place(C.peel * t, C.speed * t);
+    w.fade = Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40)) * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));   // far out it's a small swell; past the end of the reef it backs off
+    w.update(dt);
+    if (w.zW > REEF.zBeach + 40 || w.peelX > REEF.xEnd + 45) { w.dispose(scene); waves.splice(i, 1); }
+  }
+}
+// the next wave that hasn't reached you yet, and how many seconds until its face gets to you
+function incoming() {
+  let best = null, tBest = 1e9;
+  for (const w of waves) {
+    const zl = rider.z - w.zW; if (zl < -2) continue;                 // already past you
+    const t = (zl - 6) / w.cond.speed; if (t < tBest) { tBest = t; best = w; }
+  }
+  return { w: best, t: tBest };
+}
+function spawnRider() {
   if (surfer) endWipe();
-  const c = condFor(mode);
-  wave = new Wave(scene, CONDITIONS[c]); wave.seed = Math.random() * 100;
-  rider = new Rider(wave);
-  // time the peak so it reaches roughly where you are (you can paddle sideways to line it up better)
-  // you arrive a few metres ahead of the peak (in the pocket zone), with some variety; paddling along the line fixes it
-  rider.zRel = wave.cond.speed * 6;                                   // about 6 s before the wave reaches you
-  // Where you meet the wave depends on how long you paddle (paddling in means meeting it later, further along the peel).
-  // Aim so that paddling for the last ~2.5 s puts you about 5 m ahead of the peak; earlier drifts inside, later onto the shoulder.
-  const T = (rider.zRel + 4.2) / wave.cond.speed;
-  // plus the peel keeps coming while the wave lifts you (about 0.6 s), so meet it with room to spare
-  wave.peelX = -wave.cond.peel * T - (1.5 * wave.cond.H + 0.6 * wave.cond.peel + 1.8 + Math.random() * 2);
-  faceSea = 1;
-  wave.reefEnd = wave.peelX + wave.cond.peel * T + 110 + 30 * wave.cond.H;   // the reef section ends; ride it all the way for a bonus
-  wave.mesh.position.x = wave.peelX;
-  ui.cond.textContent = wave.cond.name + (mode === 'random' ? ' (random)' : '');
+  pumpC = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
+  rider = rider || new Rider();
+  // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
+  rider.reset(2 + Math.random() * 4, -7 - Math.random() * 3, -Math.PI / 2);
+  // don't drop a wave on your head as you arrive
+  const inc = incoming(); if (inc.t < 5) nextBreak = Math.max(nextBreak, T + 9);
   ui.msg.style.display = 'none';
-  endT = -1; snapCam = true;
 }
 
 // ---------- controls: PADDLE/PUMP (hold, left) and a thumb pad (right half). Keyboard for testing.
@@ -93,7 +113,7 @@ const hold = (el, on, off) => {
 };
 hold(ui.paddle, () => { audio.wake(); input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
 // thumb pad: touch anywhere on the right half; the spot you first touch is the centre.
-// Always left/right. Riding: the wave is on your left, so slide left = climb the face, right = drop. Paddling: aim along the wave.
+// Left/right turns the board left/right, like leaning on a real board: lying, it points you where you paddle; standing, it carves.
 let padTouch = null, padX = 0, padY = 0, lastPadTouch = undefined, lastKnob = 1e9;
 const PAD_R = 55;
 const padMove = (x, y) => { if (!padTouch) return; padX = Math.max(-1, Math.min(1, (x - padTouch.x0) / PAD_R)); padY = Math.max(-1, Math.min(1, (y - padTouch.y0) / PAD_R)); };
@@ -107,13 +127,12 @@ addEventListener('mouseup', () => { if (padTouch && padTouch.id === 'm') padTouc
 function readInput(dt) {
   if (!padTouch) { padX *= Math.max(0, 1 - dt * 10); padY *= Math.max(0, 1 - dt * 10); }   // let go and the board runs straight
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-  // internal steer: + = screen-right = down the face (riding) / aim right (paddling)
   const v = kx || padX;
   input.steer = input.test != null ? input.test : v;   // input.test: scripted steering for automated checks
   input.paddle = !!input.paddleBtn || keys.has('Space');
   if (padTouch !== lastPadTouch) { ui.guide.classList.toggle('live', !!padTouch); lastPadTouch = padTouch; }
   const kt = Math.round(input.steer * 45); if (kt !== lastKnob) { ui.knob.style.transform = `translateX(${kt}px)`; lastKnob = kt; }
-  return { paddle: input.paddle, pump: input.paddle, steer: -input.steer };   // same button: paddle lying down, pump once standing
+  return { paddle: input.paddle, pump: input.paddle, steer: input.steer };    // same button: paddle lying down, pump once standing; steer + = turn right
 }
 
 for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => start(b.dataset.mode));
@@ -128,60 +147,91 @@ async function start(m) {
   ui.load.textContent = '';
   ui.start.style.display = 'none'; document.body.classList.add('playing');
   session = { waves: 0, total: 0, best: 0 };
-  newWave();
+  for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9;
+  updateWaves(0); spawnRider();
+  ui.cond.textContent = mode === 'random' ? 'Random' : CONDITIONS[mode].name;
 }
 if (Q.get('mode')) start(Q.get('mode'));
 
-// ---------- camera: in front while you wait for the wave, behind once you're up, tight and low in the barrel
-const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3(), _lk = new THREE.Vector3();
-let faceSea = 1;                                                     // 1 = sitting up facing the incoming sets, 0 = turned to the beach
+// ---------- camera: a chase camera over your shoulder, looking where you're going; tight and low in the barrel
+const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3(), _lk = new THREE.Vector3(), _want = new THREE.Vector3(), _look = new THREE.Vector3();
 const camPos = new THREE.Vector3(0, 2, 10), camLook = new THREE.Vector3(), pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() };
+let camYaw = 0, lookBackK = 0;
+const camOff = new THREE.Vector3(0, 1.3, 3), lookOff = new THREE.Vector3(), _anc = new THREE.Vector3();
+const smooth01 = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+const _wq2 = {};
 function updateCamera(dt) {
-  const p = pose.pos, st = rider.state, H = wave.cond.H;
-  let want, look;
-  if (st === 'WAIT' || st === 'PADDLE' || st === 'DONE') {
-    // over your shoulder, looking where you look: out at the sets while you wait, toward the beach once you paddle
-    const d = lookDir.set(Math.sin(rider.heading), 0, Math.cos(rider.heading)).applyAxisAngle(WORLD_UP, Math.PI * faceSea);
-    want = p.clone().addScaledVector(d, -3.1).add(_cv.set(0.35, 1.25, 0));
-    if (rider.lifting && st === 'PADDLE') {
-      // take-off: swing out beside you on the face (up the line, a bit toward the beach) and look down the drop
-      want = p.clone().add(_cv.set(-2.9, 1.5, 0.8));
-      look = p.clone().add(_cv.set(0.9, 0.1, 1.1));
-    }
-    const wy = rider.face.surfaceY(want.x - wave.peelX, want.z);
-    want.y = Math.max(want.y, wy + 0.9);                               // the wave lifts the camera with you
-    if (!(rider.lifting && st === 'PADDLE')) look = p.clone().addScaledVector(d, 6).add(_cv.set(0, 0.35, 0));
-  } else if (st === 'WIPE') {
+  const p = pose.pos, st = rider.state;
+  const want = _want, look = _look;
+  if (st === 'WIPE' && W.on && surfer) {
     // follow the body from the beach side; never below the water
-    const b = surfer ? surfer.getWorldPosition(new THREE.Vector3()) : p;
-    const wy = rider.face.surfaceY(b.x + 3 - wave.peelX, b.z + 5);
-    want = new THREE.Vector3(b.x + 3, Math.max(wy + 0.8, b.y + 1.3), b.z + 5);
-    look = new THREE.Vector3(b.x, Math.max(b.y + (W.t > 1.4 ? 1.3 : 0.4), wy), b.z);
+    const b = surfer.getWorldPosition(_cv);
+    const wy = heightAt(waves, b.x + 3, b.z + 5);
+    want.set(b.x + 3, Math.max(wy + 0.8, b.y + 1.3), b.z + 5);
+    look.set(b.x, Math.max(b.y + (W.t > 1.4 ? 1.3 : 0.4), wy), b.z);
   } else {
+    // follow the direction you're travelling when you're up and moving, the way the board points when you're lying
+    const standing = rider.standing, moving = rider.v > 2.5 && standing;
+    // standing, stay behind you along the wave: never straight behind when you point down the face (that's up inside the wall)
+    let yaw = moving || rider.state === 'POP' ? Math.atan2(rider.vz, rider.vx) : rider.th;
+    if (standing) yaw = Math.cos(yaw) >= -0.2 ? Math.max(-0.5, Math.min(0.55, yaw)) : Math.PI - Math.max(-0.5, Math.min(0.55, Math.PI - (yaw < 0 ? yaw + 2 * Math.PI : yaw)));
+    let dy = yaw - camYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    camYaw += dy * Math.min(1, dt * (standing ? 4 : 5)); if (snapCam) camYaw = yaw;
+    const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
     const tube = rider.inBarrel ? 1 : 0;
-    const back = 3.4 - 1.4 * tube + 0.05 * rider.v, height = 1.3 - 0.55 * tube;
-    // behind you along the wave (not along the board, which points up or down the face), out toward the beach so the wall frames the left
-    want = _cv.set(p.x - back, p.y + height, p.z + 1.3 - 0.8 * tube).clone();
-    want.y = Math.max(want.y, 0.35);
-    // never inside the water: stay in front of the face, and inside the tube stay behind the curtain and under the ceiling
-    // the tube collapses into whitewater behind -4.5H: the camera can't sit back there
-    if (want.x - wave.peelX < -4.1 * H) want.x = wave.peelX - 4.1 * H;
-    const cs = want.x - wave.peelX, lip = wave.lipAt(cs);
-    if (rider.inBarrel || (wave.cond.hollow > 0.5 && cs < -0.5 * H && cs > -4.5 * H && lip[1] < 0.45 * H)) {
-      want.z = Math.min(want.z, lip[2] - 0.45);
-      want.y = Math.min(Math.max(want.y, p.y + 0.45), 0.62 * H);
+    const back = standing ? 3.9 - 1.6 * tube + 0.05 * rider.v : 3.0, height = standing ? 1.55 - 0.7 * tube : 1.2;
+    want.set(p.x - dx * back, p.y + height, p.z - dz * back + (standing ? 1.5 - 0.9 * tube : 0));   // a little out toward the beach so the wall frames the shot
+    look.set(p.x + dx * 5, p.y + (standing ? 0.85 : 0.4), p.z + dz * 5);
+    // lying and facing the beach with a wave coming: look back over your shoulder at it; on the face, swing beside you for the drop
+    if (!standing && st === 'LIE') {
+      const inc = incoming(), facingIn = Math.sin(rider.th) > 0.4;
+      const onWave = rider.y > 0.25 * (rider.wave ? rider.wave.cond.H : 1);
+      const lookBack = facingIn && inc.w && inc.t < 5 ? smooth01(1 - (inc.t - 1) / 3) : 0;
+      lookBackK += ((onWave ? 2 : lookBack) - lookBackK) * Math.min(1, dt * 3);
+      if (lookBackK > 0.01) {
+        const k1 = Math.min(1, lookBackK), k2 = Math.max(0, lookBackK - 1);
+        // stage 1: in front of you (shoreward), a little to the side, looking back past you at the wave
+        _cv.set(p.x + 1.4, p.y + 1.25, p.z + 4.4); want.lerp(_cv, k1);
+        _lk.set(p.x - 0.4, p.y + 0.55, p.z - 4); look.lerp(_lk, k1);
+        // stage 2: in front of you and down the line (where a filmer in the channel would be), looking back up at the drop
+        _cv.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); want.lerp(_cv, k2);
+        _lk.set(p.x - 0.3, p.y + 0.6, p.z - 0.5); look.lerp(_lk, k2);
+      }
+    } else if (standing && lookBackK > 0.01) {
+      // just up: ease from the filmer's view into the riding camera
+      lookBackK = Math.max(0, lookBackK - dt * 1.6);
+      const k2 = Math.min(1, lookBackK);
+      _cv.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); want.lerp(_cv, k2);
+      _lk.set(p.x - 0.3, p.y + 0.6, p.z - 0.5); look.lerp(_lk, k2);
+    } else lookBackK = 0;
+    // stay out of the water: above the surface here, in front of the face at the camera's height, inside the tube in the barrel
+    const q = waterAt(waves, want.x, want.z, _wq2);
+    if (q.w) {
+      const sl = q.w.prof.slice(q.s), H = q.w.cond.H;
+      if (tube) { want.z = Math.min(want.z, sl.lipZ + q.w.zW - 0.45); want.y = Math.min(Math.max(want.y, p.y + 0.45), 0.62 * H); }
+      else if (q.zl > sl.topZ - 0.3 && want.y < sl.top + 0.3) {
+        const fz = q.w.prof.frontZAt(q.s, want.y) + q.w.zW;
+        if (want.z < fz + 0.7) want.z = fz + 0.7;                  // pushed out in front of the wall, never inside it
+      }
     }
-    want.y = Math.max(want.y, rider.face.surfaceY(cs, want.z) + 0.3);
-    // never inside the wall: keep the camera in front of the face at its own height
-    if (!tube) want.z = Math.max(want.z, rider.face.zAtHeight(cs, want.y) + 0.7);
-    look = _lk.set(pose.fwd.x, pose.fwd.y * 0.4, pose.fwd.z * 0.5).normalize().multiplyScalar(3).add(p); look.y += 0.6;
+    want.y = Math.max(want.y, heightAt(waves, want.x, want.z) + 0.45);
     if (tube) look.y = p.y + 0.55;                                     // level gaze down the tube toward the opening
   }
-  const k = snapCam ? 1 : Math.min(1, dt * (st === 'RIDE' ? 5 : st === 'WIPE' ? 3.5 : 7));   // lying down, the target itself swings round smoothly
+  // smooth the camera's offset from whoever it follows, not its absolute position: no lag when the surfer is flying along
+  const anchor = st === 'WIPE' && W.on && surfer ? surfer.getWorldPosition(_anc) : p;
+  const k = snapCam ? 1 : Math.min(1, dt * (st === 'WIPE' ? 3.5 : 5));
   snapCam = false;
-  camPos.lerp(want, k); camLook.lerp(look, k);
+  // swing round the surfer in an arc (angle, distance, height), never cut through them
+  _cv.subVectors(want, anchor);
+  const ta = Math.atan2(_cv.z, _cv.x), tr = Math.hypot(_cv.x, _cv.z);
+  let ca = Math.atan2(camOff.z, camOff.x), cr = Math.hypot(camOff.x, camOff.z);
+  ca += Math.atan2(Math.sin(ta - ca), Math.cos(ta - ca)) * k; cr += (tr - cr) * k;
+  camOff.set(Math.cos(ca) * cr, camOff.y + (_cv.y - camOff.y) * k, Math.sin(ca) * cr);
+  lookOff.lerp(_lk.subVectors(look, anchor), k);
+  camPos.addVectors(anchor, camOff); camLook.addVectors(anchor, lookOff);
+  camPos.y = Math.max(camPos.y, heightAt(waves, camPos.x, camPos.z) + 0.3);
   camera.position.copy(camPos);
-  if (st === 'WIPE') { const sh = 0.12 * Math.exp(-(W.t || 0) * 2.5); camera.position.add(new THREE.Vector3((Math.random() - .5) * sh, (Math.random() - .5) * sh, 0)); }
+  if (st === 'WIPE') { const sh = 0.12 * Math.exp(-(W.t || 0) * 2.5); camera.position.x += (Math.random() - .5) * sh; camera.position.y += (Math.random() - .5) * sh; }
   camera.lookAt(camLook);
 }
 
@@ -193,37 +243,39 @@ const setStance = () => { invQ.copy(rig.quaternion).invert(); surfer.quaternion.
 function updateRig(dt, t) {
   if (rider.state === 'WIPE' && W.on) { wipeout(dt); return; }
   rider.pose(pose);
-  // the board rides on its rail: tilted partway toward the face, not lying flat against a steep wall
-  if (rider.state !== 'WAIT' && rider.state !== 'PADDLE') { pose.up.lerp(WORLD_UP, 0.45).normalize(); pose.up.addScaledVector(pose.fwd, -pose.up.dot(pose.fwd)).normalize(); }
+  const standing = rider.standing;
+  // standing, the board rides on its rail (partway between the face and level) and rolls into the carve
+  if (standing) {
+    pose.up.lerp(WORLD_UP, 0.45).normalize();
+    const roll = Math.atan(rider.turn * rider.v / 9.8) * 0.6;
+    pose.up.applyAxisAngle(pose.fwd, -roll);
+  }
+  pose.up.addScaledVector(pose.fwd, -pose.up.dot(pose.fwd)).normalize();
   xAxis.crossVectors(pose.up, pose.fwd).normalize();
   const up = _up.crossVectors(pose.fwd, xAxis).normalize();
   tmpM.makeBasis(xAxis, up, pose.fwd);
   rig.quaternion.setFromRotationMatrix(tmpM);
   rig.position.copy(pose.pos);
-  // sitting you face the sea; when you start paddling you swing the board round to the beach
-  faceSea += ((rider.state === 'WAIT' || rider.state === 'DONE' ? 1 : 0) - faceSea) * Math.min(1, dt * 3.5);
-  if (faceSea > 0.001) rig.quaternion.premultiply(_yq.setFromAxisAngle(WORLD_UP, Math.PI * faceSea));
-  const upright = rider.state === 'POPUP' || rider.state === 'RIDE' || (rider.state === 'WIPE' && rider.stateT < 0.8);
-  if (upright) {
-    // on a steep wall the board lies on the face, but the rider stays near vertical, leaning into the wave
-    const lean = 0.22 + 0.2 * Math.max(0, rider.turn) + (rider.inBarrel ? 0.12 : 0);
-    bodyUp.copy(pose.up).addScaledVector(INTO_WAVE, Math.tan(lean * 0.6)).normalize();   // stand on the deck, leaning into the wave
+  if (standing || (rider.state === 'WIPE' && rider.stateT < 0.1)) {
+    // the rider stands on the deck, leaning into the turn and a little toward the wave
+    const lean = 0.15 + (rider.inBarrel ? 0.12 : 0);
+    bodyUp.copy(pose.up).addScaledVector(INTO_WAVE, Math.tan(lean * 0.6)).normalize();
     bodyFwd.set(pose.fwd.x, 0, pose.fwd.z).normalize();
     bodyUp.addScaledVector(bodyFwd, -bodyUp.dot(bodyFwd)).normalize();
     bodyX.crossVectors(bodyUp, bodyFwd);
     tmpM.makeBasis(bodyX, bodyUp, bodyFwd);
     bodyQ.setFromRotationMatrix(tmpM);
   }
-  // bob on the water while waiting
-  if (rider.state === 'WAIT' || rider.state === 'PADDLE') rig.position.y += Math.sin(t * 1.6) * 0.05;
+  // bob on the water while lying
+  if (!standing) rig.position.y += Math.sin(t * 1.6) * 0.04;
   if (!surfer) return;
   const st = rider.state;
   surfer.position.set(0, 0, 0); surfer.rotation.set(0, 0, 0);
-  if (st === 'WAIT') { play('sit'); surfer.position.set(0, -0.36, -0.15); }
-  else if (st === 'PADDLE') { play('paddle', { speed: 0.6 + rider.paddleV / 2 }); surfer.position.set(0, -0.93, -0.25); }
-  else if (st === 'POPUP') { play('popup', { once: true, fade: 0.12, speed: 1.6 }); setStance(); surfer.position.set(0, 0.03, -0.1); }
+  if (st === 'LIE' || st === 'OUT') {
+    if (rider.paddling && st === 'LIE') { play('paddle', { speed: 0.7 + rider.v / 3 }); surfer.position.set(0, -0.93, -0.25); }
+    else { play('sit'); surfer.position.set(0, -0.36, -0.15); }
+  } else if (st === 'POP') { play('popup', { once: true, fade: 0.12, speed: 1.6 }); setStance(); surfer.position.set(0, 0.03, -0.1); }
   else if (st === 'RIDE') {
-    // stance: half crouch, deeper in the barrel and at speed; lean into the turn
     // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
     pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
     const deep = Math.min(0.8, (rider.inBarrel ? 0.62 : 0.3 + 0.15 * Math.min(1, rider.v / 10)) + 0.3 * pumpC);
@@ -234,7 +286,7 @@ function updateRig(dt, t) {
   } else if (st === 'WIPE') {
     setStance(); surfer.position.set(0, 0, -0.1);
     wipeout(dt);
-  } else if (st === 'DONE') { play('sit'); surfer.position.set(0, -0.36, -0.15); }
+  }
 }
 
 // ---------- rail spray: water thrown off the board's edge when you carve, skid or pop up; a big burst when you wipe out
@@ -263,8 +315,8 @@ const railSpray = (() => {
     burst(p, n = 120, up = 3) { emit(p, _v.set(0, up, 0), n, 3.5); },
     update(dt) {
       // how much water the rail is throwing: carving load, skidding, and a little at speed
-      if (rider && (rider.state === 'RIDE' || rider.state === 'POPUP')) {
-        const load = Math.abs(rider.turn) * rider.v / 12 + rider.skid * 1.5 + (rider.state === 'POPUP' ? 0.6 : 0) + Math.max(0, rider.v - 6) * 0.03;
+      if (rider && rider.standing) {
+        const load = Math.abs(rider.turn) * rider.v / 12 + rider.skid * 1.5 + (rider.state === 'POP' ? 0.6 : 0) + Math.max(0, rider.v - 6) * 0.03;
         acc += load * 900 * dt;
         if (acc >= 1) {
           const n = Math.floor(acc); acc -= n;
@@ -311,14 +363,13 @@ function startWipe() {
 function wipeout(dt) {
   if (!W.on) startWipe();
   W.t += dt;
-  const s = (x) => x - wave.peelX;
   for (const [obj, vel, spin, isBody] of [[surfer, W.rv, W.rw, true], [rig, W.bv, W.bw, false]]) {
-    const p = obj.position, water = rider.face.surfaceY(s(p.x), p.z);
+    const p = obj.position, water = heightAt(waves, p.x, p.z);
     const depth = water - p.y;
     if (depth > 0) {
       // in the water: heavy drag, the broken wave drags you shoreward, buoyancy brings you back up
       vel.multiplyScalar(Math.exp(-dt * (isBody ? 3.5 : 2.5)));
-      vel.z += (isBody ? 2.5 : 3.5) * dt; vel.x += wave.cond.peel * 0.3 * dt;
+      vel.z += (isBody ? 2.5 : 3.5) * dt; vel.x += 1.2 * dt;
       vel.y += (isBody ? (W.t < 1.4 ? -2 : 6) : 14) * Math.min(1, depth + 0.3) * dt;
       spin.multiplyScalar(Math.exp(-dt * (isBody ? 2 : 3)));
       if (isBody) { W.under += dt; if (!W.hit) { W.hit = true; audio.splash(1.2); railSpray.burst(p, 160, 3.5); } }
@@ -360,7 +411,7 @@ function swingBone(bone, end, sgn, ang) {
 }
 let stanceW = 0, pumpC = 0;
 function surfStance() {
-  const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POPUP' ? Math.min(1, rider.stateT / 0.45) : 0;
+  const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POP' ? Math.min(1, rider.stateT / 0.45) : 0;
   stanceW += (want - stanceW) * 0.2;
   if (stanceW < 0.02) return;
   if (!bones.thigh_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -384,23 +435,31 @@ const setText = (el, t) => { if (el._t !== t) { el._t = t; el.textContent = t; }
 let endT = -1, snapCam = true;
 function updateHUD(dt) {
   const st = rider.state;
-  setText(ui.speed, st === 'RIDE' || st === 'POPUP' ? `${Math.round(rider.v * 3.6)} km/h` : '');
-  ui.paddle.style.visibility = st === 'WIPE' || st === 'DONE' ? 'hidden' : 'visible';
-  const lbl = st === 'WAIT' || st === 'PADDLE' ? 'PADDLE' : 'PUMP'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
-  // first waves: tell the player what to do while the set rolls in
-  const hint = st === 'WAIT' ? (rider.zRel < wave.cond.speed * 2.6 ? 'Now! Hold PADDLE' : rider.zRel < wave.cond.speed * 5 ? 'Wave coming, get ready...' : '') : st === 'PADDLE' && rider.lifting ? 'It\'s lifting you, keep paddling!' : st === 'PADDLE' ? 'Wave behind you: keep paddling' : st === 'POPUP' ? 'Up!' : st === 'RIDE' && rider.stateT < 3.5 && session.waves < 2 ? 'Hold PUMP as you drop down the face' : '';
-  setText(ui.hint, session.waves < 3 || st === 'POPUP' ? hint : '');
+  setText(ui.speed, rider.standing ? `${Math.round(rider.v * 3.6)} km/h` : '');
+  ui.paddle.style.visibility = st === 'WIPE' || st === 'OUT' ? 'hidden' : 'visible';
+  const lbl = rider.standing ? 'PUMP' : 'PADDLE'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
+  // coaching for the first few waves: read the sea like a surfer would
+  let hint = '';
+  if (st === 'LIE') {
+    const inc = incoming(), facingIn = Math.sin(rider.th) > 0.5;
+    if (rider.washed) hint = 'Caught inside! Hold on, paddle back out';
+    else if (inc.w && inc.t < 7) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
+    else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
+  } else if (st === 'POP') hint = 'Up!';
+  else if (st === 'RIDE' && rider.stateT < 4 && session.waves < 3) hint = 'Steer along the wave. Hold PUMP going down for speed';
+  setText(ui.hint, session.waves < 4 || st === 'POP' ? hint : '');
   ui.tube.style.opacity = rider.inBarrel && st === 'RIDE' ? 1 : 0;
   setText(ui.score, st === 'RIDE' ? '' + rider.liveScore() : '');
-  if ((st === 'WIPE' || st === 'DONE') && endT < 0) {
-    endT = 0; session.waves++; session.total += rider.ride.score; session.best = Math.max(session.best, rider.ride.score);
-    ui.msgT.textContent = rider.why;
+  if ((st === 'WIPE' || st === 'OUT') && endT < 0) {
+    endT = 0;
     const r = rider.ride;
-    ui.msgS.textContent = r.t > 0 ? `${r.score} points  ·  ${r.t.toFixed(1)}s riding  ·  top ${Math.round(r.top)} km/h${r.barrel > 0.2 ? `  ·  ${r.barrel.toFixed(1)}s in the barrel` : ''}` : 'No ride';
-    ui.sess.textContent = `Waves ${session.waves}  ·  best ${session.best}  ·  total ${session.total}`;
+    if (r.t > 0 || st === 'WIPE') { session.waves++; session.total += r.score; session.best = Math.max(session.best, r.score); }
+    ui.msgT.textContent = rider.why;
+    ui.msgS.textContent = r.t > 0 ? `${r.score} points  ·  ${r.t.toFixed(1)}s riding  ·  top ${Math.round(r.top)} km/h${r.barrel > 0.2 ? `  ·  ${r.barrel.toFixed(1)}s in the barrel` : ''}` : '';
+    ui.sess.textContent = session.waves ? `Rides ${session.waves}  ·  best ${session.best}  ·  total ${session.total}` : '';
     ui.msg.style.display = 'flex';
   }
-  if (endT >= 0) { endT += dt; if (endT > 3.2) newWave(); }
+  if (endT >= 0) { endT += dt; if (endT > (st === 'WIPE' ? 3.4 : 2.6)) spawnRider(); }
 }
 
 // ---------- automatic quality
@@ -422,27 +481,27 @@ const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)');
 let last = performance.now(), T = 0, strokeT = 0, lastState = '';
 function tick(dt) {
   T += dt;
+  ENV.uTime.value += dt;
   const inp = readInput(dt);
-  if (wave) {
-    // in heavier surf the peel speed surges: sections race ahead and you have to react
-    const sg = rider.state === 'RIDE' ? wave.cond.surge : 0;   // steady while you line up the take-off
-    wave.peelMul = 1 + sg * (Math.sin(T * 0.9 + wave.seed) * 0.6 + Math.sin(T * 2.3 + wave.seed * 3) * 0.4);
-    wave.update(dt);
-    if (rider.state !== 'WIPE' && rider.state !== 'DONE') rider.update(dt, inp);
-    else { rider.stateT += dt; if (rider.state === 'DONE') rider.zRel -= wave.cond.speed * dt; }   // the wave keeps rolling on past you
+  if (rider) {
+    updateWaves(dt);
+    rider.update(dt, inp, waves);
+    // drifting too far inside or out wide on a lie: bring the surfer back to the lineup
+    if (rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out('Drifted out of the lineup'); }
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); surfStance(); }
     railSpray.update(dt);
     updateCamera(dt);
     updateHUD(dt);
-    // sound follows what's happening
-    const H = wave.cond.H, rs = rider.s, st = rider.state;
-    const near = st === 'WAIT' || st === 'PADDLE' ? Math.max(0, 1 - rider.zRel / 25) * Math.max(0, 1 - Math.abs(rs) / (8 * H)) : Math.max(0, 1 - Math.abs(rs) / (6 * H));
+    // sound follows what's happening: the breaking wave is loud near the curl
+    const st = rider.state, w = rider.wave;
+    let near = 0;
+    for (const v of waves) { const s = rider.x - v.peelX, zl = rider.z - v.zW; if (zl > -20 && zl < 25) near = Math.max(near, Math.max(0, 1 - Math.hypot(s < 0 ? s * 0.4 : s, zl) / (7 * v.cond.H))); }
     let underwater = false;
-    if (st === 'WIPE' && W.on && surfer) { const b = surfer.position; underwater = W.t < 1.4 && b.y < rider.face.surfaceY(b.x - wave.peelX, b.z) - 0.2; }
-    audio.update({ H, near, barrel: rider.inBarrel && st === 'RIDE', riding: st === 'RIDE' || st === 'POPUP', v: rider.v, turn: rider.turn, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
-    if (st === 'PADDLE' && rider.paddleV > 0.3) { strokeT -= dt * (0.9 + rider.paddleV * 0.5); if (strokeT <= 0) { strokeT = 0.5; audio.paddle(); } }
-    if (st !== lastState) { if (st === 'POPUP') audio.splash(0.35); lastState = st; }
+    if (st === 'WIPE' && W.on && surfer) { const b = surfer.position; underwater = W.t < 1.4 && b.y < heightAt(waves, b.x, b.z) - 0.2; }
+    audio.update({ H: w ? w.cond.H : 1.5, near, barrel: rider.inBarrel && st === 'RIDE', riding: rider.standing, v: rider.v, turn: rider.turn, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
+    if (st === 'LIE' && rider.paddling) { strokeT -= dt * 1.6; if (strokeT <= 0) { strokeT = 0.55; audio.paddle(); } }
+    if (st !== lastState) { if (st === 'POP') audio.splash(0.35); lastState = st; }
     sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   } else {
     // behind the start screen: a slow drift along a peeling wave
@@ -451,7 +510,7 @@ function tick(dt) {
     const px = tick.demo.peelX;
     camera.position.set(px + 14, 2.2, 13); camera.lookAt(px - 2, 1.2, 0);
   }
-  if (wave && tick.demo) { tick.demo.dispose(scene); tick.demo = null; }
+  if (rider && tick.demo) { tick.demo.dispose(scene); tick.demo = null; }
   fx.update(dt, camera.position);
 }
 renderer.setAnimationLoop(() => {
@@ -459,4 +518,4 @@ renderer.setAnimationLoop(() => {
   if (!window.__g.paused && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
-window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get wave() { return wave; }, input, keys, setMode: (m) => { mode = m; setWeather(m); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, newWave };
+window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; } };

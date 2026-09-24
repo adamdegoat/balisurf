@@ -1,249 +1,245 @@
-// Surf physics. The rider lives on the wave's front face, in the wave's own frame:
-//   x  = position along the wave (world metres; the break peels toward +x at cond.peel m/s)
-//   a  = where on the face: 0 = the trough/toe, 1 = the top of the rideable face (just under the lip)
-//   v  = board speed (m/s), psi = heading on the face: 0 = straight down the line (+x), + = up the face, - = down it
-// Each frame: gravity pulls you down the slope, the pocket (just ahead of the curl) drives you forward,
-// water drag slows you, and the moving face slowly lifts you toward the lip. Falls come from real mistakes.
-import * as THREE from 'three';
+// Surf physics: a board on the real water surface.
+// World: x runs along the reef (the break peels toward +x, a right-hander), z points to the beach, y is up.
+// Waves roll in along +z at their speed c and break along the reef at the peel rate. The board moves freely in x/z;
+// its height is the water surface under it. Forces: gravity down whatever slope you're on, the water moving with the
+// wave, drag (low along the board, very high sideways once you're standing: that's the fins), paddling, pumping.
+// Catching, stalling, barrels, kick-outs and wipeouts all come out of that, not out of scripts.
 
 export const RIDE = {
   g: 9.8,
-  pocket: 6.5,            // forward push in the pocket (m/s^2), scaled per condition
-  drag: 0.22, drag2: 0.018,
-  lift: 0.16,             // how fast the face carries you up toward the lip if you ride straight (per second, in a)
-  gripBase: 20,           // how hard you can carve before the rail lets go (m/s^2 sideways); lower in heavy surf
-  turnSlow: 2.6, turnFast: 1.6,    // turn rate (rad/s) at low / high speed
-  maxAngle: 0.85,         // steepest lean up or down the face (radians)
-  lineSpan: 0.38,         // full thumb moves your line this far from mid-face (0.5 +/- this)
-  lineGain: 3.2,          // how eagerly you lean toward your line
-  skidLoss: 4,             // speed lost per second while the tail is skidding
-  stall: 1.4,             // below this speed the wave leaves you
-  stallHigh: 3.2,         // extra drag high on the face
-  pump: 0.45,             // share of the drop you add by pumping
-  paddleMax: 2.1, paddleAcc: 1.6,
-  slide: 0.35,            // how much of the face's slope turns into speed while it lifts you (board still flat in the water)
+  // lying on the board
+  paddleThrust: 2.6, paddleMax: 2.4,   // arms: thrust (m/s^2) fading to nothing at paddleMax (m/s); a good paddler holds ~1.8 m/s
+  lieDrag: 0.25, lieDrag2: 0.3, lieLat: 2.2,   // a lying board sits in the water: the moving water grabs it
+  lieTurn: 1.9, paddleTurn: 1.25,      // rad/s turning while sitting / paddling
+  lieGravity: 0.9,                     // a lying board is half in the water: less of the slope turns into speed
+  // standing
+  drag: 0.09, drag2: 0.013,            // planing drag along the board
+  finGrip: 12, gripMax: 19,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2), then the tail skids
+  skidLoss: 0.35,                      // share of the excess sideways force lost as speed while skidding
+  turnMax: 2.5, turnRadius: 2.6,       // carve: rad/s cap, and the tightest arc (m) a board holds at speed
+  pump: 0.5,                           // pumping adds this share of the downhill pull (and costs 1.2x that when climbing)
+  popTime: 0.35,                       // seconds from lying to standing
+  waterPush: 1.0,                      // how much the wave's moving water carries you
 };
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-// Samples the face of the slice at distance s ahead of the break. Returns height y, depth z and slope angle th
-// at face position a (0..1). Cached per 0.2 m of s because the wave shape is fixed for a condition.
-export class Face {
-  constructor(wave) { this.wave = wave; this.cache = new Map(); }
+// The surface of one wave, slice by slice (cached per 20 cm of s): the front (flat water in front, up the face to the top)
+// and the back (from behind the wave up to the crest). Heights in the wave's own frame: zl = z - wave.zW.
+export class Profile {
+  constructor(wave) { this.w = wave; this.cache = new Map(); this.buf = new Float32Array(256); }
   slice(s) {
     const key = Math.round(s * 5);
     let c = this.cache.get(key);
     if (c) return c;
-    const out = new Float32Array(64 * 4); this.wave.section(key / 5, out);
-    // the rideable face runs from the toe (sample ~6 of 64) up to the upper face (sample ~22); find it by index
-    const pts = [];
-    for (let j = 5; j <= 24; j++) pts.push([out[j * 4], out[j * 4 + 1]]);
-    let L = 0; const acc = [0];
-    for (let i = 1; i < pts.length; i++) { L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); acc.push(L); }
-    c = { pts, acc, L: Math.max(L, 0.3), ...this.wave.shapeAt(key / 5) };
-    if (this.cache.size > 4000) this.cache.clear();
+    const w = this.w, o = this.buf, H = w.cond.H, sk = key / 5; w.section(sk, o);
+    const F = [[o[0], o[1]]];
+    let j = 1;
+    for (; j < 64; j++) { const z = o[j * 4], y = o[j * 4 + 1], p = F[F.length - 1]; if (z >= p[0] - 1e-4 || y < p[1] - 1e-3) break; F.push([z, y]); }
+    const B = [[o[63 * 4], o[63 * 4 + 1]]];
+    for (let k = 62; k > j; k--) { const z = o[k * 4], y = o[k * 4 + 1], p = B[B.length - 1]; if (z <= p[0] + 1e-4 || y < p[1] - 1e-3) break; B.push([z, y]); }
+    const sh = w.shapeAt(sk), amp = sk > 0 ? 1 - 0.55 * smooth(8, 70, sk) : 1 - 0.15 * smooth(0, 40, -sk);
+    c = { F, B, top: Math.max(F[F.length - 1][1], B[B.length - 1][1]), topZ: F[F.length - 1][0], broken: sh.broken, curl: sh.curl,
+      lipY: sh.P[7][1] * H * amp, lipZ: sh.P[7][0] * H };
+    if (this.cache.size > 6000) this.cache.clear();
     this.cache.set(key, c);
     return c;
   }
-  // water height at (s, z) on the front of the wave (the face and the flat water in front of it)
-  surfaceY(s, z) {
-    const c = this.slice(s), P = c.pts;
-    if (z >= P[0][0]) return Math.max(0, P[0][1]);
-    for (let i = 1; i < P.length; i++) if (z >= P[i][0]) { const t = (z - P[i][0]) / (P[i - 1][0] - P[i][0] || 1e-6); return P[i][1] + (P[i - 1][1] - P[i][1]) * t; }
-    const top = P[P.length - 1];                    // past the top of the face: the back of the wave slopes away
-    return Math.max(0, top[1] - (top[0] - z) * 0.55);
+  height(s, zl) {
+    const c = this.slice(s), F = c.F, B = c.B;
+    if (zl >= F[0][0]) return 0;
+    if (zl >= F[F.length - 1][0]) {
+      for (let i = 1; i < F.length; i++) if (zl >= F[i][0]) { const t = (zl - F[i][0]) / (F[i - 1][0] - F[i][0] || 1e-6); return F[i][1] + (F[i - 1][1] - F[i][1]) * t; }
+    }
+    if (zl <= B[0][0]) return 0;
+    if (zl <= B[B.length - 1][0]) {
+      for (let i = 1; i < B.length; i++) if (zl <= B[i][0]) { const t = (zl - B[i][0]) / (B[i - 1][0] - B[i][0] || 1e-6); return B[i][1] + (B[i - 1][1] - B[i][1]) * t; }
+    }
+    return c.top;                                     // over the crest
   }
-  // depth (z) of the front of the wave at height y: anything shoreward of this is open air in front of the face
-  zAtHeight(s, y) {
-    const P = this.slice(s).pts;
-    for (let i = 1; i < P.length; i++) if (P[i][1] >= y) { const t = (y - P[i - 1][1]) / Math.max(1e-6, P[i][1] - P[i - 1][1]); return P[i - 1][0] + (P[i][0] - P[i - 1][0]) * t; }
-    return P[P.length - 1][0];
-  }
-  at(s, a) {
-    const c = this.slice(s), target = Math.min(1, Math.max(0, a)) * c.L;
-    let i = 1; while (i < c.acc.length - 1 && c.acc[i] < target) i++;
-    const t = (target - c.acc[i - 1]) / Math.max(1e-6, c.acc[i] - c.acc[i - 1]);
-    const p0 = c.pts[i - 1], p1 = c.pts[i];
-    const z = p0[0] + (p1[0] - p0[0]) * t, y = p0[1] + (p1[1] - p0[1]) * t;
-    const th = Math.atan2(p1[1] - p0[1], Math.abs(p1[0] - p0[0]) + 1e-6);   // face angle from horizontal
-    return { z, y, th, L: c.L, curl: c.curl, broken: c.broken };
+  // how far toward the beach the face reaches at height y (anything shoreward of this is open air in front of the wave)
+  frontZAt(s, y) {
+    const F = this.slice(s).F;
+    for (let i = 1; i < F.length; i++) if (F[i][1] >= y) { const t = (y - F[i - 1][1]) / Math.max(1e-6, F[i][1] - F[i - 1][1]); return F[i - 1][0] + (F[i][0] - F[i - 1][0]) * t; }
+    return F[F.length - 1][0];
   }
 }
 
+// Everything the rider needs to know about the water at a point: which wave, where on it, how high
+const SPAN_LO = -50, SPAN_HI = 66;                    // the wave mesh covers s from -55 to 70
+export function waterAt(waves, x, z, out) {
+  out.y = 0; out.w = null;
+  for (const w of waves) {
+    const s = x - w.peelX; if (s < SPAN_LO || s > SPAN_HI) continue;
+    const zl = z - w.zW; if (zl > 20 || zl < -14) continue;
+    const y = w.prof.height(s, zl) * w.fade;
+    if (y > out.y || !out.w) { out.y = y; out.w = w; out.s = s; out.zl = zl; }
+  }
+  return out;
+}
+const _q = {}, _c = {};
+export function heightAt(waves, x, z) { return waterAt(waves, x, z, _q).y; }
+
 export class Rider {
-  constructor(wave) {
-    this.wave = wave; this.face = new Face(wave);
-    this.reset();
+  constructor() { this.reset(0, -6, -Math.PI / 2); }
+  reset(x, z, th) {
+    this.x = x; this.z = z; this.y = 0; this.vx = 0; this.vz = 0; this.th = th;
+    this.state = 'LIE'; this.stateT = 0; this.why = ''; this.washed = false;
+    this.paddling = false; this.paddleT = 0; this.catchT = 0;
+    this.turn = 0; this.skid = 0; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
+    this.wave = null; this.s = 99; this.zl = 99; this.inBarrel = false; this.onFace = false; this.lowT = 0;
+    this.pumpHold = 0; this.pumping = false;
+    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, speed: 0, end: 0, score: 0 }; this.turnSign = 0;
   }
-  reset() {
-    this.state = 'WAIT';            // WAIT -> PADDLE -> POPUP -> RIDE -> (WIPE | DONE)
-    this.stateT = 0;
-    this.x = 0; this.a = 0; this.v = 0; this.psi = 0; this.turn = 0;
-    this.zRel = 36;                 // while waiting/paddling: metres in front of the wave's toe
-    this.paddleV = 0; this.heading = 0;   // paddling heading: 0 = toward the beach, + = angled toward +x (down the line)
-    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, speed: 0, end: 0, score: 0 }; this.skid = 0; this.lastSide = 0; this.lifting = false; this.u = 0; this.paddleT = 0; this.pumpHold = 0; this.pumping = false; this.inBarrel = false; this.why = '';
-  }
-  get s() { return this.x - this.wave.peelX; }
   set(state) { this.state = state; this.stateT = 0; }
+  get standing() { return this.state === 'POP' || this.state === 'RIDE'; }
 
-  update(dt, inp) {
-    const C = this.wave.cond, H = C.H;
+  update(dt, inp, waves) {
     this.stateT += dt;
-    if (this.state === 'WAIT' || this.state === 'PADDLE') {
-      // lying on the board: hold PADDLE to move toward the beach; the wheel angles you along the wave
-      if (inp.paddle && this.state === 'WAIT') this.state = 'PADDLE';
-      if (inp.paddle) this.paddleT += dt;
-      this.paddleV += ((inp.paddle ? RIDE.paddleMax : 0) - this.paddleV) * Math.min(1, dt * (inp.paddle ? RIDE.paddleAcc : 0.6));
-      this.heading = Math.max(-1.1, Math.min(1.1, this.heading + inp.steer * 1.4 * dt));
-      this.x += Math.sin(this.heading) * this.paddleV * dt;
-      // the wave rolls in at its own speed; you close the gap only as fast as the wave outruns your paddling
-      if (!this.lifting) this.zRel -= (C.speed - Math.cos(this.heading) * this.paddleV) * dt;
-      const s = this.s;
-      if (this.zRel <= 0 && !this.lifting) {
-        // the face reaches you: if it's already broken here you get hit, otherwise it starts lifting you
-        if (s < -0.3 * H) return this.wipe(s < -4.5 * H ? 'The whitewater ran you over' : this.paddleT > 4 ? 'Paddled too early: you ended up inside it' : 'Caught inside: it broke right on you');
-        if (this.state === 'WAIT') this.state = 'PADDLE';   // the wave picks you up: you're lying down and facing in now
-        this.lifting = true; this.a = 0.03; this.u = Math.max(0, Math.cos(this.heading) * this.paddleV);
-      }
-      if (this.lifting) {
-        // on the face: you slide down it (gravity), your paddling adds a little, the water drags;
-        // the wave keeps moving under you. Match its speed before it passes and you're on.
-        const f = this.face.at(s, this.a);
-        this.u += (RIDE.g * Math.sin(f.th) * RIDE.slide + (inp.paddle ? RIDE.paddleAcc * 1.2 : 0) - 0.35 * this.u) * dt;
-        this.a = Math.max(0, this.a + (C.speed - this.u) / f.L * dt);
-        if (s < -0.3 * H) return this.wipe('Too late: it broke on top of you');
-        if (this.u >= C.speed * 0.82) {
-          if (this.heading < -0.3) return this.done('Went left: this reef only peels right');
-          this.set('POPUP'); this.v = this.u + 0.8 + 0.1 * C.peel; this.psi = -0.25 * C.forgive;   // pop up angled slightly down the line
-          return;
-        }
-        if (this.a > 0.97) return this.done(this.paddleV > RIDE.paddleMax * 0.6 ? 'It rolled under you: start paddling earlier' : 'Not enough speed: hold PADDLE as it comes');
-      }
-      return;
-    }
-    if (this.state === 'POPUP') {
-      this.physics(dt, { steer: 0 }, 0.6);
-      if (this.stateT > 0.45) this.set('RIDE');
-      return;
-    }
-    if (this.state === 'RIDE') { this.physics(dt, inp, 1); this.ride.t += dt; return; }
+    if (this.state === 'WIPE' || this.state === 'OUT') return;
+    const n = dt > 0.02 ? 3 : 2, h = dt / n;
+    for (let i = 0; i < n && this.state !== 'WIPE' && this.state !== 'OUT'; i++) this.step(h, inp, waves);
   }
 
-  physics(dt, inp, control) {
-    const C = this.wave.cond, H = C.H;
-    const s = this.s, f = this.face.at(s, this.a);
-    const sinTh = Math.sin(f.th);
-    // steering: the wheel sets how hard you turn; fast boards carve wider arcs
-    const rate = RIDE.turnSlow + (RIDE.turnFast - RIDE.turnSlow) * smooth(3, 11, this.v);
-    // the thumb sets how far you lean the board up (+) or down (-) the face; let go and it runs straight along the line.
-    // The board can only swing round so fast (slower at speed, gentler on small faces).
-    // The thumb picks the line you want to ride: far left = high line (slow, the stall), middle = mid-face trim,
-    // far right = low line (fast). You lean the board toward that line, looking a moment ahead like a real surfer,
-    // limited by how fast the board can turn and how much the fins can hold.
-    const line = 0.5 + RIDE.lineSpan * inp.steer * control;   // inp.steer + = up the face (thumb left)
-    const ahead = this.a + Math.sin(this.psi) * this.v / f.L * 0.3;
-    const target = Math.max(-RIDE.maxAngle, Math.min(RIDE.maxAngle, (line - ahead) * RIDE.lineGain));
-    const maxRate = rate * (0.6 + 0.4 * smooth(1, 2.5, f.L));
-    let wantTurn = Math.max(-maxRate, Math.min(maxRate, (target - this.psi) * 5));
-    // the fins can only hold so much sideways load (less in heavy surf): ask for more and the tail skids out, scrubbing speed
-    const grip = RIDE.gripBase * (1.1 - 0.08 * H);
-    const gripRate = grip / Math.max(this.v, 1);
-    this.skid = Math.abs(wantTurn) > gripRate ? Math.min(1, (Math.abs(wantTurn) - gripRate) / gripRate) : 0;
-    if (this.skid) wantTurn = Math.sign(wantTurn) * gripRate;
-    this.turn += (wantTurn - this.turn) * Math.min(1, dt * 10);
-    this.psi += this.turn * dt;
-    this.psi = Math.max(-1.3, Math.min(1.3, this.psi));
-    // forces along the board
-    const down = -Math.sin(this.psi);                               // 1 = pointing straight down the face
-    const grav = RIDE.g * sinTh * down;
-    // the pocket: power right ahead of the curl, fading out along the shoulder; mid-face best
-    // out on the flat shoulder there is almost no push: you slow down and the curl catches back up to you
-    const pocketAlong = s > -4.5 * H ? (s < 0 ? 1 : 1 - smooth(0.5 * H, 4 * H, s)) : 0;
-    // the stall line: high on the face bleeds speed. Inside a hollow tube it starts lower (riding high in the barrel = hand-drag stall)
-    const tubeZone = C.hollow > 0.5 ? smooth(-0.2 * H, -0.7 * H, s) * (1 - smooth(-4 * H, -4.5 * H, s)) : 0;
-    const hi0 = 0.68 - 0.2 * tubeZone;
-    const pocketHigh = (0.2 + 0.8 * smooth(0.1, 0.35, this.a)) * (1 - 0.75 * smooth(hi0, hi0 + 0.27, this.a));
-    const push = RIDE.pocket * (0.7 + 0.25 * C.H) * pocketAlong * pocketHigh * Math.max(0, Math.cos(this.psi));
-    // flats are slow; riding high near the lip stalls you (that's how you let the curl catch up for a barrel)
-    const drag = RIDE.drag * this.v + RIDE.drag2 * this.v * this.v + (this.a < 0.05 ? 1.2 : 0) + RIDE.stallHigh * C.forgive * smooth(hi0, hi0 + 0.27, this.a) * Math.min(1, this.v / 3);
-    // pumping: push the board into the face on the way down (more speed out of the drop), stay light going up.
-    // Pushing while climbing just bogs you down, and legs can only push for so long before they're fully compressed.
-    this.pumpHold = inp.pump ? this.pumpHold + dt : 0;
-    const legs = 1 - smooth(0.45, 1.1, this.pumpHold);
-    const pump = inp.pump ? RIDE.pump * RIDE.g * sinTh * down * (down > 0 ? legs : 1.3) : 0;
-    this.pumping = inp.pump && down > 0 && legs > 0.2;
-    this.v = Math.max(0, this.v + (grav + push + pump - drag) * dt);
-    // move: along the wave and up/down the face; the face also carries you up toward the lip
-    this.x += Math.cos(this.psi) * this.v * dt;
-    this.a += (Math.sin(this.psi) * this.v / f.L + RIDE.lift * C.forgive * (0.4 + 0.6 * pocketAlong) * (0.5 + f.curl)) * dt;
-    this.a = Math.max(0, this.a);
-    // bookkeeping
-    if (this.skid) this.v = Math.max(0, this.v - RIDE.skidLoss * this.skid * dt);
-    const kmh = this.v * 3.6; this.ride.top = Math.max(this.ride.top, kmh);
-    if (this.state === 'RIDE') this.ride.speed += Math.max(0, this.v - C.peel) * dt;   // outrunning the peel = real speed
-    const s2 = this.s;
-    // inside the tube = behind where the lip lands and under the ceiling; out on the flats in front of it is where the lip lands
-    const fz = this.face.at(s2, this.a).z, lip = this.wave.lipAt(s2), lipDown = C.hollow > 0.5 && lip[1] < 0.45 * H;
-    this.inBarrel = lipDown && s2 < -0.4 * H && s2 > -4.5 * H && fz < lip[2] - 0.25 && this.a < 0.75;
-    this.underLip = lipDown && s2 < -0.3 * H && s2 > -4.5 * H && Math.abs(fz - lip[2]) < 0.45 + 0.1 * H;
-    if (this.inBarrel && this.state === 'RIDE') this.ride.barrel += dt;
-    if (this.state === 'RIDE' && s2 > -0.5 * H && s2 < 3 * H) this.ride.pocket += dt;   // surfing close to the curl
-    // turns: a swing from climbing to dropping (or back) at speed counts as a real top or bottom turn
-    if (this.state === 'RIDE') {
-      if (this.psi > 0.35 && this.lastSide !== 1) { if (this.lastSide === -1 && this.v > C.peel * 0.9) this.ride.turns++; this.lastSide = 1; }
-      else if (this.psi < -0.35 && this.lastSide !== -1) { if (this.lastSide === 1 && this.v > C.peel * 0.9) this.ride.turns++; this.lastSide = -1; }
+  step(h, inp, waves) {
+    const P = RIDE, g = P.g;
+    // the water here: height, slope (finite differences), which wave
+    const q = waterAt(waves, this.x, this.z, _c), e = 0.15;
+    const hx = (heightAt(waves, this.x + e, this.z) - heightAt(waves, this.x - e, this.z)) / (2 * e);
+    const hz = (heightAt(waves, this.x, this.z + e) - heightAt(waves, this.x, this.z - e)) / (2 * e);
+    this.y = q.y; this.hx = hx; this.hz = hz; this.wave = q.w; this.s = q.w ? q.s : 99; this.zl = q.w ? q.zl : 99;
+    const w = q.w, C = w ? w.cond : null, H = C ? C.H : 1, cw = C ? C.speed : 0;
+    const dx = Math.cos(this.th), dz = Math.sin(this.th);
+    const slope2 = hx * hx + hz * hz;
+    this.gAlong = hx * dx + hz * dz;                                   // rise per metre in the direction the board points
+    // the water itself moves with the wave (shoreward, strongest under the crest), and the whitewater is a moving bore
+    // (shallow-water flow c*y/(d+y) on a gentle swell; on a steep face near breaking the water at the crest moves at nearly c,
+    //  which is exactly why it breaks: that's what picks a paddling surfer up)
+    const sl = w ? w.prof.slice(q.s) : null;
+    const d = H / 0.78, slopeNow = Math.sqrt(hx * hx + hz * hz);
+    const steep = smooth(0.35, 1.2, slopeNow), hRel = sl ? Math.min(1, q.y / Math.max(0.3, sl.top)) : 0;
+    let uz = w ? cw * Math.max(q.y / (d + q.y), Math.pow(hRel, 1.3) * (0.35 + 0.55 * steep)) * P.waterPush : 0;
+    if (sl && sl.broken > 0.3 && q.zl > sl.topZ - 1.5 && q.y > 0.05) uz = Math.max(uz, cw * 0.85 * sl.broken);
+    // Gravity along the surface, plus the push of the face itself. Work in the wave's own frame (moving along with the
+    // peel and in toward the beach), where its shape stands still: a board sliding over a curved surface is pressed
+    // against it by the curvature (the w.Hess.w term), so a face rising under you shoves you forward and down it.
+    let curv = 0;
+    if (w) {
+      const wx = this.vx - C.peel, wz = this.vz - cw, ws = Math.hypot(wx, wz);
+      if (ws > 0.05) {
+        const ux = wx / ws, uz2 = wz / ws, ee = 0.3;
+        const d2 = (heightAt(waves, this.x + ux * ee, this.z + uz2 * ee) - 2 * q.y + heightAt(waves, this.x - ux * ee, this.z - uz2 * ee)) / (ee * ee);
+        curv = Math.max(-30, Math.min(30, ws * ws * d2));
+      }
     }
-    if (this.state !== 'RIDE') return;
-    // mistakes
-    if (this.a > 1.02 + 0.15 * (1 - C.forgive) && s2 < 1.2 * H) return this.wipe('Too high: the lip threw you over the falls');
-    if (this.a > 1.12) return this.done('Kicked out over the back');
-    if (s2 < -4.5 * H) return this.wipe(C.hollow > 0.5 ? 'The barrel closed on you' : 'The whitewater caught you');
-    if (s2 < -0.3 * H && this.a > 0.8) return this.wipe('The lip landed on you');
-    if (this.underLip) return this.wipe('The lip landed on you');
-    if (this.v < RIDE.stall && this.ride.t > 1) return this.done('Lost speed: the wave left you');
-    if (s2 > 60) return this.done('Rode it out to the end of the wave');
-    if (this.wave.peelX > this.wave.reefEnd) { this.ride.end = 1; return this.done('Made it to the end of the reef'); }
+    const gs = (this.standing ? 1 : P.lieGravity) * Math.max(0, g + curv) / (1 + slope2);
+    let ax = -gs * hx, az = -gs * hz;
+    // board velocity relative to the water: along the board and sideways
+    const rx = this.vx, rz = this.vz - uz;
+    const along = rx * dx + rz * dz, lx = rx - along * dx, lz = rz - along * dz;
+    if (!this.standing) {
+      // lying: slow hull, sitting up is a brake, arms push you along
+      this.paddling = inp.paddle;
+      this.paddleT = inp.paddle ? this.paddleT + h : 0;
+      this.recentPaddle = inp.paddle ? 0.6 : Math.max(0, (this.recentPaddle || 0) - h);   // you only get into a wave by paddling for it
+      const k = (P.lieDrag + P.lieDrag2 * Math.abs(along)) * (inp.paddle ? 1 : 1.8);
+      ax += -k * along * dx - P.lieLat * lx; az += -k * along * dz - P.lieLat * lz;
+      if (inp.paddle) { const f = P.paddleThrust * Math.max(0, 1 - (along / P.paddleMax) ** 2); ax += f * dx; az += f * dz; }
+      this.th += inp.steer * (inp.paddle ? P.paddleTurn : P.lieTurn) * h;
+      this.turn = 0; this.skid = 0;
+    } else {
+      // standing: planing drag along the board, fins stop it sliding sideways (up to their grip), carving turns the board
+      const pop = this.state === 'POP' ? 0.4 : 1;
+      const speed = Math.hypot(this.vx, this.vz);
+      const want = inp.steer * Math.min(P.turnMax, Math.max(0.9, speed / P.turnRadius)) * pop;
+      this.turn += (want - this.turn) * Math.min(1, h * 10);
+      this.th += this.turn * h;
+      const dr = P.drag * along + P.drag2 * along * Math.abs(along);
+      ax += -dr * dx; az += -dr * dz;
+      const latA = P.finGrip * Math.hypot(lx, lz), lim = P.gripMax * pop;
+      this.skid = latA > lim ? Math.min(1, latA / lim - 1) : 0;
+      const sc = latA > lim ? lim / latA : 1;
+      ax += -P.finGrip * lx * sc; az += -P.finGrip * lz * sc;
+      if (this.skid) { const loss = P.skidLoss * (latA - lim) * Math.sign(along); ax += -loss * dx; az += -loss * dz; }
+      // pumping: weight the board on the way down, stay light going up. Legs only push for so long.
+      this.pumpHold = inp.pump ? this.pumpHold + h : 0;
+      const legs = 1 - smooth(0.45, 1.1, this.pumpHold);
+      if (inp.pump) {
+        const pull = g * Math.abs(this.gAlong) / (1 + slope2) * P.pump;
+        const f = this.gAlong < 0 ? pull * legs : -pull * 1.2;
+        ax += f * dx; az += f * dz;
+      }
+      this.pumping = inp.pump && this.gAlong < 0 && legs > 0.2;
+    }
+    this.vx += ax * h; this.vz += az * h;
+    this.x += this.vx * h; this.z += this.vz * h;
+    this.v = Math.hypot(this.vx, this.vz);
+    this.judge(h, w, sl, q);
+  }
+
+  // what the wave does to you from here: catching, the barrel, the lip, the whitewater, kicking out, losing it
+  judge(h, w, sl, q) {
+    const P = RIDE;
+    this.inBarrel = false; this.washed = false;
+    if (!w) { this.onFace = false; if (this.standing) this.lostSpeed(h); return; }
+    const C = w.cond, H = C.H, s = q.s, zl = q.zl, y = q.y, slope = Math.hypot(this.hx, this.hz);
+    const lipDown = C.hollow > 0.5 && sl.lipY < 0.45 * H;
+    const onFront = zl > sl.topZ - 0.3;                               // on the face side of the wave, not behind it
+    this.onFace = onFront && slope > 0.22 && this.hz < -0.1;          // downhill is toward the beach
+    // the lip lands on anyone under it
+    if (lipDown && s < -0.3 * H && s > -4.5 * H && Math.abs(zl - sl.lipZ) < 0.45 + 0.1 * H && y < 0.55 * H) return this.wipe('The lip landed on you');
+    if (!this.standing) {
+      // caught inside: the whitewater rolls you toward the beach (you hang on to the board)
+      if (sl.broken > 0.35 && onFront && y > 0.1 * H) this.washed = true;
+      // pulled over the falls: lying at the top of a wave that's pitching
+      if (onFront && y > 0.8 * sl.top && s < 0.6 * H && s > -2 * H && zl < sl.topZ + 0.4) return this.wipe('Too late: it pulled you over the falls');
+      // the catch: on the face, heading for the beach, and going as fast as the wave
+      // (once you're sliding down a steep enough face at a good share of its speed, it has you: you pop up and gravity does the rest)
+      if (this.onFace && this.recentPaddle > 0 && Math.sin(this.th) > 0.2 && this.vz > C.speed * 0.5 && slope > 0.4) { this.catchT += h; if (this.catchT > 0.1) { this.set('POP'); this.catchT = 0; } }
+      else this.catchT = 0;
+      return;
+    }
+    if (this.state === 'POP' && this.stateT >= P.popTime) this.set('RIDE');
+    const riding = this.state === 'RIDE';
+    if (riding) this.ride.t += h;
+    // falling out of the whitewater
+    if (sl.broken > 0.4 && onFront && y > 0.12 * H) return this.wipe(C.hollow > 0.5 ? 'The whitewater caught you' : 'The whitewater knocked you off');
+    // too high while it's throwing
+    if (onFront && y > 0.86 * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
+    this.inBarrel = lipDown && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
+    // over the back
+    if (!onFront && y < 0.4 * Math.max(sl.top, 0.3)) return this.out('Kicked out over the back');
+    const kmh = this.v * 3.6; this.ride.top = Math.max(this.ride.top, kmh);
+    if (riding) {
+      if (this.inBarrel) this.ride.barrel += h;
+      if (onFront && s > -0.5 * H && s < 3 * H && y > 0.2 * H) this.ride.pocket += h;
+      this.ride.speed += Math.max(0, this.v - C.peel) * h;
+      // a turn counts when the carve swings hard one way and then hard the other at speed
+      if (Math.abs(this.turn) > 0.9 && this.v > C.peel * 0.8) {
+        const sg = Math.sign(this.turn);
+        if (sg !== this.turnSign) { if (this.turnSign !== 0) this.ride.turns++; this.turnSign = sg; }
+      }
+      if (w.peelX > w.xEnd) { this.ride.end = 1; return this.out('Made it to the end of the reef'); }
+      if (this.z > w.zBeach) { this.ride.end = 1; return this.out('Rode it all the way in'); }
+    }
+    this.lostSpeed(h);
+  }
+  lostSpeed(h) {
+    this.lowT = (this.v < 2.2 || (!this.onFace && this.v < 3.2)) ? this.lowT + h : 0;
+    if (this.lowT > 0.6) this.out(this.ride.t > 0 ? 'Lost speed: the wave left you' : 'Missed it');
   }
 
   // like a contest judge: turns, speed, time in the barrel and in the pocket; just riding along earns little
   liveScore() { const r = this.ride; return Math.round(r.t * 2 + r.pocket * 4 + r.turns * 25 + r.speed * 6 + r.barrel * 80 + r.end * 100); }
-  wipe(why) { this.why = why; this.set('WIPE'); this.score(true); }
-  done(why) {
-    // from wherever you are on the face, the wave now rolls on under you (pose() follows zRel from here)
-    if (this.lifting || this.state === 'POPUP' || this.state === 'RIDE') {
-      const s = this.s; this.zRel = this.face.at(s, Math.min(this.a, 1.05)).z - this.face.at(s, 0).z - 0.6; this.lifting = false;
-    }
-    this.why = why; this.set('DONE'); this.score(false);
-  }
-  score(wiped) {
-    const r = this.ride;
-    r.score = Math.round(this.liveScore() * (wiped && r.t > 0 ? 0.8 : 1));
-  }
+  wipe(why) { this.why = why; this.set('WIPE'); this.ride.score = Math.round(this.liveScore() * (this.ride.t > 0 ? 0.8 : 1)); }
+  out(why) { this.why = why; this.set('OUT'); this.ride.score = this.liveScore(); }
 
-  // world transform of the board: position on the face and orientation (forward along heading, up = face normal)
+  // world pose of the board: position, forward along the board, up out of the deck
   pose(out) {
-    const s = this.s;
-    if (this.state === 'WAIT' || this.state === 'PADDLE' || this.state === 'DONE') {
-      // lying on the water in front of the wave; as the face arrives it lifts you, and if you miss it, it rolls under you
-      const toe = this.face.at(s, 0);
-      if (this.lifting && this.state !== 'DONE') {
-        const f = this.face.at(s, this.a), c = Math.cos(f.th), sn = Math.sin(f.th);
-        out.pos.set(this.x, f.y + 0.05, f.z);
-        out.fwd.set(Math.sin(this.heading) * c, -sn, Math.cos(this.heading) * c).normalize();   // nose pointing down the face
-        out.up.set(0, c, sn);
-        return out;
-      }
-      const zWorld = toe.z + this.zRel + 0.6;
-      out.pos.set(this.x, 0.06 + this.face.surfaceY(s, zWorld), zWorld);
-      out.fwd.set(Math.sin(this.heading), 0, Math.cos(this.heading)).normalize();
-      out.up.set(0, 1, 0);
-      return out;
-    }
-    const f = this.face.at(s, Math.min(this.a, 1.05));
-    const cth = Math.cos(f.th), sth = Math.sin(f.th);
-    out.fwd.set(Math.cos(this.psi), sth * Math.sin(this.psi), -cth * Math.sin(this.psi)).normalize();   // along the line (+x) turned up/down the face
-    out.up.set(0, cth, sth).normalize();                           // face normal (out of the wall, toward the beach/sky)
-    out.pos.set(this.x, f.y + 0.04, f.z).addScaledVector(out.up, 0.03);
+    const dx = Math.cos(this.th), dz = Math.sin(this.th);
+    out.pos.set(this.x, this.y + (this.standing ? 0.04 : 0.02), this.z);
+    out.fwd.set(dx, this.gAlong, dz).normalize();
+    out.up.set(-this.hx, 1, -this.hz).normalize();
     return out;
   }
 }

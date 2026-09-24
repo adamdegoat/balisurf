@@ -9,11 +9,13 @@
 // top of the lip -> down the back of the wave. Rendered double-sided so you can see it from inside the tube.
 import * as THREE from 'three';
 
-// speed = how fast the wave comes in (about sqrt(g x depth) for a wave breaking on a reef: 4-6 m/s); peel = how fast it breaks along the reef
+// Real numbers (surf-science literature): a wave breaks at about 0.78 x the depth; near breaking it travels at about
+// sqrt(g(d + H/2)); good surf breaks peel at 45-66 degrees, so the peel rate is c / tan(angle) and a surfer needs c / sin(angle).
+//   H = breaking height (m), speed = how fast it comes in (m/s), peel = how fast it breaks along the reef (m/s), period = s between waves
 export const CONDITIONS = {
-  easy:   { H: 1.1, peel: 4.0, hollow: 0.35, speed: 4.0, surge: 0, forgive: 0.55, name: 'Easy' },
-  medium: { H: 2.0, peel: 5.5, hollow: 0.75, speed: 5.0, surge: 0.18, forgive: 1, name: 'Medium' },
-  hard:   { H: 3.4, peel: 7.5, hollow: 1.0,  speed: 6.0, surge: 0.35, forgive: 1, name: 'Hard' },
+  easy:   { H: 1.1, speed: 4.4, peel: 2.1, angle: 64, period: 11, hollow: 0.35, forgive: 0.55, name: 'Easy' },    // waist-chest high, gentle
+  medium: { H: 2.0, speed: 5.9, peel: 4.1, angle: 55, period: 13, hollow: 0.75, forgive: 1, name: 'Medium' },     // overhead, a proper wave
+  hard:   { H: 3.4, speed: 7.7, peel: 7.2, angle: 47, period: 15, hollow: 1.0, forgive: 1, name: 'Hard' },        // double overhead and fast
 };
 
 // Cross-section keyframes (units of wave height H; z toward the beach, y up). Every keyframe lists the SAME 12
@@ -45,7 +47,7 @@ function catmull(P, u) {                           // u in [0,1] across all segm
 
 export class Wave {
   constructor(scene, cond) {
-    this.cond = cond; this.peelX = 0; this.t = 0;
+    this.cond = cond; this.peelX = 0; this.zW = 0; this.t = 0; this.fade = 1;
     const g = new THREE.BufferGeometry();
     this.pos = new Float32Array(NX * NU * 3);
     this.attr = new Float32Array(NX * NU * 2);      // foam, thinness
@@ -92,7 +94,9 @@ export class Wave {
       const [z, y, i, t] = catmull(P, j / (NU - 1));
       const thin = THIN[i] + (THIN[Math.min(11, i + 1)] - THIN[i]) * t;
       const spray = SPRAY[i] + (SPRAY[Math.min(11, i + 1)] - SPRAY[i]) * t;
-      out[k++] = z * H; out[k++] = Math.max(0, y) * H * amp;
+      // the lower face runs further out in front than the keyframes say: steep near the lip, easing into the flats like a real wave
+      const wide = i < 4 && z > 0 ? 1 + 0.55 * (1 - smooth(0, 0.6, y)) : 1;
+      out[k++] = z * H * wide; out[k++] = Math.max(0, y) * H * amp;
       out[k++] = Math.min(1, broken * 0.9 + spray * curl * 0.7);
       out[k++] = thin * (1 - broken * 0.7);
     }
@@ -135,6 +139,8 @@ export class Wave {
     this.spray.frustumCulled = false; scene.add(this.spray);
     for (let i = 0; i < N; i++) this.sl[i] = -1;
   }
+  // where the break is (peelX) and where the wave is on its way in (zW)
+  place(peelX, zW) { this.placed = true; this.peelX = peelX; this.zW = zW; }
   dispose(scene) {
     scene.remove(this.mesh); scene.remove(this.spray);
     this.geo.dispose(); this.mesh.material.dispose();
@@ -143,9 +149,9 @@ export class Wave {
   lipAt(s) {                                          // world position of the lip tip for the slice at s
     // the shape for a given s never changes, so remember it (per 10 cm); only x moves with the peel
     const key = Math.round(s * 10), c = (this._lip ||= new Map()).get(key);
-    if (c) return [this.peelX + s, c[0], c[1]];
+    if (c) return [this.peelX + s, c[0], c[1] + this.zW];
     const r = this._lipAt(key / 10); if (this._lip.size > 5000) this._lip.clear(); this._lip.set(key, [r[1], r[2]]);
-    return [this.peelX + s, r[1], r[2]];
+    return [this.peelX + s, r[1], r[2] + this.zW];
   }
   _lipAt(s) {
     const { P } = this.shapeAt(s); const H = this.cond.H;
@@ -165,7 +171,7 @@ export class Wave {
         const top = Math.random() < 0.6;
         this.sp[i * 3] = x + (Math.random() - .5) * .3;
         this.sp[i * 3 + 1] = top ? crest[1] * H : y;
-        this.sp[i * 3 + 2] = top ? crest[0] * H : z;
+        this.sp[i * 3 + 2] = top ? crest[0] * H + this.zW : z;
         this.sv[i * 3] = (Math.random() - .5) * .6; this.sv[i * 3 + 1] = 1 + Math.random() * 2.2 * (H / 2); this.sv[i * 3 + 2] = -1.5 - Math.random() * 3;   // offshore wind blows it back
         this.sl[i] = 0.6 + Math.random() * 1.2;
       }
@@ -179,9 +185,9 @@ export class Wave {
 
   update(dt) {
     this.t += dt;
-    this.peelX += this.cond.peel * (this.peelMul ?? 1) * dt;   // peelMul: surges in the peel speed (set by the game)
-    this.mesh.position.x = this.peelX;                // same shape, slid along the reef as it peels
-    ENV.uTime.value += dt;
+    if (!this.placed) this.peelX += this.cond.peel * dt;   // test page: just peel; the game places waves itself
+    this.mesh.position.set(this.peelX, 0, this.zW);   // same shape, slid along the reef as it peels and toward the beach as it comes in
+    this.mesh.scale.y = this.fade;
     this.mesh.material.uniforms.uH.value = this.cond.H;
     this.updateSpray(dt);
   }
