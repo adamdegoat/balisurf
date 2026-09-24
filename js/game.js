@@ -214,14 +214,17 @@ function updateCamera(dt) {
     const tube = rider.inBarrel ? 1 : 0;
     // heading toward the beach (the drop), come in close over your shoulder so you stay on the same face as the surfer;
     // turning along the wave, ease back out to the normal chase distance
-    const shore = standing ? Math.max(0, Math.sin(lookYaw)) : 0;
-    const back = standing ? (3.9 - 1.5 * tube) * (1 - 0.5 * shore) : 3.0, height = standing ? 1.75 - 0.85 * tube - 0.55 * shore : 1.2;
+    // chase distance: far enough to read the wave ahead (surfer ~a third of the screen), a little closer in the tube
+    // during the drop (standing up and the first moments after) come in close over your shoulder: you're on the same face,
+    // so the wave can't come between you and the camera; then ease back out to the normal chase distance
+    const dropK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - Math.max(0, rider.stateT - 0.25) / 0.9) : 0;
+    const back = standing ? (5.2 - 2.1 * tube) * (1 - 0.84 * dropK) : 3.6, height = standing ? 1.65 - 0.6 * tube + 0.15 * dropK : 1.4;   // at the drop: just behind your head
     want.set(p.x - dx * back, p.y + height, p.z - dz * back);
     // look just ahead of you (from the side or front during the drop, at you)
     const ol = Math.hypot(camOff.x, camOff.z) || 1, behind = Math.max(0, Math.min(1, -(camOff.x * dx + camOff.z * dz) / ol));
-    const lead = standing ? 0.3 + 2.4 * behind : 0.5 + 4.5 * behind * behind;
+    const lead = standing ? 1 + 3.5 * behind : 0.5 + 4.5 * behind * behind;   // look down your line so you can read what's coming
     const lx = standing ? Math.cos(lookYaw) : dx, lz = standing ? Math.sin(lookYaw) : dz;   // look where you're actually going
-    look.set(p.x + lx * lead, p.y + (standing ? 0.55 : 0.4), p.z + lz * lead);
+    look.set(p.x + lx * (lead + 3 * dropK), p.y + (standing ? 0.95 - 1.1 * dropK : 0.4), p.z + lz * (lead + 3 * dropK));   // surfer in the lower middle; at the drop, looking down the face
     lookBackK = 0;                                                     // one camera, always behind you, like being the surfer
     // stay out of the water: above the surface here, in front of the face at the camera's height, inside the tube in the barrel
     const q = waterAt(waves, want.x, want.z, _wq2);
@@ -238,8 +241,7 @@ function updateCamera(dt) {
       if (!tube && q.zl < sl.topZ + 1.5 && q.y > 0.15) {
         const top = sl.top * (q.w.fade || 1);
         want.y = Math.max(want.y, top + 1.1);
-        want.x += (p.x - want.x) * 0.25; want.z += (p.z - want.z) * 0.25;
-        look.set(p.x + (look.x - p.x) * 0.35, p.y + 0.35, p.z + (look.z - p.z) * 0.35);   // high up: look down at you, not past you
+
       }
     }
     // stay above the water that's here now and the water that's about to arrive (a wave passing under shouldn't shove the camera)
@@ -248,17 +250,19 @@ function updateCamera(dt) {
     if (!tube) want.y = Math.max(want.y, wy + 0.45);
     if (tube) look.y = p.y + 0.55;                                     // level gaze down the tube toward the opening
     // keep a clear line of sight to the surfer: if water sits between the camera and them, lift the camera until it clears
-    if (!tube) for (let k = 0; k < 8; k++) {
+    if (!tube) for (let k = 0; k < 10; k++) {
       let blocked = false;
       for (let j = 1; j < 7; j++) {
         const f = j / 7, sx = want.x + (p.x - want.x) * f, sy = want.y + (p.y + 0.9 - want.y) * f, sz = want.z + (p.z - want.z) * f;
         if (solidAt(sx, sz) > sy) { blocked = true; break; }
       }
       if (!blocked) break;
-      want.y += 0.45;
+      // first come closer (keeps you big on screen), then climb
+      want.x += (p.x - want.x) * 0.16; want.z += (p.z - want.z) * 0.16; want.y += 0.25;
     }
     // whenever the camera sits well above you, aim at you so you never drop out of the bottom of the screen
-    { const above = want.y - p.y; if (above > 2) { const k = Math.min(1, (above - 2) / 1.5); look.x += (p.x - look.x) * 0.6 * k; look.z += (p.z - look.z) * 0.6 * k; look.y += (p.y + 0.35 - look.y) * k; } }
+    { const above = want.y - p.y; if (above > 1.9) { const k = Math.min(1, (above - 1.9) / 1.4);   // the higher the camera, the more it aims at you
+        look.x += (p.x + lx * 1.5 - look.x) * k; look.z += (p.z + lz * 1.5 - look.z) * k; look.y += (p.y + 0.4 - look.y) * k; } }
   }
   // the camera follows a smoothed version of the surfer (a spring about 0.15 s behind): the board's little hops never shake it
   const tgt = st === 'WIPE' && W.on && surfer ? surfer.getWorldPosition(_anc) : p;
