@@ -104,3 +104,53 @@ export function carveBrain({ hi = 0.7, lo = 0.25, dv = null, gain = 2.5 } = {}) 
     return { steer: Math.max(-1, Math.min(1, d * gain)), paddle: false, pump: false };
   };
 }
+
+// a cutback: ride down the line, then turn hard back toward the curl (up, round, and down facing it),
+// then turn again to go back down the line. Reports how long the turn takes and what speed survives it.
+export function cutback(mode, { at = 5, steer = 1 } = {}) {
+  const G = g(); G.paused = true; G.setMode(mode);
+  document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); G.spawnRider();
+  const br = brain({}); let phase = 0, t0 = 0, v0 = 0, log = [];
+  for (let i = 0; i < 30 * 60; i++) {
+    const r = G.rider;
+    if (r.state === 'WIPE' || r.state === 'OUT') { log.push(`END ${r.why} (phase ${phase})`); break; }
+    let o = br(r);
+    if (r.state === 'RIDE') {
+      if (phase === 0 && r.stateT > at) { phase = 1; t0 = r.stateT; v0 = r.v; log.push(`start v ${(r.v * 3.6).toFixed(0)}km/h th ${r.th.toFixed(2)}`); }
+      if (phase === 1) {   // turn back: heading swings through out-to-sea round to facing the curl (-x)
+        o = { steer: -steer, pump: false };
+        if (Math.cos(r.th) < -0.5) { phase = 2; log.push(`facing the curl after ${(r.stateT - t0).toFixed(2)}s, v ${(r.v * 3.6).toFixed(0)}km/h, slip max ${r._slipMax?.toFixed?.(0)}`); t0 = r.stateT; }
+      } else if (phase === 2) {   // rebound: turn back round toward the beach and down the line
+        o = { steer: steer, pump: false };
+        if (Math.cos(r.th) > 0.3) { phase = 3; log.push(`back down the line after ${(r.stateT - t0).toFixed(2)}s, v ${(r.v * 3.6).toFixed(0)}km/h`); t0 = r.stateT; }
+      } else if (phase === 3 && r.stateT - t0 > 3) { log.push(`still riding 3s later, v ${(r.v * 3.6).toFixed(0)}km/h`); break; }
+    }
+    G.input.test = o.steer; G.input.paddleBtn = r.standing ? o.pump : o.paddle;
+    G.step(1 / 30, 1 / 30, false);
+  }
+  G.input.test = null;
+  return `${mode} cutback: ` + log.join(' | ');
+}
+
+// drift: every 4 s of a ride, hold the thumb at `amt` for 1.2 s; how far the board points away from where it's going (deg)
+export function drift(mode, amt) {
+  const G = g(); G.paused = true; G.setMode(mode);
+  document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); G.spawnRider();
+  const br = brain({}), slips = []; let rideT = 0, n = 0;
+  for (let i = 0; i < 60 * 90 && n < 4; i++) {
+    const r = G.rider;
+    if (r.state === 'WIPE' || r.state === 'OUT') { G.spawnRider(); n++; continue; }
+    let o = br(r);
+    if (r.state === 'RIDE') {
+      rideT += 1 / 60; const ph = rideT % 4;
+      if (ph > 2.5 && ph < 3.7) {
+        o.steer = (Math.floor(rideT / 4) % 2 ? 1 : -1) * amt;
+        if (r.v > 4) { const vd = Math.atan2(r.vz, r.vx); slips.push(Math.abs(wrap(vd - r.th)) * 57.3); }
+      }
+    }
+    G.input.test = o.steer; G.input.paddleBtn = r.standing ? o.pump : o.paddle; G.step(1 / 60, 1 / 60, false);
+  }
+  G.input.test = null; slips.sort((a, b) => a - b);
+  const p = (q) => slips.length ? slips[Math.floor(q * (slips.length - 1))].toFixed(0) : '-';
+  return `${mode} thumb ${amt}: slide p50 ${p(.5)} p90 ${p(.9)} max ${p(1)} deg`;
+}

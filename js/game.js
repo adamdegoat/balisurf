@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
-import { Rider, Profile, waterAt, heightAt } from './surf.js?v=48';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=52';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -618,7 +618,7 @@ function surfStance() {
   const w = stanceW, deep = rider.inBarrel ? 1 : 0;
   // how hard the turn is loading the legs (sideways g), smoothed; which way is the inside of the turn
   gLoad += (Math.min(1.4, Math.abs(rider.turn) * rider.v / 9.8) - gLoad) * 0.15;
-  const leanN = Math.max(-1, Math.min(1, rider.lean / 0.98));
+  const leanN = Math.max(-1, Math.min(1, rider.lean / RIDE.leanMax));
   _in.crossVectors(bodyFwd, bodyUp).normalize().multiplyScalar(-Math.sign(leanN) || 1);   // toward the inside of the carve
   for (const [s, sgn] of [['l', side], ['r', -side]]) {
     // legs: feet about shoulder-and-a-half apart, front foot toward the nose
