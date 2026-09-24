@@ -44,9 +44,21 @@ fit();
 const rig = new THREE.Group(); scene.add(rig);           // board frame: +z along the board, +y out of the deck
 const board = makeBoard(); rig.add(board);
 let surfer = null, mixer = null, clips = {}, curClip = null;
+// first-person cutaway: any part of your own body closer than this to your eyes isn't drawn (your neck, shoulders
+// and upper arms are right at the camera and would fill the screen); hands, forearms, legs and the board stay
+const CUT = { value: 0.42 };
+function cutaway(m) {
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uCut = CUT;
+    sh.vertexShader = 'varying vec3 vCutW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = 'uniform float uCut;\nvarying vec3 vCutW;\n' + sh.fragmentShader.replace('void main() {', 'void main() {\n  if (distance(vCutW, cameraPosition) < uCut) discard;');
+  };
+  m.customProgramCacheKey = () => 'cutaway';
+  m.needsUpdate = true;
+}
 const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
   surfer = g.scene; rig.add(surfer);
-  surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; } });
+  surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else cutaway(o.material); } });
   mixer = new THREE.AnimationMixer(surfer);
   for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale')); clips[c.name] = mixer.clipAction(c); }
   res();
@@ -263,7 +275,10 @@ function povCamera(dt) {
   if (_eye.y < eyeFloor) _eye.y = eyeFloor;
   if (!pov.ready || snapCam) { pov.pos.copy(_eye); pov.vel.set(0, 0, 0); pov.yaw = yawT; pov.ready = true; }
   else {
-    const w0 = 14; pov.vel.addScaledVector(_cv.subVectors(_eye, pov.pos), w0 * w0 * dt).multiplyScalar(Math.max(0, 1 - 2 * w0 * dt)); pov.pos.addScaledVector(pov.vel, dt);
+    // (a plain exponential follow: stays glued to your head through the pop-up, just takes the jitter off; the old
+    // spring was so over-damped it closed only ~2% of the gap a frame and left the camera inside your chest)
+    const k = st === 'POP' || (st === 'RIDE' && rider.stateT < 0.5) ? 30 : 16;
+    pov.pos.lerp(_eye, 1 - Math.exp(-k * dt));
     const dy = Math.atan2(Math.sin(yawT - pov.yaw), Math.cos(yawT - pov.yaw)), maxY = 3.2 * dt;
     pov.yaw += Math.max(-maxY, Math.min(maxY, dy * Math.min(1, dt * 7)));
   }
@@ -654,7 +669,7 @@ function turnBone(bone, axis, ang) {
   bone.updateMatrixWorld(true);
 }
 const _in = new THREE.Vector3(), _fw = new THREE.Vector3();
-let bodyT = 0, gLoad = 0; const STOOP = 0.25; const ARM = { ff: 0.62, fd: 0.45, bf: 0.47, bd: 0.5 };   // hand targets ahead of / below the eyes (front hand, back hand), vetted in first-person
+let bodyT = 0, gLoad = 0; const STOOP = 0.25; const ARM = { ff: 0.62, fd: 0.32, bf: 0.5, bd: 0.4 };   // hand targets ahead of / below the eyes (front hand, back hand), vetted in first-person
 const _af = new THREE.Vector3(), _ar = new THREE.Vector3(), _ah = new THREE.Vector3(), _ap = new THREE.Vector3(), _aq = new THREE.Vector3(); const _sideAx = new THREE.Vector3();
 function surfStance() {
   if (sitting) straddle();
@@ -698,8 +713,8 @@ function surfStance() {
     const front = sgn > 0, sway = Math.sin(bodyT * 1.7 + (front ? 0 : 1.3)) * 0.05;
     const P = _ap.copy(_ah);
     if (front) {
-      P.addScaledVector(F, ARM.ff).addScaledVector(R, ws * 0.25 * (1 - L)).addScaledVector(_in, 0.45 * L).addScaledVector(WORLD_UP, -ARM.fd - 0.3 * L + sway);
-      P.lerp(_aq.copy(_ah).addScaledVector(F, ARM.ff).addScaledVector(R, ws * 0.45).addScaledVector(WORLD_UP, -ARM.fd - 0.3), deep);   // tucked low in the tube, reaching toward the wall
+      P.addScaledVector(F, ARM.ff).addScaledVector(R, ws * 0.25 * (1 - L)).addScaledVector(_in, 0.4 * L).addScaledVector(WORLD_UP, -ARM.fd - 0.12 * L + sway);
+      P.lerp(_aq.copy(_ah).addScaledVector(F, ARM.ff).addScaledVector(R, ws * 0.45).addScaledVector(WORLD_UP, -ARM.fd - 0.08), deep);   // tucked low in the tube, reaching toward the wall
     } else {
       P.addScaledVector(F, ARM.bf - 0.2 * L).addScaledVector(R, -ws * 0.3 * (1 - L)).addScaledVector(_in, -0.5 * L).addScaledVector(WORLD_UP, -ARM.bd + 0.35 * L + sway);
     }
@@ -853,4 +868,4 @@ renderer.setAnimationLoop(() => {
   if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
-window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
+window.__g = { paused: false, cutaway, CUT, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };

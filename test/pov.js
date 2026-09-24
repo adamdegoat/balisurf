@@ -8,6 +8,7 @@ const RT = new THREE.WebGLRenderTarget(160, 74), PIX = new Uint8Array(160 * 74 *
 // share of the screen covered by your own body, and the share of the bottom-centre (where a shoulder would block the view)
 function bodyCover(G) {
   const r = G.renderer, saved = [];
+  if (!MAG.userData.cut && G.cutaway) { G.cutaway(MAG); MAG.userData.cut = true; }   // count only what the player sees (the near-camera cutaway)
   G.surfer.traverse((o) => { if (o.isMesh) { saved.push([o, o.material]); o.material = MAG; } });
   G.camera.updateMatrixWorld(); r.setRenderTarget(RT); r.render(G.scene, G.camera); r.readRenderTargetPixels(RT, 0, 0, 160, 74, PIX); r.setRenderTarget(null);
   for (const [o, m] of saved) o.material = m;
