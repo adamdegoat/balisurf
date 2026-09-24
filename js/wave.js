@@ -144,7 +144,7 @@ export class Wave {
 
   // whitewater mist: big soft puffs boiling off the broken part of the wave and drifting back in the offshore wind
   initMist(scene) {
-    const N = 160; this.mistN = N;
+    const N = 240; this.mistN = N;
     this.mp = new Float32Array(N * 3); this.mv = new Float32Array(N * 3); this.ml = new Float32Array(N).fill(-1); this.ma = new Float32Array(N);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.mp, 3));
     const cv = document.createElement('canvas'); cv.width = cv.height = 64;
@@ -158,7 +158,7 @@ export class Wave {
     const H = this.cond.H, P = this.mp, V = this.mv;
     for (let i = 0; i < this.mistN; i++) {
       if (this.ml[i] <= 0) {
-        if (Math.random() > 0.12) { P[i * 3 + 1] = -99; continue; }
+        if (Math.random() > 0.2) { P[i * 3 + 1] = -99; continue; }
         // born along the top of the whitewater and where the lip hits the water
         const s = -(4 + Math.random() * 10) * H;
         if (s < -50) continue;
@@ -288,7 +288,7 @@ export function waterMaterial({ wave = false } = {}) {
       varying vec3 vW; varying vec3 vN; varying vec2 vFT;
       void main(){
         vec3 pp = position;
-        ${wave ? 'pp.y += aBrk * uH * (sin(pp.x * 1.7 + pp.z * 2.3 + uTime * 3.) * .08 + sin(pp.x * .63 - uTime * 2.1 + pp.z * .9) * .1);' : ''}
+        ${wave ? 'pp.y += aBrk * uH * (sin(pp.x * 1.7 + pp.z * 2.3 + uTime * 3.) * .09 + sin(pp.x * .63 - uTime * 2.1 + pp.z * .9) * .12 + sin(pp.x * 4.1 + pp.z * 3.3 - uTime * 5.) * .045 + sin(pp.x * 2.9 - pp.z * 5.2 + uTime * 4.2) * .04); pp.z += aBrk * uH * sin(pp.x * 1.3 + uTime * 2.6) * .08;   // a churning, lumpy bore, not a smooth plateau' : ''}
         vec4 w = modelMatrix * vec4(pp,1.);
         vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal);
         vFT = ${wave ? 'aFoamThin' : 'vec2(0.)'};
@@ -354,8 +354,12 @@ export function waterMaterial({ wave = false } = {}) {
         float lace = (1. - smoothstep(.0, lw, abs(ln - .5))) * smoothstep(.35, .6, fbm(vec2(vW.x, vW.y + vW.z) * .7));
         lace *= .45 + .55 * smoothstep(2., 10., length(cameraPosition - vW));
         foamMask = max(foamMask, lace * .3 * step(.02, vFT.y) * (1. - base * .5));   // faint: old foam lines, not chalk marks
-        vec3 foamCol = vec3(.95, .9, .86) * (.75 + .25 * max(dot(N, uSun), 0.)) + uHor * .12;
-        col = mix(col, foamCol, foamMask);
+        // whitewater is lumpy boiling foam, not a white slab: churning lumps with grey shadows between them, lit by the sky
+        vec2 fp = vec2(vW.x * 1.7 + vW.z * .5, vW.y * 2.2 + vW.z * 1.3) + vec2(uTime * .35, -uTime * 1.1);
+        float lump = fbm(fp) * .65 + fbm(fp * 2.7 + 5.3) * .35;
+        float shade = .55 + .45 * smoothstep(.25, .75, lump);
+        vec3 foamCol = vec3(.93, .92, .9) * shade * (.72 + .28 * max(dot(N, uSun), 0.)) + mix(uHor, uZen, .5) * .12 * (1. - shade * .5);
+        col = mix(col, foamCol, foamMask * (.82 + .18 * lump));   // thin spots show the water through
         ` : ''}
         // distance haze toward the horizon
         float d = length(cameraPosition - vW);

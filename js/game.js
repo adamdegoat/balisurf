@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=27';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=29';
 import { Rider, Profile, waterAt, heightAt } from './surf.js?v=41';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=3';
@@ -26,7 +26,11 @@ fx.onFlash = () => audio.thunder(Math.random());
 addEventListener('visibilitychange', () => audio.pause(document.hidden));
 const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x3a4a48, 1.3); scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xfff0dd, 2.0); scene.add(sunLight); scene.add(sunLight.target);
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); fitFov(); });
+// fit the screen whenever it changes: rotation, the browser bar sliding away, split screen (iOS doesn't always send 'resize')
+let lastW = 0, lastH = 0;
+const fit = () => { const w = innerWidth, h = innerHeight; if (w === lastW && h === lastH) return; lastW = w; lastH = h; renderer.setSize(w, h); fitFov(); };
+addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 250)); visualViewport?.addEventListener('resize', fit);
+fit();
 
 // ---------- surfer on a board
 const rig = new THREE.Group(); scene.add(rig);           // board frame: +z along the board, +y out of the deck
@@ -182,9 +186,12 @@ function updateCamera(dt) {
   if (st === 'WIPE' && W.on && surfer) {
     // follow the body from the beach side; never below the water
     const b = surfer.getWorldPosition(_cv);
-    // from the beach side, down the line, back far enough to see the lip throw you and the board fly
-    const wy = heightAt(waves, b.x + 2.5, b.z + 7);
-    want.set(b.x + 2.5, Math.max(wy + 1.2, Math.min(b.y, 2) + 1.4), b.z + 7);
+    // from down the line and a little toward the beach (where a filmer stands), high enough to see the lip and the board fly;
+    // it rises ahead of any water rolling toward it so the wave never swallows the camera
+    const cx = b.x + 6.5, cz = b.z + 2.5;
+    let wy = heightAt(waves, cx, cz);
+    for (const w of waves) for (const ta of [0.3, 0.7, 1.2]) wy = Math.max(wy, heightAt(waves, cx, cz - w.cond.speed * ta));
+    want.set(cx, Math.max(wy + 1.0, Math.min(b.y, 2) + 1.8), cz);
     look.set(b.x, Math.max(b.y + (W.t > 1.4 ? 1.3 : 0.2), 0.3), b.z);
   } else {
     // follow the direction you're travelling when you're up and moving, the way the board points when you're lying
@@ -210,7 +217,7 @@ function updateCamera(dt) {
     if (!standing && st === 'LIE') {
       const inc = incoming(), facingIn = Math.sin(rider.th) > 0.4;
       const onWave = rider.y > 0.25 * (rider.wave ? rider.wave.cond.H : 1);
-      const lookBack = facingIn && inc.w && inc.t < 5 ? smooth01(1 - (inc.t - 1) / 3) : 0;
+      const lookBack = facingIn && inc.w && inc.t < 6 ? smooth01(1 - (inc.t - 2.2) / 3) : 0;   // full by ~2 s out, starts ~5 s out
       lookBackK += ((onWave ? 2 : lookBack) - lookBackK) * Math.min(1, dt * 3);
       // pick one framing at a time; the arc smoother below swings the camera between them round the surfer (never through)
       if (lookBackK > 1.4) {          // on the face: in front of you and down the line, looking back up at the drop
@@ -223,6 +230,11 @@ function updateCamera(dt) {
       lookBackK = Math.max(0, lookBackK - dt * 1.6);
       if (lookBackK > 1.2) { want.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); look.set(p.x - 0.3, p.y + 0.6, p.z - 0.5); }
     } else lookBackK = 0;
+    // ride over: settle on a calm, wider shot of you from the side, a little above
+    if (st === 'OUT') {
+      const sx = Math.cos(rider.th + 1.2), sz = Math.sin(rider.th + 1.2);
+      want.set(p.x + sx * 4.5, p.y + 1.7, p.z + sz * 4.5); look.set(p.x, p.y + 0.45, p.z);
+    }
     // stay out of the water: above the surface here, in front of the face at the camera's height, inside the tube in the barrel
     const q = waterAt(waves, want.x, want.z, _wq2);
     if (q.w) {
@@ -597,6 +609,7 @@ function autoQuality(dt) {
   fpsAcc += dt; fpsN++;
   if (fpsAcc < 1) return;
   const fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0;
+  fit();
   // compare against what this screen can actually do (60, 120, or 30 in iPhone Low Power Mode), not a fixed number
   refFps = Math.max(Math.min(fps, 125), refFps - 2);
   if (fps < refFps * 0.82) { lowT++; highT = 0; } else if (fps > refFps * 0.95) { highT++; lowT = 0; }
