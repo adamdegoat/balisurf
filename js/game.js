@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
-import { Rider, Profile, waterAt, heightAt } from './surf.js?v=45';
+import { Rider, Profile, waterAt, heightAt } from './surf.js?v=47';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -374,7 +374,8 @@ function updateRig(dt, t) {
   } else if (st === 'RIDE') {
     // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
     pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
-    const deep = Math.min(0.8, (rider.inBarrel ? 0.62 : 0.3 + 0.15 * Math.min(1, rider.v / 10)) + 0.3 * pumpC);
+    // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
+    const deep = Math.min(0.85, (rider.inBarrel ? 0.62 : 0.25 + 0.12 * Math.min(1, rider.v / 10)) + 0.28 * pumpC + 0.3 * gLoad);
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     clips.crouch.weight = deep; clips.stand.weight = 1 - deep;
     setStance();
@@ -397,7 +398,7 @@ const railSpray = (() => {
   const tex = new THREE.CanvasTexture(cv);
   const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf6f1ea, size: 0.055, map: tex, transparent: true, opacity: 0.75, depthWrite: false }));
   pts.frustumCulled = false; scene.add(pts);
-  let next = 0, acc = 0;
+  let next = 0, acc = 0, fanAcc = 0;
   const emit = (p, v, n, spread) => {
     for (let k = 0; k < n; k++) {
       const i = next; next = (next + 1) % SPRAY_N;
@@ -425,6 +426,18 @@ const railSpray = (() => {
             emit(_p, _v, 1, 0.6);
           }
         }
+        // drifting: the tail sprays a big fan to the outside of the slide
+        if (rider.skid > 0.15) {
+          fanAcc += rider.skid * rider.v * 55 * dt;
+          const side = Math.sign(rider.lean) || 1;                     // spray goes to the outside of the turn
+          while (fanAcc >= 1) {
+            fanAcc--;
+            _p.copy(rig.position).addScaledVector(pose.fwd, -0.7 + Math.random() * 0.25);
+            _v.set(Math.sin(rider.th) * side, 0, -Math.cos(rider.th) * side).multiplyScalar(2.5 + Math.random() * 3.5 * rider.skid)
+              .addScaledVector(pose.fwd, -rider.v * 0.25).add(_cv.set(0, 1.4 + Math.random() * 2.2, 0));
+            emit(_p, _v, 1, 0.9);
+          }
+        } else fanAcc = 0;
       } else acc = 0;
       for (let i = 0; i < SPRAY_N; i++) {
         if (life[i] <= 0) { if (life[i] > -1) { pos[i * 3 + 1] = -50; life[i] = -1; } continue; }
@@ -564,6 +577,16 @@ function straddle() {
     aimBone(bones['calf_' + s], bones['foot_' + s], _t, 0.8);
   }
 }
+// turn a bone about a world axis (keeps everything below it attached)
+function turnBone(bone, axis, ang) {
+  if (!bone || Math.abs(ang) < 1e-4) return;
+  _q.setFromAxisAngle(axis, ang);
+  bone.getWorldQuaternion(_wq); bone.parent.getWorldQuaternion(_pq);
+  bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));
+  bone.updateMatrixWorld(true);
+}
+const _in = new THREE.Vector3(), _fw = new THREE.Vector3();
+let bodyT = 0, gLoad = 0;
 function surfStance() {
   if (sitting) straddle();
   const st = rider.state, want = st === 'RIDE' ? 1 : st === 'POP' ? Math.min(1, rider.stateT / 0.45) : 0;
@@ -571,18 +594,33 @@ function surfStance() {
   if (stanceW < 0.02) return;
   if (!bones.thigh_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   surfer.updateMatrixWorld(true);
+  bodyT += 1 / 60;
   // which way along the board each side of the body sits
   bones.thigh_l.getWorldPosition(_a); bones.thigh_r.getWorldPosition(_b);
   const side = Math.sign(_d.subVectors(_a, _b).dot(bodyFwd)) || 1;
   const w = stanceW, deep = rider.inBarrel ? 1 : 0;
+  // how hard the turn is loading the legs (sideways g), smoothed; which way is the inside of the turn
+  gLoad += (Math.min(1.4, Math.abs(rider.turn) * rider.v / 9.8) - gLoad) * 0.15;
+  const leanN = Math.max(-1, Math.min(1, rider.lean / 0.98));
+  _in.crossVectors(bodyFwd, bodyUp).normalize().multiplyScalar(-Math.sign(leanN) || 1);   // toward the inside of the carve
   for (const [s, sgn] of [['l', side], ['r', -side]]) {
     // legs: feet about shoulder-and-a-half apart, front foot toward the nose
     swingBone(bones['thigh_' + s], bones['foot_' + s], sgn, (0.36 + 0.06 * deep) * w);
-    // arms: out along the board, a little forward, lower when tucked in the barrel; the leading arm follows the turn
-    const lift = (deep ? -0.2 : 0.15) + (sgn > 0 ? 0.25 * rider.turn : -0.15 * rider.turn);
-    _t.copy(bodyFwd).multiplyScalar(sgn * 0.9).addScaledVector(bodyUp, lift - 0.25).addScaledVector(INTO_WAVE, 0.25).normalize();
-    aimBone(bones['upperarm_' + s], bones['lowerarm_' + s], _t, 0.75 * w);
+    // arms: the front arm leads into the turn and points where you're going, the back arm swings out for balance;
+    // both drop low and in when tucked in the barrel, and never sit still
+    const sway = Math.sin(bodyT * 1.7 + (sgn > 0 ? 0 : 1.3)) * 0.08;
+    if (sgn > 0) _t.copy(bodyFwd).multiplyScalar(0.85).addScaledVector(_in, 0.55 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.35 : 0.05) + 0.2 * Math.abs(leanN) + sway);
+    else _t.copy(bodyFwd).multiplyScalar(-0.7).addScaledVector(_in, -0.35 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.3 : 0.25) + 0.35 * Math.abs(leanN) + sway);
+    _t.addScaledVector(INTO_WAVE, 0.2).normalize();
+    aimBone(bones['upperarm_' + s], bones['lowerarm_' + s], _t, 0.8 * w);
   }
+  // upper body: shoulders twist into the turn and the chest bends toward the inside; a slow balance sway on top
+  const twist = (leanN * 0.45 + Math.sin(bodyT * 1.1) * 0.05) * w;
+  turnBone(bones.spine_02, bodyUp, twist * 0.5); turnBone(bones.spine_03, bodyUp, twist * 0.5);
+  _fw.copy(bodyFwd);
+  turnBone(bones.spine_01, _fw, -leanN * 0.18 * w * side);
+  // head: look ahead along your line (surfers always look where they're going)
+  turnBone(bones.head, bodyUp, side * 0.55 * w - twist * 0.6);
 }
 
 // ---------- HUD + end of ride
@@ -641,8 +679,7 @@ function autoQuality(dt) {
 
 // ---------- loop
 const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)');
-let last = performance.now(), T = 0, strokeT = 0, lastState = '', crashT = 1, wasSkid = false, wasBarrel = false;
-const buzz = (p) => { try { navigator.vibrate?.(p); } catch (e) {} };
+let last = performance.now(), T = 0, strokeT = 0, lastState = '', crashT = 1;
 function tick(dt) {
   T += dt;
   ENV.uTime.value += dt;
@@ -664,7 +701,7 @@ function tick(dt) {
     for (const v of waves) { const s = rider.x - v.peelX, zl = rider.z - v.zW; if (zl > -20 && zl < 25) near = Math.max(near, Math.max(0, 1 - Math.hypot(s < 0 ? s * 0.4 : s, zl) / (7 * v.cond.H))); }
     let underwater = false;
     if (st === 'WIPE' && W.on && surfer) { const b = surfer.position; underwater = W.t < 1.4 && b.y < heightAt(waves, b.x, b.z) - 0.2; }
-    audio.update({ H: w ? w.cond.H : 1.5, near, barrel: rider.inBarrel && st === 'RIDE', riding: rider.standing, v: rider.v, turn: rider.turn, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
+    audio.update({ H: w ? w.cond.H : 1.5, near, barrel: rider.inBarrel && st === 'RIDE', riding: rider.standing, v: rider.v, turn: rider.turn + rider.skid * 2.5, storm: ENV.weather ? ENV.weather.chop / 2.4 : 0, rain: ENV.weather ? ENV.weather.rain : 0, underwater });
     // the nearest breaking wave thumps each time a new stretch of lip lands (every second or two, faster in big surf)
     crashT -= dt;
     if (crashT <= 0) {
@@ -675,13 +712,10 @@ function tick(dt) {
     }
     if (st === 'LIE' && rider.paddling) { strokeT -= dt * 1.6; if (strokeT <= 0) { strokeT = 0.55; audio.paddle(); } }
     if (st !== lastState) {
-      if (st === 'POP') { audio.splash(0.35); buzz(25); }
-      if (st === 'WIPE') buzz([60, 40, 90]);
+      if (st === 'POP') audio.splash(0.35);
       lastState = st;
     }
-    // feel it: a light tick when the tail breaks loose, a pulse when you get covered in the barrel (Android; iPhones don't allow it)
-    if (rider.skid > 0.3 && !wasSkid) buzz(12); wasSkid = rider.skid > 0.3;
-    if (rider.inBarrel && !wasBarrel) buzz([20, 30, 20]); wasBarrel = rider.inBarrel;
+
     sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   } else {
     // behind the start screen: a slow drift along a peeling wave

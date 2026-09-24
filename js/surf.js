@@ -16,9 +16,9 @@ export const RIDE = {
   drag: 0.09, drag2: 0.013,            // planing drag along the board
   // carving works like a skier or a leaning bike: you tip the board onto its rail and the lean makes the turn,
   // turn rate = g * tan(lean) / speed. The fins hold up to gripMax sideways; lean past that and the tail drifts out.
-  leanMax: 0.98, leanRate: 3.2,        // full thumb = ~56 deg on the rail; how fast you can roll the board over (rad/s)
+  leanMax: 0.98, leanRate: 4.0,        // full thumb = ~56 deg on the rail; how fast you can roll the board over (rad/s)
   finGrip: 12, gripMax: 11,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2) = ~52 deg of lean
-  skidLoss: 0.22,                      // share of the excess sideways force lost as speed while the tail drifts
+  skidLoss: 0.16,                      // share of the excess sideways force lost as speed while the tail drifts
   pump: 0.5,                           // pumping adds this share of the downhill pull (and costs 1.2x that when climbing)
   popTime: 0.35,                       // seconds from lying to standing
   waterPush: 1.0,                      // how much the wave's moving water carries you
@@ -172,9 +172,18 @@ export class Rider {
       this.lean += Math.max(-maxRoll, Math.min(maxRoll, dl * Math.min(1, h * 12)));
       this.turn = P.g * Math.tan(this.lean) / Math.max(speed, 3.2);
       this.th += this.turn * h;
+      // the tail can swing out, but the fins drag the nose back toward where the board is actually going:
+      // slip past ~20 deg is resisted, and it never passes ~42 deg (a drift, not a spin-out)
+      if (speed > 1.5) {
+        const vd = Math.atan2(this.vz, this.vx); let slip = this.th - vd; slip = Math.atan2(Math.sin(slip), Math.cos(slip));
+        const a = Math.abs(slip), soft = 0.35, hard = 0.73;
+        if (a > soft) { const na = a > hard ? hard : a - (a - soft) * Math.min(1, h * 6); this.th = vd + Math.sign(slip) * na; }
+      }
       const dr = P.drag * along + P.drag2 * along * Math.abs(along);
       ax += -dr * dx; az += -dr * dz;
-      const latA = P.finGrip * Math.hypot(lx, lz), lim = P.gripMax * pop;
+      // past ~45 deg of lean the rail starts to release: the harder you lay it over, the more the tail lets go (drift)
+      const release = 1 - 0.55 * smooth(0.72, 0.98, Math.abs(this.lean));
+      const latA = P.finGrip * Math.hypot(lx, lz), lim = P.gripMax * pop * release;
       this.skid = latA > lim ? Math.min(1, latA / lim - 1) : 0;
       const sc = latA > lim ? lim / latA : 1;
       ax += -P.finGrip * lx * sc; az += -P.finGrip * lz * sc;
