@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=21';
-import { Rider, Profile, waterAt, heightAt } from './surf.js?v=35';
+import { Rider, Profile, waterAt, heightAt } from './surf.js?v=37';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=2';
 
@@ -114,8 +114,8 @@ const hold = (el, on, off) => {
 hold(ui.paddle, () => { audio.wake(); input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
 // thumb pad: touch anywhere on the right half; the spot you first touch is the centre.
 // Left/right turns the board left/right, like leaning on a real board: lying, it points you where you paddle; standing, it carves.
-let padTouch = null, padX = 0, padY = 0, lastPadTouch = undefined, lastKnob = 1e9;
-const PAD_R = 55;
+let padTouch = null, padX = 0, padY = 0, lastPadTouch = undefined, lastKnob = 1e9, steerF = 0;
+const PAD_R = 62;                                                   // thumb travel (px) for a full lean
 const padMove = (x, y) => { if (!padTouch) return; padX = Math.max(-1, Math.min(1, (x - padTouch.x0) / PAD_R)); padY = Math.max(-1, Math.min(1, (y - padTouch.y0) / PAD_R)); };
 ui.pad.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); if (padTouch) return; const t = e.changedTouches[0]; padTouch = { id: t.identifier, x0: t.clientX, y0: t.clientY }; padX = padY = 0; }, { passive: false });
 ui.pad.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (padTouch && t.identifier === padTouch.id) padMove(t.clientX, t.clientY); }, { passive: false });
@@ -127,11 +127,15 @@ addEventListener('mouseup', () => { if (padTouch && padTouch.id === 'm') padTouc
 function readInput(dt) {
   if (!padTouch) { padX *= Math.max(0, 1 - dt * 10); padY *= Math.max(0, 1 - dt * 10); }   // let go and the board runs straight
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-  const v = kx || padX;
-  input.steer = input.test != null ? input.test : v;   // input.test: scripted steering for automated checks
+  // thumb feel: a small dead zone (a resting thumb wobbles), fine control near the centre, full lean at the edge,
+  // and a light filter so the board answers smoothly instead of twitching with every pixel
+  const ax = Math.abs(padX), shaped = ax < 0.08 ? 0 : Math.sign(padX) * Math.pow((ax - 0.08) / 0.92, 1.35);
+  const raw = kx || shaped;
+  steerF += (raw - steerF) * Math.min(1, dt * 14);
+  input.steer = input.test != null ? input.test : steerF;   // input.test: scripted steering for automated checks
   input.paddle = !!input.paddleBtn || keys.has('Space');
   if (padTouch !== lastPadTouch) { ui.guide.classList.toggle('live', !!padTouch); lastPadTouch = padTouch; }
-  const kt = Math.round(input.steer * 45); if (kt !== lastKnob) { ui.knob.style.transform = `translateX(${kt}px)`; lastKnob = kt; }
+  const kt = Math.round(padX * 45); if (kt !== lastKnob) { ui.knob.style.transform = `translateX(${kt}px)`; lastKnob = kt; }
   return { paddle: input.paddle, pump: input.paddle, steer: input.steer };    // same button: paddle lying down, pump once standing; steer + = turn right
 }
 
@@ -157,7 +161,8 @@ if (Q.get('mode')) start(Q.get('mode'));
 const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3(), _lk = new THREE.Vector3(), _want = new THREE.Vector3(), _look = new THREE.Vector3();
 const camPos = new THREE.Vector3(0, 2, 10), camLook = new THREE.Vector3(), pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() };
 let camYaw = 0, lookBackK = 0;
-const camOff = new THREE.Vector3(0, 1.3, 3), lookOff = new THREE.Vector3(), _anc = new THREE.Vector3();
+const cam = { a: 0, r: 3, y: 1.3, va: 0, vr: 0, vy: 0, vl: new THREE.Vector3() };
+const camOff = new THREE.Vector3(0, 1.3, 3), lookOff = new THREE.Vector3(), _anc = new THREE.Vector3(), anchorS = new THREE.Vector3(), anchorV = new THREE.Vector3();
 const smooth01 = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 const _wq2 = {};
 function updateCamera(dt) {
@@ -172,64 +177,84 @@ function updateCamera(dt) {
   } else {
     // follow the direction you're travelling when you're up and moving, the way the board points when you're lying
     const standing = rider.standing, moving = rider.v > 2.5 && standing;
-    // standing, stay behind you along the wave: never straight behind when you point down the face (that's up inside the wall)
-    let yaw = moving || rider.state === 'POP' ? Math.atan2(rider.vz, rider.vx) : rider.th;
-    if (standing) yaw = Math.cos(yaw) >= -0.2 ? Math.max(-0.5, Math.min(0.55, yaw)) : Math.PI - Math.max(-0.5, Math.min(0.55, Math.PI - (yaw < 0 ? yaw + 2 * Math.PI : yaw)));
+    // standing, sit behind you along the wave: the shoreward part of your motion is squashed so the camera never ends up
+    // straight behind you when you point down the face (that would be up inside the wall). Smooth and rate-limited.
+    const yaw = standing && (moving || rider.state === 'POP') ? Math.atan2(rider.vz * 0.35, rider.vx + 0.3) : rider.th;
     let dy = yaw - camYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-    camYaw += dy * Math.min(1, dt * (standing ? 4 : 5)); if (snapCam) camYaw = yaw;
+    const maxTurn = 1.3 * dt;                                            // at most ~75 degrees a second
+    camYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * 3))); if (snapCam) camYaw = yaw;
     const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
     const tube = rider.inBarrel ? 1 : 0;
     const back = standing ? 3.9 - 1.6 * tube + 0.05 * rider.v : 3.0, height = standing ? 1.55 - 0.7 * tube : 1.2;
     want.set(p.x - dx * back, p.y + height, p.z - dz * back + (standing ? 1.5 - 0.9 * tube : 0));   // a little out toward the beach so the wall frames the shot
-    look.set(p.x + dx * 5, p.y + (standing ? 0.85 : 0.4), p.z + dz * 5);
+    // look ahead of you only once the camera is actually behind you; from the side or front, look at you
+    const ol = Math.hypot(camOff.x, camOff.z) || 1, behind = Math.max(0, Math.min(1, -(camOff.x * dx + camOff.z * dz) / ol));
+    const lead = 0.5 + 4.5 * behind * behind;
+    look.set(p.x + dx * lead, p.y + (standing ? 0.85 : 0.4), p.z + dz * lead);
     // lying and facing the beach with a wave coming: look back over your shoulder at it; on the face, swing beside you for the drop
     if (!standing && st === 'LIE') {
       const inc = incoming(), facingIn = Math.sin(rider.th) > 0.4;
       const onWave = rider.y > 0.25 * (rider.wave ? rider.wave.cond.H : 1);
       const lookBack = facingIn && inc.w && inc.t < 5 ? smooth01(1 - (inc.t - 1) / 3) : 0;
       lookBackK += ((onWave ? 2 : lookBack) - lookBackK) * Math.min(1, dt * 3);
-      if (lookBackK > 0.01) {
-        const k1 = Math.min(1, lookBackK), k2 = Math.max(0, lookBackK - 1);
-        // stage 1: in front of you (shoreward), a little to the side, looking back past you at the wave
-        _cv.set(p.x + 1.4, p.y + 1.25, p.z + 4.4); want.lerp(_cv, k1);
-        _lk.set(p.x - 0.4, p.y + 0.55, p.z - 4); look.lerp(_lk, k1);
-        // stage 2: in front of you and down the line (where a filmer in the channel would be), looking back up at the drop
-        _cv.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); want.lerp(_cv, k2);
-        _lk.set(p.x - 0.3, p.y + 0.6, p.z - 0.5); look.lerp(_lk, k2);
+      // pick one framing at a time; the arc smoother below swings the camera between them round the surfer (never through)
+      if (lookBackK > 1.4) {          // on the face: in front of you and down the line, looking back up at the drop
+        want.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); look.set(p.x - 0.3, p.y + 0.6, p.z - 0.5);
+      } else if (lookBackK > 0.5) {   // wave coming: in front of you (shoreward), looking back past you at it
+        want.set(p.x + 1.4, p.y + 1.25, p.z + 4.4); look.set(p.x - 0.4, p.y + 0.55, p.z - 4);
       }
     } else if (standing && lookBackK > 0.01) {
-      // just up: ease from the filmer's view into the riding camera
+      // just up: hold the filmer's view a moment, then hand over to the riding camera
       lookBackK = Math.max(0, lookBackK - dt * 1.6);
-      const k2 = Math.min(1, lookBackK);
-      _cv.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); want.lerp(_cv, k2);
-      _lk.set(p.x - 0.3, p.y + 0.6, p.z - 0.5); look.lerp(_lk, k2);
+      if (lookBackK > 1.2) { want.set(p.x + 2.6, p.y + 0.9, p.z + 3.6); look.set(p.x - 0.3, p.y + 0.6, p.z - 0.5); }
     } else lookBackK = 0;
     // stay out of the water: above the surface here, in front of the face at the camera's height, inside the tube in the barrel
     const q = waterAt(waves, want.x, want.z, _wq2);
     if (q.w) {
       const sl = q.w.prof.slice(q.s), H = q.w.cond.H;
-      if (tube) { want.z = Math.min(want.z, sl.lipZ + q.w.zW - 0.45); want.y = Math.min(Math.max(want.y, p.y + 0.45), 0.62 * H); }
+      if (tube) {
+        // inside the tube: under the ceiling, off the wall, behind the falling lip
+        want.y = Math.min(Math.max(want.y, p.y + 0.45), 0.6 * H);
+        const wall = q.w.prof.frontZAt(q.s, want.y) + q.w.zW;
+        want.z = Math.max(wall + 0.5, Math.min(want.z, sl.lipZ + q.w.zW - 0.5));
+      }
       else if (q.zl > sl.topZ - 0.3 && want.y < sl.top + 0.3) {
         const fz = q.w.prof.frontZAt(q.s, want.y) + q.w.zW;
         if (want.z < fz + 0.7) want.z = fz + 0.7;                  // pushed out in front of the wall, never inside it
       }
     }
-    want.y = Math.max(want.y, heightAt(waves, want.x, want.z) + 0.45);
+    // stay above the water that's here now and the water that's about to arrive (a wave passing under shouldn't shove the camera)
+    let wy = heightAt(waves, want.x, want.z);
+    if (!standing) for (const w of waves) { const zl = want.z - w.zW; if (zl > -3 && zl < 16) for (const ta of [0.3, 0.6, 1.0]) wy = Math.max(wy, heightAt(waves, want.x, want.z - w.cond.speed * ta)); }
+    if (!tube) want.y = Math.max(want.y, wy + 0.45);
     if (tube) look.y = p.y + 0.55;                                     // level gaze down the tube toward the opening
   }
-  // smooth the camera's offset from whoever it follows, not its absolute position: no lag when the surfer is flying along
-  const anchor = st === 'WIPE' && W.on && surfer ? surfer.getWorldPosition(_anc) : p;
-  const k = snapCam ? 1 : Math.min(1, dt * (st === 'WIPE' ? 3.5 : 5));
+  // the camera follows a smoothed version of the surfer (a spring about 0.15 s behind): the board's little hops never shake it
+  const tgt = st === 'WIPE' && W.on && surfer ? surfer.getWorldPosition(_anc) : p;
+  if (snapCam) { anchorS.copy(tgt); anchorV.set(0, 0, 0); }
+  else { const w0 = 11; anchorV.addScaledVector(_cv.subVectors(tgt, anchorS), w0 * w0 * dt).multiplyScalar(Math.max(0, 1 - 2 * w0 * dt)); anchorS.addScaledVector(anchorV, dt); }
+  const anchor = anchorS;
+  const snap = snapCam;
   snapCam = false;
-  // swing round the surfer in an arc (angle, distance, height), never cut through them
+  // swing round the surfer in an arc (angle, distance, height) on critically damped springs: it eases in and out,
+  // never jumps, never cuts through the surfer, and its speed is capped
   _cv.subVectors(want, anchor);
   const ta = Math.atan2(_cv.z, _cv.x), tr = Math.hypot(_cv.x, _cv.z);
-  let ca = Math.atan2(camOff.z, camOff.x), cr = Math.hypot(camOff.x, camOff.z);
-  ca += Math.atan2(Math.sin(ta - ca), Math.cos(ta - ca)) * k; cr += (tr - cr) * k;
-  camOff.set(Math.cos(ca) * cr, camOff.y + (_cv.y - camOff.y) * k, Math.sin(ca) * cr);
-  lookOff.lerp(_lk.subVectors(look, anchor), k);
+  if (snap) { cam.a = ta; cam.r = tr; cam.y = _cv.y; cam.va = cam.vr = cam.vy = 0; lookOff.subVectors(look, anchor); cam.vl.set(0, 0, 0); }
+  else {
+    const w0 = st === 'WIPE' ? 3.2 : 3.6, damp = Math.max(0, 1 - 2 * w0 * dt), w2 = w0 * w0 * dt;
+    cam.va = (cam.va + Math.atan2(Math.sin(ta - cam.a), Math.cos(ta - cam.a)) * w2) * damp; cam.va = Math.max(-1.1, Math.min(1.1, cam.va)); cam.a += cam.va * dt;
+    cam.vr = (cam.vr + (tr - cam.r) * w2) * damp; cam.vr = Math.max(-3, Math.min(3, cam.vr)); cam.r += cam.vr * dt;
+    cam.vy = (cam.vy + (_cv.y - cam.y) * w2) * damp; cam.vy = Math.max(-3, Math.min(3, cam.vy)); cam.y += cam.vy * dt;
+    // the point we look at: same kind of spring, a little quicker
+    const l0 = 4.2, ld = Math.max(0, 1 - 2 * l0 * dt);
+    _lk.subVectors(look, anchor).sub(lookOff).multiplyScalar(l0 * l0 * dt);
+    cam.vl.add(_lk).multiplyScalar(ld); if (cam.vl.length() > 3) cam.vl.setLength(3);
+    lookOff.addScaledVector(cam.vl, dt);
+  }
+  camOff.set(Math.cos(cam.a) * cam.r, cam.y, Math.sin(cam.a) * cam.r);
   camPos.addVectors(anchor, camOff); camLook.addVectors(anchor, lookOff);
-  camPos.y = Math.max(camPos.y, heightAt(waves, camPos.x, camPos.z) + 0.3);
+  { const sy = heightAt(waves, camPos.x, camPos.z) + 0.35; if (camPos.y < sy) { cam.y += sy - camPos.y; cam.vy = Math.max(cam.vy, 0); camPos.y = sy; } }   // never under the water
   camera.position.copy(camPos);
   if (st === 'WIPE') { const sh = 0.12 * Math.exp(-(W.t || 0) * 2.5); camera.position.x += (Math.random() - .5) * sh; camera.position.y += (Math.random() - .5) * sh; }
   camera.lookAt(camLook);
@@ -237,7 +262,7 @@ function updateCamera(dt) {
 
 // ---------- surfer pose on the board
 const WORLD_UP = new THREE.Vector3(0, 1, 0), INTO_WAVE = new THREE.Vector3(0, 0, -1), tmpM = new THREE.Matrix4(), xAxis = new THREE.Vector3(), bodyUp = new THREE.Vector3(), bodyFwd = new THREE.Vector3(), bodyX = new THREE.Vector3();
-const _up = new THREE.Vector3(), _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
+const _up = new THREE.Vector3(), _tq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
 // the rider's world orientation (bodyQ, plus side-on stance) expressed in the board's frame
 const setStance = () => { invQ.copy(rig.quaternion).invert(); surfer.quaternion.copy(invQ).multiply(bodyQ).multiply(stanceQ); };
 function updateRig(dt, t) {
@@ -254,7 +279,9 @@ function updateRig(dt, t) {
   xAxis.crossVectors(pose.up, pose.fwd).normalize();
   const up = _up.crossVectors(pose.fwd, xAxis).normalize();
   tmpM.makeBasis(xAxis, up, pose.fwd);
-  rig.quaternion.setFromRotationMatrix(tmpM);
+  _tq.setFromRotationMatrix(tmpM);
+  // the water surface kinks where the face bends; ease the board's tilt so it rides over those instead of snapping
+  if (snapCam) rig.quaternion.copy(_tq); else rig.quaternion.slerp(_tq, Math.min(1, dt * (rider.state === 'POP' ? 9 : 16)));
   rig.position.copy(pose.pos);
   if (standing || (rider.state === 'WIPE' && rider.stateT < 0.1)) {
     // the rider stands on the deck, leaning into the turn and a little toward the wave
@@ -518,4 +545,4 @@ renderer.setAnimationLoop(() => {
   if (!window.__g.paused && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
-window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; } };
+window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; } };

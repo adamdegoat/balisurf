@@ -10,7 +10,7 @@ export const RIDE = {
   // lying on the board
   paddleThrust: 2.6, paddleMax: 2.4,   // arms: thrust (m/s^2) fading to nothing at paddleMax (m/s); a good paddler holds ~1.8 m/s
   lieDrag: 0.25, lieDrag2: 0.3, lieLat: 2.2,   // a lying board sits in the water: the moving water grabs it
-  lieTurn: 1.9, paddleTurn: 1.25,      // rad/s turning while sitting / paddling
+  lieTurn: 1.5, paddleTurn: 1.1,       // rad/s turning while sitting / paddling
   lieGravity: 0.9,                     // a lying board is half in the water: less of the slope turns into speed
   // standing
   drag: 0.09, drag2: 0.013,            // planing drag along the board
@@ -45,8 +45,14 @@ export class Profile {
     this.cache.set(key, c);
     return c;
   }
+  // height blended between the two nearest slices, so the surface is continuous along the wave (no 20 cm steps)
   height(s, zl) {
-    const c = this.slice(s), F = c.F, B = c.B;
+    const k = s * 5, k0 = Math.floor(k), t = k - k0;
+    const h0 = this.heightSlice(this.slice(k0 / 5), zl);
+    return t < 1e-3 ? h0 : h0 + (this.heightSlice(this.slice((k0 + 1) / 5), zl) - h0) * t;
+  }
+  heightSlice(c, zl) {
+    const F = c.F, B = c.B;
     if (zl >= F[0][0]) return 0;
     if (zl >= F[F.length - 1][0]) {
       for (let i = 1; i < F.length; i++) if (zl >= F[i][0]) { const t = (zl - F[i][0]) / (F[i - 1][0] - F[i][0] || 1e-6); return F[i][1] + (F[i - 1][1] - F[i][1]) * t; }
