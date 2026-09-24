@@ -56,7 +56,9 @@
   #touch.live { opacity: 1; }
   #touch b { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: rgba(255,255,255,.75); }
   #msg { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; padding: 0 30px; }
-  #msg { transition: opacity .35s; }
+  #msg { transition: opacity .35s; z-index: 6; }
+  .hud { z-index: 6; } .ctl { z-index: 7; }   /* above the underwater tint */
+  body:not(.playing) #cond { display: none; }
   #msg { background: radial-gradient(ellipse at center, rgba(5,12,18,.45), rgba(5,12,18,0) 70%); }
   #msg-t { font-size: 15px; font-weight: 600; color: var(--dim); text-shadow: 0 1px 4px rgba(0,0,0,.6); }
   #msg-n { margin-top: 2px; font: 800 54px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(0,0,0,.4); }
@@ -65,7 +67,7 @@
   #msg-s { margin-top: 10px; display: flex; gap: 18px; justify-content: center; font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
   #msg-s div { font-size: 16px; font-weight: 600; } #msg-s span { display: block; font-size: 10px; font-weight: 500; color: var(--dim); letter-spacing: .06em; }
   #sess { margin-top: 14px; color: var(--dim); font-size: 12px; }
-  #start { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 max(7vw, env(safe-area-inset-left)); background: rgba(8,14,20,.35); }
+  #start { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; justify-content: center; padding: 0 max(7vw, env(safe-area-inset-left)); background: rgba(8,14,20,.35); }
   #start h1 { margin: 0; font: 800 clamp(34px, 7vw, 64px)/0.95 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: -.02em; }
   #start p { margin: 8px 0 20px; color: var(--dim); max-width: 32em; }
   #start .row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -107,11 +109,11 @@
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260924-2214</small>
+<small id="build">build 260924-2218</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=307"></script>
+<script type="module" src="js/game.js?v=312"></script>
 </body>
 </html>

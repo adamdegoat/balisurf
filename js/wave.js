@@ -509,7 +509,7 @@ export class WeatherFX {
   }
 }
 
-// The coast behind the break, modelled on Keramas (Bali's right-hand reef on a beach): black volcanic sand, a line of
+// The coast behind the break (a Bukit-style left like Uluwatu / Padang Padang): golden sand, a line of
 // coconut palms, jungle behind, and Mount Agung far inland. All of it hazed by distance like real sea air.
 export function coast(scene) {
   const mat = new THREE.ShaderMaterial({
@@ -542,7 +542,16 @@ export function coast(scene) {
   // beach: dark volcanic sand rising gently from the water
   const sand = new THREE.PlaneGeometry(1600, 40, 60, 4); sand.rotateX(-Math.PI / 2);
   { const p = sand.attributes.position; for (let i = 0; i < p.count; i++) { const z = p.getZ(i); p.setY(i, (z + 20) / 40 * 2.2 - 0.2 + Math.sin(p.getX(i) * 0.05) * 0.2); } sand.computeVertexNormals(); }
-  group.add(at(new THREE.Mesh(colorize(sand, [0.2, 0.18, 0.16]), mat), 0, 0, 205));
+  // golden reef-break sand (Bali's Bukit beaches): darker and wet at the water's edge, pale and dry up the beach
+  sand.dispose(); const sd = new THREE.PlaneGeometry(1600, 40, 160, 8); sd.rotateX(-Math.PI / 2);
+  { const p = sd.attributes.position, c = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const z = p.getZ(i), x = p.getX(i); p.setY(i, (z + 20) / 40 * 2.2 - 0.2 + Math.sin(x * 0.05) * 0.2);
+      const dry = Math.min(1, Math.max(0, (z + 17) / 10)), k = 1 + (Math.random() - .5) * 0.06 + Math.sin(x * 0.21) * 0.03;
+      c[i * 3] = (0.36 + 0.4 * dry) * k; c[i * 3 + 1] = (0.3 + 0.35 * dry) * k; c[i * 3 + 2] = (0.22 + 0.25 * dry) * k;
+    }
+    sd.setAttribute('color', new THREE.BufferAttribute(c, 3)); sd.computeVertexNormals(); }
+  group.add(at(new THREE.Mesh(sd, mat), 0, 0, 205));
   // land behind, gently rolling
   const land = new THREE.PlaneGeometry(1800, 500, 90, 20); land.rotateX(-Math.PI / 2);
   { const p = land.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, 2 + 4 * Math.sin(x * 0.013) * Math.cos(z * 0.02) + (z + 250) * 0.03); } land.computeVertexNormals(); }

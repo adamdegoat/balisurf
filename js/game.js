@@ -1,7 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=47';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=48';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=73';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
@@ -127,7 +127,7 @@ function spawnRider() {
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
   rider.reset(2 + Math.random() * 4, -7 - Math.random() * 3, -Math.PI / 2);
   // don't drop a wave on your head as you arrive
-  const inc = incoming(); if (inc.t < 5) nextBreak = Math.max(nextBreak, T + 9);
+  const inc = incoming(); if (inc.t < 7) nextBreak = Math.max(nextBreak, T + 11);
   ui.msg.style.display = 'none';
 }
 
@@ -225,7 +225,7 @@ async function start(m) {
   ui.load.textContent = '';
   ui.start.style.display = 'none'; document.body.classList.add('playing');
   session = { waves: 0, total: 0, best: 0, scores: [] };
-  for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9;
+  for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15;   // a calm start: time to look around and find the set
   updateWaves(0); spawnRider();
   ui.cond.textContent = mode === 'random' ? 'Random' : CONDITIONS[mode].name;
 }
@@ -739,7 +739,7 @@ function surfStance() {
     // each hand stays on its own side of your body (an arm reaching across the middle is a wall of arm in the view,
     // and nobody surfs like that): at least 22 cm out to its own side of your eyes
     { bones['upperarm_' + s].getWorldPosition(_ik4); const own = Math.sign(_cv.subVectors(_ik4, _ah).dot(R)) || 1;
-      const lat = _cv.subVectors(P, _ah).dot(R) * own; if (lat < 0.22) P.addScaledVector(R, own * (0.22 - lat)); }
+      const lat = _cv.subVectors(P, _ah).dot(R) * own; if (lat < 0.32) P.addScaledVector(R, own * (0.32 - lat)); }
     // never into the lens: keep the hand at least 45 cm from your eyes
     const cd = P.distanceTo(camera.position); if (cd < 0.5) P.addScaledVector(F, 0.5 - cd);
     const ua = bones['upperarm_' + s], la = bones['lowerarm_' + s], hd = bones['hand_' + s];
@@ -763,7 +763,8 @@ function updateHUD(dt) {
     const onWave = rider.y > 0.3 && rider.onFace;
     if (rider.washed) hint = 'Caught inside! Hold on, paddle back out';
     else if (onWave) hint = rider.paddling ? 'Keep paddling!' : 'Paddle now!';
-    else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
+    else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 2.5 ? 'Paddle hard!' : 'Wave coming... get ready';
+    else if (session.waves < 2 && inc.t >= 7) hint = 'Watch the horizon for the next set';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
   } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Go LEFT along the wave, hold PUMP for speed' : 'Up!';
   else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Slide your thumb left and right to carve, like a steering wheel' : rider.stateT < 5 ? 'Hold PUMP for speed, STALL to brake and let the barrel catch you' : 'Let go and the board just glides straight';
@@ -879,4 +880,4 @@ renderer.setAnimationLoop(() => {
   if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
-window.__g = { paused: false, cutaway, CUT, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
+window.__g = { paused: false, cutaway, CUT, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
