@@ -1,19 +1,25 @@
-// A shortboard, built from an outline: 6'2" (1.88m), pointed nose, squash tail, a little rocker, rounded rails.
+// A shortboard, built from an outline: 6'2" (1.88m), a rounded-off point nose, squash tail, a little rocker, rounded rails.
 import * as THREE from 'three';
 
 export function makeBoard() {
-  const L = 1.88, W = 0.49, T = 0.06, NL = 28, NW = 10;
-  const halfWidth = (u) => {                      // u 0 = tail, 1 = nose
-    const nose = Math.pow(Math.max(0, 1 - u), 0.55), tail = Math.pow(Math.min(1, u / 0.12), 0.35);
-    return W / 2 * Math.min(1, Math.sin(Math.PI * Math.pow(u, 0.85)) * 1.25) * nose ** 0.4 * (0.55 + 0.45 * tail);
+  const L = 1.88, W = 0.49, T = 0.06, NL = 60, NW = 10;
+  // outline from real shortboard proportions (share of max half-width along the board, tail 0 -> nose 1):
+  // squash tail ~14" wide, widest just behind the middle, ~12" wide a foot from the nose, then a small rounded tip
+  const OUT = [[0, .66], [.08, .78], [.25, .93], [.45, 1], [.62, .96], [.78, .82], [.88, .64], [.94, .48], [.975, .31], [.992, .15], [1, .02]];
+  const halfWidth = (u) => {
+    let i = 1; while (i < OUT.length - 1 && OUT[i][0] < u) i++;
+    const [u0, w0] = OUT[i - 1], [u1, w1] = OUT[i], t = (u - u0) / (u1 - u0), s2 = t * t * (3 - 2 * t);
+    return W / 2 * (w0 + (w1 - w0) * s2);
   };
+  // stations bunched toward the nose so its curve stays round, not faceted
+  const station = (i) => { const x = i / NL; return 1 - Math.pow(1 - x, 1.6); };
   const rocker = (u) => 0.08 * Math.pow(Math.max(0, u - 0.62) / 0.38, 2.2) + 0.03 * Math.pow(Math.max(0, 0.18 - u) / 0.18, 2);
   const pos = [], col = [], idx = [];
   // deck (top) and bottom surfaces, each a grid across the width
   for (const side of [1, -1]) {
     const base = pos.length / 3;
     for (let i = 0; i <= NL; i++) {
-      const u = i / NL, hw = Math.max(0.004, halfWidth(u)), z = (u - 0.5) * L, r = rocker(u);
+      const u = station(i), hw = Math.max(0.004, halfWidth(u)), z = (u - 0.5) * L, r = rocker(u);
       for (let j = 0; j <= NW; j++) {
         const v = j / NW * 2 - 1, x = v * hw;
         const dome = (1 - v * v) * T * 0.5;       // thickest along the stringer, thin at the rails
