@@ -102,7 +102,7 @@ export class Rider {
     this.turn = 0; this.lean = 0; this.skid = 0; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
     this.wave = null; this.s = 99; this.zl = 99; this.inBarrel = false; this.onFace = false; this.lowT = 0;
     this.pumpHold = 0; this.pumping = false;
-    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, cutbacks: 0, speed: 0, end: 0, score: 0 }; this.turnSign = 0; this.cbArmed = false; this.trick = null;
+    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, cutbacks: 0, snaps: 0, speed: 0, end: 0, score: 0 }; this.turnSign = 0; this.cbArmed = false; this.snapArm = 0; this.trick = null;
   }
   set(state) { this.state = state; this.stateT = 0; }
   get standing() { return this.state === 'POP' || this.state === 'RIDE'; }
@@ -255,6 +255,12 @@ export class Rider {
       const hd = Math.cos(this.th);
       if (hd > 0.5) this.cbArmed = true;
       else if (this.cbArmed && hd < -0.5 && this.v > 0.45 * C.speed) { this.cbArmed = false; this.ride.cutbacks++; this.trick = { name: 'CUTBACK', t: 0 }; }
+      // a snap (top turn): climb hard up to the lip, then whip the board back down the face from up there
+      const relVz = this.vz - C.speed, hTop = y / Math.max(sl.top, 0.3);
+      if (relVz < -1.2 && hTop > 0.6) this.snapArm = 1.2; else this.snapArm = Math.max(0, this.snapArm - h);
+      if (this.snapArm > 0 && relVz > 0.8 && hTop > 0.5 && Math.abs(this.turn) > 0.9 && !(this.trick && this.trick.name === 'SNAP')) {
+        this.snapArm = 0; this.ride.snaps++; this.trick = { name: 'SNAP', t: 0 };
+      }
       if (this.trick) { this.trick.t += h; if (this.trick.t > 1.4) this.trick = null; }
       if (w.peelX > w.xEnd) { this.ride.end = 1; return this.out('Made it to the end of the reef'); }
       if (this.z > w.zBeach) { this.ride.end = 1; return this.out('Rode it all the way in'); }
@@ -267,7 +273,7 @@ export class Rider {
   }
 
   // like a contest judge: turns, speed, time in the barrel and in the pocket; just riding along earns little
-  liveScore() { const r = this.ride; return Math.round(r.t * 2 + r.pocket * 4 + r.turns * 25 + r.cutbacks * 60 + r.speed * 6 + r.barrel * 80 + r.end * 100); }
+  liveScore() { const r = this.ride; return Math.round(r.t * 2 + r.pocket * 4 + r.turns * 25 + r.cutbacks * 60 + r.snaps * 40 + r.speed * 6 + r.barrel * 80 + r.end * 100); }
   wipe(why) { this.why = why; this.set('WIPE'); this.ride.score = Math.round(this.liveScore() * (this.ride.t > 0 ? 0.8 : 1)); }
   out(why) { this.why = why; this.set('OUT'); this.ride.score = this.liveScore(); }
 

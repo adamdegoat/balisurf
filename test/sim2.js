@@ -74,7 +74,7 @@ export function carve(mode, n = 5, { hi = 0.7, lo = 0.25, dv = null, gain = 2.5 
     const r = G.rider;
     if (r.state === 'WIPE' || r.state === 'OUT') {
       const R = r.ride; hs.sort((a, b) => a - b);
-      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h turns ${R.turns} pocket ${R.pocket.toFixed(1)} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
+      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h turns ${R.turns} snaps ${R.snaps} cutbacks ${R.cutbacks} pocket ${R.pocket.toFixed(1)} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
       hs = []; phase = 'down'; G.spawnRider(); continue;
     }
     let o = br(r);

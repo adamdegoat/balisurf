@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=53';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=54';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -444,8 +444,9 @@ const railSpray = (() => {
           }
         }
         // drifting: the tail sprays a big fan to the outside of the slide
-        if (rider.skid > 0.15) {
-          fanAcc += rider.skid * rider.v * 55 * dt;
+        const snapK = rider.trick && rider.trick.name === 'SNAP' && rider.trick.t < 0.3 ? 1 : 0;   // a snap throws a sheet of spray off the lip
+        if (rider.skid > 0.15 || snapK) {
+          fanAcc += (Math.max(rider.skid, 0.3) + 1.5 * snapK) * rider.v * 55 * dt;
           const side = Math.sign(rider.lean) || 1;                     // spray goes to the outside of the turn
           while (fanAcc >= 1) {
             fanAcc--;
@@ -676,7 +677,7 @@ function updateHUD(dt) {
     ui.msgT.textContent = rider.why;
     ui.msgN.innerHTML = r.t > 0 ? `${r.score}${newBest ? '<small>NEW BEST</small>' : ''}` : '';
     const stat = (v, l) => `<div>${v}<span>${l}</span></div>`;
-    ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.cutbacks ? stat(r.cutbacks, r.cutbacks > 1 ? 'CUTBACKS' : 'CUTBACK') : '') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
+    ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.cutbacks ? stat(r.cutbacks, r.cutbacks > 1 ? 'CUTBACKS' : 'CUTBACK') : '') + (r.snaps ? stat(r.snaps, r.snaps > 1 ? 'SNAPS' : 'SNAP') : '') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
     ui.sess.textContent = session.waves ? `Rides ${session.waves}  ·  session best ${session.best}  ·  all-time best ${Math.max(bestFor(mode), r.score)}` : '';
     ui.msg.style.display = 'flex';
   }
