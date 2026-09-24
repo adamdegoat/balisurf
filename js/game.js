@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=33';
-import { Rider, Profile, waterAt, heightAt } from './surf.js?v=43';
+import { Rider, Profile, waterAt, heightAt } from './surf.js?v=45';
 import { makeBoard } from './board.js?v=1';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -218,10 +218,10 @@ function updateCamera(dt) {
     // (placed behind you, but the seaward part is halved so it stays on the face side and the wave never hides you)
     const yaw = standing && (moving || rider.state === 'POP') ? Math.atan2(rider.vz * 0.5, rider.vx) : rider.th;
     const travel = standing && moving ? Math.atan2(rider.vz, rider.vx) : yaw;
-    lookYaw += Math.atan2(Math.sin(travel - lookYaw), Math.cos(travel - lookYaw)) * Math.min(1, dt * 6); if (snapCam) lookYaw = travel;
+    lookYaw += Math.atan2(Math.sin(travel - lookYaw), Math.cos(travel - lookYaw)) * Math.min(1, dt * 12); if (snapCam) lookYaw = travel;
     let dy = yaw - camYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-    const maxTurn = (standing ? 3.2 : 1.3) * dt;
-    camYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * (standing ? 6 : 3)))); if (snapCam) camYaw = yaw;
+    const maxTurn = (standing ? 5 : 1.3) * dt;
+    camYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * (standing ? 11 : 3)))); if (snapCam) camYaw = yaw;   // stays right behind you through a carve
     const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
     const tube = rider.inBarrel ? 1 : 0;
     // heading toward the beach (the drop), come in close over your shoulder so you stay on the same face as the surfer;
@@ -290,15 +290,15 @@ function updateCamera(dt) {
   const ta = Math.atan2(_cv.z, _cv.x), tr = Math.hypot(_cv.x, _cv.z);
   if (snap) { cam.a = ta; cam.r = tr; cam.y = _cv.y; cam.va = cam.vr = cam.vy = 0; lookOff.subVectors(look, anchor); cam.vl.set(0, 0, 0); }
   else {
-    const w0 = st === 'WIPE' ? 3.2 : rider.standing && lookBackK < 0.01 ? 6.5 : 3.6, damp = Math.max(0, 1 - 2 * w0 * dt), w2 = w0 * w0 * dt;
-    cam.va = (cam.va + Math.atan2(Math.sin(ta - cam.a), Math.cos(ta - cam.a)) * w2) * damp; cam.va = Math.max(-2.5, Math.min(2.5, cam.va)); cam.a += cam.va * dt;
+    const w0 = st === 'WIPE' ? 3.2 : rider.standing && lookBackK < 0.01 ? 9.5 : 3.6, damp = Math.max(0, 1 - 2 * w0 * dt), w2 = w0 * w0 * dt;
+    cam.va = (cam.va + Math.atan2(Math.sin(ta - cam.a), Math.cos(ta - cam.a)) * w2) * damp; cam.va = Math.max(-5, Math.min(5, cam.va)); cam.a += cam.va * dt;
     cam.vr = (cam.vr + (tr - cam.r) * w2) * damp; cam.vr = Math.max(-3, Math.min(3, cam.vr)); cam.r += cam.vr * dt;
     { const wy0 = 7, dy0 = Math.max(0, 1 - 2 * wy0 * dt);             // height follows faster: rise with the wave, never lag under a crest
       cam.vy = (cam.vy + (_cv.y - cam.y) * wy0 * wy0 * dt) * dy0; cam.vy = Math.max(-3, Math.min(9, cam.vy)); } cam.y += cam.vy * dt;
     // the point we look at: same kind of spring, a little quicker
-    const l0 = 4.2, ld = Math.max(0, 1 - 2 * l0 * dt);
+    const l0 = rider.standing ? 8 : 4.2, ld = Math.max(0, 1 - 2 * l0 * dt);
     _lk.subVectors(look, anchor).sub(lookOff).multiplyScalar(l0 * l0 * dt);
-    cam.vl.add(_lk).multiplyScalar(ld); if (cam.vl.length() > 3) cam.vl.setLength(3);
+    cam.vl.add(_lk).multiplyScalar(ld); if (cam.vl.length() > 8) cam.vl.setLength(8);
     lookOff.addScaledVector(cam.vl, dt);
   }
   camOff.set(Math.cos(cam.a) * cam.r, cam.y, Math.sin(cam.a) * cam.r);
@@ -321,7 +321,7 @@ function updateRig(dt, t) {
   // standing, the board rides on its rail (partway between the face and level) and rolls into the carve
   if (standing) {
     pose.up.lerp(WORLD_UP, 0.45).normalize();
-    const roll = Math.atan(rider.turn * rider.v / 9.8) * 0.85;          // bank into the carve like a real rail turn
+    const roll = rider.lean * 0.8;                                      // the board on its rail: the lean you're carving with
     pose.up.applyAxisAngle(pose.fwd, -roll);
   }
   pose.up.addScaledVector(pose.fwd, -pose.up.dot(pose.fwd)).normalize();

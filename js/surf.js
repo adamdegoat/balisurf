@@ -14,9 +14,11 @@ export const RIDE = {
   lieGravity: 0.9,                     // a lying board is half in the water: less of the slope turns into speed
   // standing
   drag: 0.09, drag2: 0.013,            // planing drag along the board
-  finGrip: 12, gripMax: 19,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2), then the tail skids
-  skidLoss: 0.35,                      // share of the excess sideways force lost as speed while skidding
-  turnMax: 2.2, turnRadius: 4.6,       // carve: rad/s cap, and the tightest arc (m) at speed: wide enough that the fins hold (v^2/R under their grip)
+  // carving works like a skier or a leaning bike: you tip the board onto its rail and the lean makes the turn,
+  // turn rate = g * tan(lean) / speed. The fins hold up to gripMax sideways; lean past that and the tail drifts out.
+  leanMax: 0.98, leanRate: 3.2,        // full thumb = ~56 deg on the rail; how fast you can roll the board over (rad/s)
+  finGrip: 12, gripMax: 11,            // sideways: fins kill sliding at this rate, up to this much force (m/s^2) = ~52 deg of lean
+  skidLoss: 0.22,                      // share of the excess sideways force lost as speed while the tail drifts
   pump: 0.5,                           // pumping adds this share of the downhill pull (and costs 1.2x that when climbing)
   popTime: 0.35,                       // seconds from lying to standing
   waterPush: 1.0,                      // how much the wave's moving water carries you
@@ -97,7 +99,7 @@ export class Rider {
     this.x = x; this.z = z; this.y = 0; this.vx = 0; this.vz = 0; this.th = th;
     this.state = 'LIE'; this.stateT = 0; this.why = ''; this.washed = false;
     this.paddling = false; this.paddleT = 0; this.catchT = 0;
-    this.turn = 0; this.skid = 0; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
+    this.turn = 0; this.lean = 0; this.skid = 0; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
     this.wave = null; this.s = 99; this.zl = 99; this.inBarrel = false; this.onFace = false; this.lowT = 0;
     this.pumpHold = 0; this.pumping = false;
     this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, speed: 0, end: 0, score: 0 }; this.turnSign = 0;
@@ -160,13 +162,15 @@ export class Rider {
       ax += -k * along * dx - P.lieLat * lx; az += -k * along * dz - P.lieLat * lz;
       if (inp.paddle) { const f = P.paddleThrust * Math.max(0, 1 - (along / P.paddleMax) ** 2); ax += f * dx; az += f * dz; }
       this.th += inp.steer * (inp.paddle ? P.paddleTurn : P.lieTurn) * h;
-      this.turn = 0; this.skid = 0;
+      this.turn = 0; this.lean = 0; this.skid = 0;
     } else {
       // standing: planing drag along the board, fins stop it sliding sideways (up to their grip), carving turns the board
       const pop = this.state === 'POP' ? 0.4 : 1;
       const speed = Math.hypot(this.vx, this.vz);
-      const want = inp.steer * Math.min(P.turnMax, Math.max(0.9, speed / P.turnRadius)) * pop;
-      this.turn += (want - this.turn) * Math.min(1, h * 5);             // the rail rolls into a turn, it doesn't snap
+      // roll the board toward the lean your thumb asks for (weight shifts take a moment), then the lean carves the turn
+      const wantLean = inp.steer * P.leanMax * pop, dl = wantLean - this.lean, maxRoll = P.leanRate * h;
+      this.lean += Math.max(-maxRoll, Math.min(maxRoll, dl * Math.min(1, h * 12)));
+      this.turn = P.g * Math.tan(this.lean) / Math.max(speed, 3.2);
       this.th += this.turn * h;
       const dr = P.drag * along + P.drag2 * along * Math.abs(along);
       ax += -dr * dx; az += -dr * dz;
