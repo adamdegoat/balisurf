@@ -245,7 +245,8 @@ function povCamera(dt) {
   // look mostly where you're travelling, partly where the board points (you see the nose swing in a turn/drift)
   const dh = Math.atan2(Math.sin(rider.th - travel), Math.cos(rider.th - travel));
   const yawT = travel + dh * (standing ? 0.35 : 0.8);
-  _eye.x += Math.cos(yawT) * POVCAM.fwd; _eye.z += Math.sin(yawT) * POVCAM.fwd; _eye.y += POVCAM.up;   // camera just in front of the face, like a surfer's mouth-mounted camera
+  const ef = standing ? POVCAM.fwd : -0.05, eu = standing ? POVCAM.up : 0.2;   // lying: eyes at the head, a bit up, so your paddling hands pass below them
+  _eye.x += Math.cos(yawT) * ef; _eye.z += Math.sin(yawT) * ef; _eye.y += eu;   // camera just in front of the face, like a surfer's mouth-mounted camera
   // smooth the eye's position relative to the board (not in the world, or at speed it would trail behind your head)
   _eye.sub(rig.position);
   if (!pov.ready || snapCam) { pov.pos.copy(_eye); pov.vel.set(0, 0, 0); pov.yaw = yawT; pov.ready = true; }
@@ -257,15 +258,16 @@ function povCamera(dt) {
   snapCam = false;
   // head pitch: riding, look down the line and at the nose; lying, look ahead over the nose; at the drop, look down the face
   const dropK = st === 'POP' ? 1 : st === 'RIDE' ? Math.max(0, 1 - rider.stateT / 1.0) : 0;
-  const pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : -0.3;   // at the take-off you look down at the board and the face you are dropping into   // lying: tipped down enough to see your arms and the nose
+  const pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : -0.5;   // take-off: look down at the board and the face; lying: down enough to see your arms paddling
   pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * 5);
   pov.roll += ((standing ? -rider.lean * 0.28 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve
   // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
   _pe.set(pov.pitch, -pov.yaw - Math.PI / 2, pov.roll);
   camera.quaternion.setFromEuler(_pe);
   camera.position.copy(pov.pos).add(rig.position);
-  // never under the water
-  const sy = heightAt(waves, camera.position.x, camera.position.z) + 0.12; if (camera.position.y < sy && !rider.inBarrel) camera.position.y = sy;
+  // the eyes are always above your own board (never ask the water height here: under a lip or in the barrel the
+  // 'surface' overhead is the lip, and pushing above it would lift you out of the tube)
+  const minY = rig.position.y + (standing ? 0.6 : 0.25); if (camera.position.y < minY) camera.position.y = minY;
 }
 
 function updateCamera(dt) {
@@ -658,6 +660,27 @@ function aimBone(bone, child, target, w) {
   bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));
   bone.updateMatrixWorld(true);
 }
+// paddling: alternating crawl strokes. Each arm reaches far forward over the water, digs in and pulls back under the
+// board, comes out by the hip and swings forward elbow-high; the other arm half a stroke behind. (The stock clip is a
+// breaststroke that keeps both hands under the board, where your own eyes can never see them.)
+let paddlePh = 0, paddleW = 0; const _pf = new THREE.Vector3(), _pr = new THREE.Vector3(), _ps = new THREE.Vector3();
+function paddleArms(dt) {
+  const want = rider.state === 'LIE' && rider.paddling ? 1 : 0;
+  paddleW += (want - paddleW) * Math.min(1, dt * 6);
+  if (paddleW < 0.02 || rider.standing) return;
+  if (!bones.upperarm_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  surfer.updateMatrixWorld(true);
+  paddlePh += dt * Math.PI * 2 * 0.75;                              // each arm ~1.3 s a stroke: a pull every ~0.67 s
+  _pf.set(Math.cos(rider.th), 0, Math.sin(rider.th)); _pr.set(-_pf.z, 0, _pf.x);
+  for (const [sd, off] of [['l', 0], ['r', Math.PI]]) {
+    const ua = bones['upperarm_' + sd], la = bones['lowerarm_' + sd], hd = bones['hand_' + sd];
+    if (!ua || !la || !hd) continue;
+    ua.getWorldPosition(_ps); const side = Math.sign(_ps.sub(rig.position).dot(_pr)) || 1;
+    const a = -paddlePh + off, c = Math.cos(a), sn = Math.sin(a);   // 0 reach, -pi/2 pull, -pi out by the hip, -3pi/2 recovery
+    _t.copy(_pf).multiplyScalar(0.3 + 0.7 * c).addScaledVector(WORLD_UP, sn > 0 ? 0.55 * sn : 0.95 * sn).addScaledVector(_pr, side * (0.3 + 0.3 * Math.max(0, sn))).normalize();
+    aimBone(ua, la, _t, 0.9 * paddleW); aimBone(la, hd, _t, 0.8 * paddleW);
+  }
+}
 // swing a leg sideways (about the axis the rider faces) so its foot moves toward sgn * board-forward; keeps the knee bend
 const _ax = new THREE.Vector3();
 function swingBone(bone, end, sgn, ang) {
@@ -717,7 +740,7 @@ function surfStance() {
     // both drop low and in when tucked in the barrel, and never sit still
     const sway = Math.sin(bodyT * 1.7 + (sgn > 0 ? 0 : 1.3)) * 0.08;
     if (sgn > 0) _t.copy(bodyFwd).multiplyScalar(0.85).addScaledVector(_in, 0.55 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.35 : -0.3) + 0.4 * Math.abs(leanN) + sway);
-    else _t.copy(bodyFwd).multiplyScalar(-0.7).addScaledVector(_in, -0.35 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.3 : -0.2) + 0.5 * Math.abs(leanN) + sway);   // relaxed: arms low and loose; they rise for balance in a turn
+    else _t.copy(bodyFwd).multiplyScalar(0.15).addScaledVector(INTO_WAVE, -0.6).addScaledVector(_in, -0.35 * Math.abs(leanN)).addScaledVector(bodyUp, (deep ? -0.3 : -0.25) + 0.45 * Math.abs(leanN) + sway);   // the trailing arm out wide and a little forward for balance (you see both hands)
     // braking: the trailing hand reaches down and drags in the face
     if (sgn <= 0 && rider.stalling > 0.05) _t.lerp(_d.copy(bodyFwd).multiplyScalar(-0.35).addScaledVector(INTO_WAVE, 0.7).addScaledVector(bodyUp, -0.9), Math.min(1, rider.stalling * 1.3));
     _t.addScaledVector(INTO_WAVE, 0.2).normalize();
@@ -818,7 +841,7 @@ function tick(dt) {
     // drifting too far inside or out wide on a lie: bring the surfer back to the lineup
     if (rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out('Drifted out of the lineup'); }
     updateRig(dt, T);
-    if (mixer) { mixer.update(dt); surfStance(); }
+    if (mixer) { mixer.update(dt); paddleArms(dt); surfStance(); }
     railSpray.update(dt);
     wake.update(dt);
     updateCamera(dt);

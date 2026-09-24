@@ -33,7 +33,8 @@
   body.playing #build { display: none; }
   #fps { bottom: 4px; left: 50%; transform: translateX(-50%); color: var(--dim); font-size: 10px; }
   body:not(.playing) .ctl { display: none !important; }
-  #paddle { position: fixed; left: max(22px, env(safe-area-inset-left)); bottom: max(20px, env(safe-area-inset-bottom)); width: 104px; height: 104px;
+  /* PADDLE sits where PUMP will be (the 'go' button, top); STALL only appears below it once you're riding */
+  #paddle { position: fixed; left: max(30px, calc(env(safe-area-inset-left) + 8px)); bottom: max(122px, calc(env(safe-area-inset-bottom) + 102px)); width: 88px; height: 88px;
     border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(10,30,40,.28); display: grid; place-items: center;
     font-weight: 700; letter-spacing: .1em; font-size: 12px; touch-action: none; }
   #paddle.down { background: rgba(255,255,255,.3); }
@@ -101,11 +102,11 @@
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260924-2044</small>
+<small id="build">build 260924-2048</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=256"></script>
+<script type="module" src="js/game.js?v=259"></script>
 </body>
 </html>
