@@ -63,3 +63,32 @@ export function trace(mode, opts = {}, secs = 40) {
   G.input.test = null; G.input.paddleBtn = false;
   return lines.join('\n');
 }
+
+// a surfer who works the face: drop, bottom turn, climb, top turn, drop again. Reports turns, speed, how rides end.
+export function carve(mode, n = 5, { hi = 0.7, lo = 0.25, dv = null, gain = 2.5 } = {}) {
+  const G = g(); G.paused = true; G.setMode(mode);
+  document.getElementById('start').style.display = 'none'; document.body.classList.add('playing');
+  G.spawnRider();
+  const br = brain({}), out = []; let phase = 'down', guard = 0, hs = [];
+  while (out.length < n && guard++ < 30 * 60 * 5) {
+    const r = G.rider;
+    if (r.state === 'WIPE' || r.state === 'OUT') {
+      const R = r.ride; hs.sort((a, b) => a - b);
+      out.push(`${r.why} | ${R.t.toFixed(1)}s top ${Math.round(R.top)}km/h turns ${R.turns} pocket ${R.pocket.toFixed(1)} score ${R.score} | height used ${hs.length ? hs[Math.floor(hs.length * .1)].toFixed(2) + '-' + hs[Math.floor(hs.length * .9)].toFixed(2) : '-'}`);
+      hs = []; phase = 'down'; G.spawnRider(); continue;
+    }
+    let o = br(r);
+    if (r.state === 'RIDE' && r.wave) {
+      const sl = r.wave.prof.slice(r.s), hRel = r.y / Math.max(sl.top, 0.3); hs.push(hRel);
+      if (phase === 'down' && hRel < lo) phase = 'up'; else if (phase === 'up' && (hRel > hi || r.v < r.wave.cond.speed * 0.8)) phase = 'down';
+      // down: come toward the beach faster than the wave; up: slower than it (the wave catches up and you climb)
+      const c = r.wave.cond.speed, k = dv ?? 0.5 * c, wantVz = phase === 'down' ? c + k : c - k;
+      const d = wrap(Math.asin(Math.max(-0.9, Math.min(0.97, wantVz / Math.max(r.v, 0.5)))) - r.th);
+      o = { steer: Math.max(-1, Math.min(1, d * gain)), pump: false };
+    }
+    G.input.test = o.steer; G.input.paddleBtn = r.standing ? o.pump : o.paddle;
+    G.step(1 / 30, 1 / 30, false);
+  }
+  G.input.test = null; G.input.paddleBtn = false;
+  return `${mode} carving\n` + out.join('\n');
+}
