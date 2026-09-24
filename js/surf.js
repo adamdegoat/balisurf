@@ -82,12 +82,11 @@ export class Profile {
 }
 
 // Everything the rider needs to know about the water at a point: which wave, where on it, how high
-const SPAN_LO = -50, SPAN_HI = 66;                    // the wave mesh covers s from -55 to 70
 export function waterAt(waves, x, z, out) {
   out.y = 0; out.w = null;
   for (const w of waves) {
-    const s = x - w.peelX; if (s < SPAN_LO || s > SPAN_HI) continue;
-    const zl = z - w.zW; if (zl > 20 || zl < -14) continue;
+    const sp = w.span(), s = x - w.peelX; if (s < sp.sLo || s > sp.sHi) continue;
+    const zl = z - w.zW - w.bend(s); if (zl > sp.zHi || zl < sp.zLo) continue;   // same curved crest line as the drawn wave
     const y = w.prof.height(s, zl) * w.fade;
     if (y > out.y || !out.w) { out.y = y; out.w = w; out.s = s; out.zl = zl; }
   }

@@ -87,6 +87,12 @@ export class Wave {
     SHARED.set(cond, { geo: this.geo, mat: this.mesh.material, xs: this.xs }); this.shared = true;
   }
 
+  // the crest line wraps slightly toward the beach along the wave (in proportion to the swell). The physics uses the
+  // same curve (surf.js waterAt), or on a big wave the drawn face and the ridden face drift apart.
+  bend(s) { const Lx = this.cond.len || 1, sb = s / Lx; return (0.004 * sb * sb * Math.sign(sb) * -0.5 + 0.0015 * sb * sb) * Lx; }
+  // how far the wave reaches along the reef and front to back (the physics only looks for water inside this)
+  span() { const Lx = this.cond.len || 1, H = this.cond.H, Wd = this.cond.width || 1;
+    return this._span ||= { sLo: -BEHIND * Lx, sHi: AHEAD * Lx, zLo: -3.2 * H * Wd - 2, zHi: 2.4 * H * Wd + 6 }; }
   // how tall the wave stands at distance s from the break: tallest at the peak, fading down the line (scaled by swell length)
   amp(s) { const L = this.cond.len || 1; return s > 0 ? 1 - 0.55 * smooth(8 * L, 70 * L, s) : 1 - 0.15 * smooth(0, 40 * L, -s); }
   // which blend of keyframes a slice at distance s ahead of the break has, plus how broken it is
@@ -140,7 +146,7 @@ export class Wave {
       this.section(s, tmp);
       for (let j = 0; j < NU; j++) {
         const p = (i * NU + j) * 3, a = (i * NU + j) * 2;
-        const sb = s / Lx, bend = (0.004 * sb * sb * Math.sign(sb) * -0.5 + 0.0015 * sb * sb) * Lx;   // crest line wraps slightly toward the beach (in proportion to the swell)
+        const bend = this.bend(s);   // crest line wraps slightly toward the beach (the physics uses the same curve)
         this.pos[p] = s; this.pos[p + 1] = tmp[j * 4 + 1]; this.pos[p + 2] = tmp[j * 4] + bend;
         this.brk[i * NU + j] = s < -4.5 * this.cond.H ? Math.min(1, (-s - 4.5 * this.cond.H) / (3.5 * this.cond.H)) * Math.sin(Math.PI * j / (NU - 1)) : 0;
         this.attr[a] = tmp[j * 4 + 2]; this.attr[a + 1] = tmp[j * 4 + 3];
@@ -175,7 +181,7 @@ export class Wave {
         const atLip = Math.random() < 0.4 && sh.broken < 0.5;
         P[i * 3] = this.peelX + s + (Math.random() - .5) * 2;
         P[i * 3 + 1] = atLip ? 0.2 * H : crest[1] * H * amp * (0.7 + Math.random() * 0.4);
-        P[i * 3 + 2] = (atLip ? sh.P[7][0] : crest[0]) * H + this.zW + (Math.random() - .5) * H;
+        P[i * 3 + 2] = (atLip ? sh.P[7][0] : crest[0]) * H * (this.cond.width || 1) + this.zW + this.bend(s) + (Math.random() - .5) * H;
         V[i * 3] = (Math.random() - .5) * 0.6; V[i * 3 + 1] = 0.5 + Math.random() * 1.2; V[i * 3 + 2] = this.cond.speed * 0.6 - 1.5 - Math.random() * 2;
         this.ml[i] = 1 + Math.random() * 1.5;
       }
@@ -211,7 +217,7 @@ export class Wave {
         const amp = this.amp(s);
         P[i * 3] = this.peelX + s + (Math.random() - .5) * 1.5;
         P[i * 3 + 1] = crest[1] * H * amp + Math.random() * 0.15 * H;
-        P[i * 3 + 2] = crest[0] * H + this.zW;
+        P[i * 3 + 2] = crest[0] * H * (this.cond.width || 1) + this.zW + this.bend(s);
         V[i * 3] = (Math.random() - .5) * 0.8; V[i * 3 + 1] = 0.6 + Math.random() * 1.2; V[i * 3 + 2] = this.cond.speed - 3 - Math.random() * 4;   // rides in with the wave, blown back off its top
         this.vl[i] = 0.8 + Math.random() * 1.2;
       }
@@ -249,9 +255,9 @@ export class Wave {
   lipAt(s) {                                          // world position of the lip tip for the slice at s
     // the shape for a given s never changes, so remember it (per 10 cm); only x moves with the peel
     const key = Math.round(s * 10), c = (this._lip ||= new Map()).get(key);
-    if (c) return [this.peelX + s, c[0], c[1] + this.zW];
+    if (c) return [this.peelX + s, c[0], c[1] + this.zW + this.bend(s)];
     const r = this._lipAt(key / 10); if (this._lip.size > 5000) this._lip.clear(); this._lip.set(key, [r[1], r[2]]);
-    return [this.peelX + s, r[1], r[2] + this.zW];
+    return [this.peelX + s, r[1], r[2] + this.zW + this.bend(s)];
   }
   _lipAt(s) {
     const { P } = this.shapeAt(s); const H = this.cond.H;
@@ -270,7 +276,7 @@ export class Wave {
         const top = Math.random() < 0.6;
         this.sp[i * 3] = x + (Math.random() - .5) * .3;
         this.sp[i * 3 + 1] = top ? crest[1] * H : y;
-        this.sp[i * 3 + 2] = top ? crest[0] * H + this.zW : z;
+        this.sp[i * 3 + 2] = top ? crest[0] * H * (this.cond.width || 1) + this.zW + this.bend(s) : z;
         this.sv[i * 3] = (Math.random() - .5) * .6; this.sv[i * 3 + 1] = 1 + Math.random() * 2.2 * (H / 2); this.sv[i * 3 + 2] = -1.5 - Math.random() * 3;   // offshore wind blows it back
         this.sl[i] = 0.6 + Math.random() * 1.2;
       }

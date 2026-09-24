@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=42';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=66';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=43';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=67';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=4';
 
@@ -315,8 +315,8 @@ function updateCamera(dt) {
         const ax = Math.sign(rider.vx) || 1, H = rider.wave ? rider.wave.cond.H : 2;
         want.set(p.x + ax * 3.6, Math.min(p.y + 0.45, 0.6 * H), p.z);
         const qt = waterAt(waves, want.x, want.z, _wq2);
-        if (qt.w) { const slt = qt.w.prof.slice(qt.s), wall = qt.w.prof.frontZAt(qt.s, want.y) + qt.w.zW;
-          want.z = Math.max(wall + 0.7, Math.min(p.z + 0.3, slt.lipZ + qt.w.zW - 0.4)); want.y = Math.max(want.y, qt.y + 0.3); }
+        if (qt.w) { const slt = qt.w.prof.slice(qt.s), wall = qt.w.prof.frontZAt(qt.s, want.y) + qt.w.zW + qt.w.bend(qt.s);
+          want.z = Math.max(wall + 0.7, Math.min(p.z + 0.3, slt.lipZ + qt.w.zW + qt.w.bend(qt.s) - 0.4)); want.y = Math.max(want.y, qt.y + 0.3); }
         look.set(p.x, p.y + 0.7, p.z);
         return;
       }
@@ -336,8 +336,8 @@ function updateCamera(dt) {
         if (tube) {
           // inside the tube: under the ceiling, off the wall, behind the falling lip
           want.y = Math.min(Math.max(want.y, p.y + 0.45), 0.6 * H);
-          const wall = q.w.prof.frontZAt(q.s, want.y) + q.w.zW;
-          want.z = Math.max(wall + 0.5, Math.min(want.z, sl.lipZ + q.w.zW - 0.5));
+          const wall = q.w.prof.frontZAt(q.s, want.y) + q.w.zW + q.w.bend(q.s);
+          want.z = Math.max(wall + 0.5, Math.min(want.z, sl.lipZ + q.w.zW + q.w.bend(q.s) - 0.5));
         }
         // behind you is up the wave (you're dropping toward the beach): rise over the crest and look down over your
         // shoulder, a bit closer, so the wave never blocks your view of yourself
