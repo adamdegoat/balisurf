@@ -122,7 +122,7 @@ const input = { paddle: false, steer: 0 };
 const keys = new Set();
 addEventListener('keydown', (e) => keys.add(e.code)); addEventListener('keyup', (e) => keys.delete(e.code));
 const ui = {
-  paddle: document.getElementById('paddle'), pad: document.getElementById('pad'), guide: document.getElementById('guide'), knob: document.querySelector('#guide b'),
+  paddle: document.getElementById('paddle'), stall: document.getElementById('stall'), pad: document.getElementById('pad'), guide: document.getElementById('guide'), knob: document.querySelector('#guide b'),
   speed: document.getElementById('speed'), score: document.getElementById('score'), cond: document.getElementById('cond'),
   msg: document.getElementById('msg'), msgT: document.getElementById('msg-t'), msgN: document.getElementById('msg-n'), msgS: document.getElementById('msg-s'),
   tube: document.getElementById('tube'), hint: document.getElementById('hint'), load: document.getElementById('load'), start: document.getElementById('start'), sess: document.getElementById('sess'),
@@ -134,6 +134,7 @@ const hold = (el, on, off) => {
   el.addEventListener('mousedown', on); addEventListener('mouseup', off);
 };
 hold(ui.paddle, () => { audio.wake(); input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
+hold(ui.stall, () => { audio.wake(); input.stallBtn = true; ui.stall.classList.add('down'); }, () => { input.stallBtn = false; ui.stall.classList.remove('down'); });
 // thumb pad: touch anywhere on the right half; the spot you first touch is the centre.
 // Left/right turns the board left/right, like leaning on a real board: lying, it points you where you paddle; standing, it carves.
 let padTouch = null, padX = 0, padY = 0, lastPadTouch = undefined, lastKnob = '', steerF = 0, stickY = 0, lastStickMode = null;
@@ -159,47 +160,19 @@ function readInput(dt) {
   input.steer = input.test != null ? input.test : steerF;   // input.test: scripted steering for automated checks
   input.up = input.test != null ? 0 : stickY;              // thumb up (-) / down (+): where on the face you want to be
   input.paddle = !!input.paddleBtn || keys.has('Space');
-  const stickMode = !!(rider && rider.standing);
-  if (stickMode !== lastStickMode) { ui.guide.classList.toggle('stick', stickMode); ui.guide.classList.toggle('side', !stickMode); lastStickMode = stickMode; }
+  const riding = !!(rider && rider.standing);
+  if (riding !== lastStickMode) { document.body.classList.toggle('riding', riding); lastStickMode = riding; }
   if (padTouch !== lastPadTouch) { ui.guide.classList.toggle('live', !!padTouch); lastPadTouch = padTouch; }
-  const kt = `translate(${Math.round(padX * 42)}px,${Math.round((rider && rider.standing ? padY : 0) * 42)}px)`; if (kt !== lastKnob) { ui.knob.style.transform = kt; lastKnob = kt; }
+  const kt = `translate(${Math.round(padX * 42)}px,0px)`; if (kt !== lastKnob) { ui.knob.style.transform = kt; lastKnob = kt; }
   return { paddle: input.paddle, pump: input.paddle, steer: input.steer, up: input.up };    // same button: paddle lying down, pump once standing; steer + = turn right
 }
 
-// Riding, like True Surf / Kelly Slater's Pro Surfer, laid out for a camera behind you (the wave rises on your left):
-//   left / right = carve up the face toward the lip / drop to the bottom (how far you push = how hard you carve)
-//   up           = speed: run down the line, pumping
-//   down         = brake: back foot + trailing hand dragged in the face, you slow so the barrel can catch you
-//   down, held hard at speed = swing round into a cutback toward the curl; push up to swing back down the line
-//   let go       = nothing: the board runs where it points, and staying on the wave is up to you
-// Underneath it's the same physics: this only picks the lean a surfer would use, and how hard they drag.
-const SURF = { range: 0.3, push: 0.9, ahead: 0.35 };   // how far up/down the face the thumb reaches, how hard it pushes, how far ahead it judges
-let lineDir = 1, brakeT = 0;
-function surfSteer(sx, sy, dt) {
-  const r = rider, w = r.wave, out = { steer: 0, pump: false, stall: 0 };
-  const forward = Math.max(0, -sy), brake = Math.max(0, sy);
-  out.pump = forward > 0.3;
-  if (!w || r.v < 1.5) { out.steer = -sx; return out; }
-  const c = w.cond.speed, v = Math.max(r.v, 0.5);
-  // which way along the wave you want to run: a long hard brake at speed turns you back to the curl, pushing up turns you back
-  brakeT = brake > 0.8 && r.v > 0.6 * c ? brakeT + dt : 0;
-  if (brakeT > 0.25 && lineDir > 0) lineDir = -1; else if (forward > 0.4) lineDir = 1;
-  let up = -sx;                                                      // + = up the face (the wave is on your left)
-  if (r.state !== 'RIDE' || r.stateT < 0.9) up = Math.min(up, 0);   // make the drop first: no climbing straight back into the lip
-  const push = Math.min(1, Math.abs(sx) * 1.5);
-  // the thumb picks a height on the face; heading there is a speed toward the beach: slower than the wave = climbing
-  // its face, faster = dropping down it (judged a moment ahead, so a fast climb starts turning early)
-  const top = Math.max(w.prof.slice(r.s).top, 0.3), climb = (c - r.vz) * Math.hypot(r.hx, r.hz);
-  const hRel = (r.y + climb * SURF.ahead) / top, hT = 0.5 + SURF.range * up;
-  const want = c + (hRel - hT) * 0.76 * c * (1 + SURF.push * Math.abs(up));
-  let target = r.v < c * 0.95 ? 1.1 : Math.asin(Math.max(-0.6, Math.min(0.97, want / v)));
-  if (lineDir < 0) target = Math.PI - target;                      // running back toward the curl: same, mirrored
-  const err = Math.atan2(Math.sin(target - r.th), Math.cos(target - r.th));
-  // swinging round (cutback / back down the line) steers fully; otherwise the help is only as strong as your push
-  const turning = Math.cos(r.th) * lineDir < 0.3, auth = turning ? 1 : push;
-  out.stall = lineDir > 0 && !turning ? brake : 0;              // no dragging while you swing round (it would kill the turn)
-  out.steer = Math.max(-1, Math.min(1, err * 2.2)) * auth;
-  return out;
+// Riding, "steer and pedals" (his pick), seamless like a simulator: no modes, no hidden steering.
+//   right thumb slider = lean the board left / right, as far and as long as you like (the camera is behind you, so
+//                        left/right always match the screen; keep turning and you carve round into a cutback)
+//   left thumb PUMP    = speed    STALL = brake (back foot + trailing hand dragged in the face, the barrel catches you)
+function surfSteer(sx, stall) {
+  return { steer: sx, stall: stall ? 1 : 0 };
 }
 
 // your best ride per level, kept on this phone (quietly does nothing if storage is blocked)
@@ -248,7 +221,7 @@ function solidAt(x, z) {
   if (q.zl > sl.topZ - 0.5 && q.zl < Math.max(sl.lipZ, sl.topZ) + 0.6) return Math.max(q.y, sl.top * (q.w.fade || 1));
   return q.y;
 }
-let camStandK = 0, tubeK = 0;
+let camStandK = 0, tubeK = 0; const CAM = { back: 4.8, h: 1.4, lookY: 1.1, lead: 1.3, level: true };   // riding camera: distance, height, aim height, look-ahead; level = no lift over the crest while riding
 const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 function updateCamera(dt) {
   const p = pose.pos, st = rider.state;
@@ -297,13 +270,14 @@ function updateCamera(dt) {
         look.set(p.x, p.y + 0.7, p.z);
         return;
       }
-      const back = standing ? 3.6 + (1.6 - 2.1 * tube) * ks : 3.6, height = standing ? 1.4 + (0.25 - 0.6 * tube) * ks + 1.6 * dropK : 1.4;   // during the drop: lift over the crest, don't move in   // at the drop: just behind your head
+      // riding: close-ish behind you at about head height, looking along the wave (a level, eye-height view, not a drone looking down)
+      const back = standing ? 3.6 + (CAM.back - 3.6 - 2.1 * tube) * ks : 3.6, height = standing ? 1.4 + (CAM.h - 1.4 - 0.6 * tube) * ks + 1.6 * dropK : 1.4;   // during the drop: lift over the crest, don't move in
       want.set(p.x - dx * back, p.y + height, p.z - dz * back);
       // look just ahead of you (from the side or front during the drop, at you)
       const ol = Math.hypot(camOff.x, camOff.z) || 1, behind = Math.max(0, Math.min(1, -(camOff.x * dx + camOff.z * dz) / ol));
       const lead = standing ? 1 + 3.5 * behind : 0.5 + 4.5 * behind * behind;   // look down your line so you can read what's coming
       const lx = standing ? Math.cos(lookYaw) : dx, lz = standing ? Math.sin(lookYaw) : dz;   // look where you're actually going
-      look.set(p.x + lx * (lead + 3 * dropK), p.y + (standing ? 0.95 - 1.1 * dropK : 0.4), p.z + lz * (lead + 3 * dropK));   // surfer in the lower middle; at the drop, looking down the face
+      look.set(p.x + lx * (lead * CAM.lead + 3 * dropK), p.y + (standing ? CAM.lookY - 1.1 * dropK : 0.4), p.z + lz * (lead * CAM.lead + 3 * dropK));   // surfer in the lower middle; at the drop, looking down the face
       lookBackK = 0;                                                     // one camera, always behind you, like being the surfer
       // stay out of the water: above the surface here, in front of the face at the camera's height, inside the tube in the barrel
       const q = waterAt(waves, want.x, want.z, _wq2);
@@ -317,7 +291,7 @@ function updateCamera(dt) {
         }
         // behind you is up the wave (you're dropping toward the beach): rise over the crest and look down over your
         // shoulder, a bit closer, so the wave never blocks your view of yourself
-        if (!tube && q.zl < sl.topZ + 1.5 && q.y > 0.15) {
+        if (!tube && q.zl < sl.topZ + 1.5 && q.y > 0.15 && (!standing || dropK > 0 || !CAM.level)) {   // riding along the face: stay level (the sight-line check handles a blocking crest)
           const top = sl.top * (q.w.fade || 1);
           want.y = Math.max(want.y, top + 1.1 + 0.3 * q.w.cond.H);   // bigger wave, more margin: the camera sits metres back
   
@@ -728,9 +702,9 @@ function updateHUD(dt) {
     else if (onWave) hint = rider.paddling ? 'Keep paddling!' : 'Paddle now!';
     else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 3 ? 'Paddle hard!' : 'Wave coming...';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
-  } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Push your thumb up to run along the wave' : 'Up!';
-  else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Thumb left: carve up to the lip. Right: drop to the bottom' : rider.stateT < 5 ? 'Thumb up: speed. Thumb down: brake and let the barrel catch you' : 'Keep steering: let go and the board just runs straight';
-  else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: hold your thumb all the way down at speed, then push up to swing back';
+  } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Hold PUMP to run along the wave' : 'Up!';
+  else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Slide your thumb left and right to carve, like a steering wheel' : rider.stateT < 5 ? 'Hold PUMP for speed, STALL to brake and let the barrel catch you' : 'Let go and the board just glides straight';
+  else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: keep turning right till you face the breaking wave, then turn back';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
   // the callout: BARREL while you're in it, or the move you just landed
   const call = st !== 'RIDE' ? '' : rider.inBarrel ? 'BARREL' : rider.trick ? rider.trick.name : '';
@@ -782,9 +756,12 @@ function tick(dt) {
   const inp = readInput(dt);
   // (in the barrel view the camera looks back at you, so left/right are flipped to match the screen)
   if (rider && rider.standing && input.test == null) {
-    const o = surfSteer(tubeK > 0.5 ? -inp.steer : inp.steer, inp.up, dt);
-    inp.steer = o.steer; inp.pump = inp.pump || o.pump; inp.stall = o.stall;
-  } else { lineDir = 1; brakeT = 0; }
+    // (scripted checks drive a virtual stick: y down = STALL held, y up = PUMP held)
+    const stallOn = !!input.stallBtn || keys.has('ArrowDown') || !!(input.stick && input.stick.y > 0.5);
+    const pumpOn = inp.pump || !!(input.stick && input.stick.y < -0.3);
+    const o = surfSteer(tubeK > 0.5 ? -inp.steer : inp.steer, stallOn);
+    inp.steer = o.steer; inp.pump = pumpOn; inp.stall = o.stall;
+  }
   if (rider) {
     updateWaves(dt);
     rider.update(dt, inp, waves);
@@ -836,4 +813,4 @@ renderer.setAnimationLoop(() => {
   if (!window.__g.paused && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
-window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, SURF, want: () => _want };
+window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };

@@ -37,6 +37,11 @@
     border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(10,30,40,.28); display: grid; place-items: center;
     font-weight: 700; letter-spacing: .1em; font-size: 12px; touch-action: none; }
   #paddle.down { background: rgba(255,255,255,.3); }
+  /* riding only: hold to brake (weight on the tail, hand in the face); above the PUMP button, same thumb */
+  #stall { position: fixed; left: max(34px, calc(env(safe-area-inset-left) + 12px)); bottom: max(136px, calc(env(safe-area-inset-bottom) + 116px)); width: 80px; height: 80px;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(10,30,40,.28); display: none; place-items: center;
+    font-weight: 700; letter-spacing: .1em; font-size: 11px; touch-action: none; }
+  body.riding #stall { display: grid; } #stall.down { background: rgba(255,255,255,.3); }
   /* thumb pad: the whole right half of the screen; the guide shows where your thumb is and which way the board leans */
   #pad { position: fixed; top: 0; right: 0; bottom: 0; width: 50%; touch-action: none; }
   #guide { position: fixed; right: max(40px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom)); width: 64px; height: 150px; margin: 0; pointer-events: none;
@@ -48,13 +53,6 @@
   #guide svg.l { top: 50%; left: 12px; margin-top: -5px; transform: rotate(-90deg); } #guide svg.r { top: 50%; right: 12px; margin-top: -5px; transform: rotate(90deg); }
   /* paddling: a left/right bar. riding: a round pad, up = up the face, down = to the bottom, sideways = turn */
   #guide.side { width: 150px; height: 64px; } #guide.side svg.l, #guide.side svg.r { display: block; }
-  #guide.stick { width: 132px; height: 132px; border-radius: 50%; } #guide.stick svg { display: block; }
-  /* riding: what each way does, written on the pad */
-  #guide i { display: none; position: absolute; font: 700 8px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .08em; color: rgba(255,255,255,.85); font-style: normal; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
-  #guide.stick i { display: block; }
-  #guide i.u { top: 24px; left: 0; right: 0; text-align: center; } #guide i.d { bottom: 24px; left: 0; right: 0; text-align: center; }
-  #guide i.l { left: 24px; top: 50%; margin-top: -4px; } #guide i.r { right: 19px; top: 50%; margin-top: -4px; }
-  #guide.stick b { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
   #msg { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; padding: 0 30px; }
   #msg { transition: opacity .35s; }
   #msg { background: radial-gradient(ellipse at center, rgba(5,12,18,.45), rgba(5,12,18,0) 70%); }
@@ -87,12 +85,13 @@
 <div class="hud" id="hint"></div>
 <div class="hud" id="fps"></div>
 <div class="ctl" id="paddle">PADDLE</div>
+<div class="ctl" id="stall">STALL</div>
 <div class="ctl" id="pad"></div>
-<div class="ctl side" id="guide"><svg class="u" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="d" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="l" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="r" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><i class="u">SPEED</i><i class="d">BRAKE</i><i class="l">LIP</i><i class="r">DOWN</i><b></b></div>
+<div class="ctl side" id="guide"><svg class="u" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="d" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="l" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><svg class="r" viewBox="0 0 16 10"><path d="M1 9 8 2l7 7" fill="none" stroke="#fff" stroke-width="2.4"/></svg><b></b></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
   <h1>Bali Surf</h1>
-  <p>A right-hand reef break in Bali. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: left carves up the face to the lip, right drops you to the bottom, up for speed, down to brake and get barrelled.</p>
+  <p>A right-hand reef break in Bali. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: slide left and right to carve, like a steering wheel. On the left, hold PUMP for speed and STALL to brake and get barrelled.</p>
   <div class="row">
     <button data-mode="easy">Easy<small>Sunny, small and soft</small></button>
     <button data-mode="medium">Medium<small>Sunset, head-high barrels</small></button>
@@ -102,11 +101,11 @@
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260924-1955</small>
+<small id="build">build 260924-2003</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=227"></script>
+<script type="module" src="js/game.js?v=232"></script>
 </body>
 </html>
