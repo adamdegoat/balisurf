@@ -52,6 +52,17 @@ function catmull(P, u) {                           // u in [0,1] across all segm
 }
 
 const SHARED = new Map();                           // condition -> built geometry + material
+// soft round sprites for spray, mist and the offshore veil: drawn once and shared by every wave (making them per wave
+// cost a canvas draw and a texture upload each time a new wave appeared: a small hitch on phones)
+const SPRITES = {};
+function sprite(key, size, stops) {
+  if (SPRITES[key]) return SPRITES[key];
+  const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  const cx = cv.getContext('2d'), h = size / 2, gr = cx.createRadialGradient(h, h, 0, h, h, h);
+  for (const [o, c] of stops) gr.addColorStop(o, c);
+  cx.fillStyle = gr; cx.fillRect(0, 0, size, size);
+  return (SPRITES[key] = new THREE.CanvasTexture(cv));
+}
 export class Wave {
   constructor(scene, cond) {
     this.cond = cond; this.peelX = 0; this.zW = 0; this.t = 0; this.fade = 1;
@@ -162,11 +173,7 @@ export class Wave {
     const N = 240; this.mistN = N;
     this.mp = new Float32Array(N * 3); this.mv = new Float32Array(N * 3); this.ml = new Float32Array(N).fill(-1); this.ma = new Float32Array(N);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.mp, 3));
-    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
-    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(255,255,255,.9)'); gr.addColorStop(0.5, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
-    this.mist = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf2efe9, size: 1.1 * this.cond.H, map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0.38, depthWrite: false }));
+    this.mist = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf2efe9, size: 1.1 * this.cond.H, map: sprite('mist', 64, [[0, 'rgba(255,255,255,.9)'], [0.5, 'rgba(255,255,255,.35)'], [1, 'rgba(255,255,255,0)']]), transparent: true, opacity: 0.38, depthWrite: false }));
     this.mist.frustumCulled = false; scene.add(this.mist);
   }
   updateMist(dt) {
@@ -198,11 +205,7 @@ export class Wave {
     const N = 260; this.veilN = N;
     this.vp = new Float32Array(N * 3); this.vv = new Float32Array(N * 3); this.vl = new Float32Array(N).fill(-1);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.vp, 3));
-    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
-    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(255,255,255,.7)'); gr.addColorStop(0.45, 'rgba(255,255,255,.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
-    this.veil = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.55 * Math.sqrt(this.cond.H), map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0.3, depthWrite: false }));
+    this.veil = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.55 * Math.sqrt(this.cond.H), map: sprite('veil', 64, [[0, 'rgba(255,255,255,.7)'], [0.45, 'rgba(255,255,255,.22)'], [1, 'rgba(255,255,255,0)']]), transparent: true, opacity: 0.3, depthWrite: false }));
     this.veil.frustumCulled = false; scene.add(this.veil);
   }
   updateVeil(dt) {
@@ -234,11 +237,7 @@ export class Wave {
     this.sp = new Float32Array(N * 3); this.sv = new Float32Array(N * 3); this.sl = new Float32Array(N);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.sp, 3));
     // soft round droplet sprite
-    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
-    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    cx.fillStyle = gr; cx.fillRect(0, 0, 32, 32);
-    const tex = new THREE.CanvasTexture(cv);
+    const tex = sprite('drop', 32, [[0, 'rgba(255,255,255,1)'], [0.4, 'rgba(255,255,255,.5)'], [1, 'rgba(255,255,255,0)']]);
     this.spray = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xfff1e0, size: 0.1, map: tex, alphaMap: tex, transparent: true, opacity: 0.6, depthWrite: false, fog: false }));
     this.spray.frustumCulled = false; scene.add(this.spray);
     for (let i = 0; i < N; i++) this.sl[i] = -1;
@@ -248,9 +247,9 @@ export class Wave {
   dispose(scene) {
     scene.remove(this.mesh); scene.remove(this.spray);
     if (!this.shared) { this.geo.dispose(); this.mesh.material.dispose(); }   // shared shapes stay for the next wave
-    this.spray.geometry.dispose(); this.spray.material.map.dispose(); this.spray.material.dispose();
-    scene.remove(this.mist); this.mist.geometry.dispose(); this.mist.material.map.dispose(); this.mist.material.dispose();
-    scene.remove(this.veil); this.veil.geometry.dispose(); this.veil.material.map.dispose(); this.veil.material.dispose();
+    this.spray.geometry.dispose(); this.spray.material.dispose();
+    scene.remove(this.mist); this.mist.geometry.dispose(); this.mist.material.dispose();
+    scene.remove(this.veil); this.veil.geometry.dispose(); this.veil.material.dispose();   // (sprites are shared: kept)
   }
   lipAt(s) {                                          // world position of the lip tip for the slice at s
     // the shape for a given s never changes, so remember it (per 10 cm); only x moves with the peel
