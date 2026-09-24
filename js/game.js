@@ -171,7 +171,7 @@ if (Q.get('mode')) start(Q.get('mode'));
 // ---------- camera: a chase camera over your shoulder, looking where you're going; tight and low in the barrel
 const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3(), _lk = new THREE.Vector3(), _want = new THREE.Vector3(), _look = new THREE.Vector3();
 const camPos = new THREE.Vector3(0, 2, 10), camLook = new THREE.Vector3(), pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() };
-let camYaw = 0, lookBackK = 0, wipeCut = false, camRoll = 0;
+let camYaw = 0, lookYaw = 0, lookBackK = 0, wipeCut = false;
 const cam = { a: 0, r: 3, y: 1.3, va: 0, vr: 0, vy: 0, vl: new THREE.Vector3() };
 const camOff = new THREE.Vector3(0, 1.3, 3), lookOff = new THREE.Vector3(), _anc = new THREE.Vector3(), anchorS = new THREE.Vector3(), anchorV = new THREE.Vector3();
 const smooth01 = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
@@ -189,20 +189,23 @@ function updateCamera(dt) {
   } else {
     // follow the direction you're travelling when you're up and moving, the way the board points when you're lying
     const standing = rider.standing, moving = rider.v > 2.5 && standing;
-    // standing, sit behind you along the wave: the shoreward part of your motion is squashed so the camera never ends up
-    // straight behind you when you point down the face (that would be up inside the wall). Smooth and rate-limited.
-    const yaw = standing && (moving || rider.state === 'POP') ? Math.atan2(rider.vz * 0.35, rider.vx + 0.3) : rider.th;
+    // a chase camera locked behind you: it points where you're going, level horizon, lightly smoothed
+    // (placed behind you, but the seaward part is halved so it stays on the face side and the wave never hides you)
+    const yaw = standing && (moving || rider.state === 'POP') ? Math.atan2(rider.vz * 0.5, rider.vx) : rider.th;
+    const travel = standing && moving ? Math.atan2(rider.vz, rider.vx) : yaw;
+    lookYaw += Math.atan2(Math.sin(travel - lookYaw), Math.cos(travel - lookYaw)) * Math.min(1, dt * 6); if (snapCam) lookYaw = travel;
     let dy = yaw - camYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-    const maxTurn = 1.3 * dt;                                            // at most ~75 degrees a second
-    camYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * 3))); if (snapCam) camYaw = yaw;
+    const maxTurn = (standing ? 3.2 : 1.3) * dt;
+    camYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * (standing ? 6 : 3)))); if (snapCam) camYaw = yaw;
     const dx = Math.cos(camYaw), dz = Math.sin(camYaw);
     const tube = rider.inBarrel ? 1 : 0;
-    const back = standing ? 3.9 - 1.6 * tube + 0.05 * rider.v : 3.0, height = standing ? 1.55 - 0.7 * tube : 1.2;
-    want.set(p.x - dx * back, p.y + height, p.z - dz * back + (standing ? 1.5 - 0.9 * tube : 0));   // a little out toward the beach so the wall frames the shot
-    // look ahead of you only once the camera is actually behind you; from the side or front, look at you
+    const back = standing ? 3.9 - 1.5 * tube : 3.0, height = standing ? 1.75 - 0.85 * tube : 1.2;
+    want.set(p.x - dx * back, p.y + height, p.z - dz * back);
+    // look just ahead of you (from the side or front during the drop, at you)
     const ol = Math.hypot(camOff.x, camOff.z) || 1, behind = Math.max(0, Math.min(1, -(camOff.x * dx + camOff.z * dz) / ol));
-    const lead = 0.5 + 4.5 * behind * behind;
-    look.set(p.x + dx * lead, p.y + (standing ? 0.85 : 0.4), p.z + dz * lead);
+    const lead = standing ? 0.3 + 2.4 * behind : 0.5 + 4.5 * behind * behind;
+    const lx = standing ? Math.cos(lookYaw) : dx, lz = standing ? Math.sin(lookYaw) : dz;   // look where you're actually going
+    look.set(p.x + lx * lead, p.y + (standing ? 0.55 : 0.4), p.z + lz * lead);
     // lying and facing the beach with a wave coming: look back over your shoulder at it; on the face, swing beside you for the drop
     if (!standing && st === 'LIE') {
       const inc = incoming(), facingIn = Math.sin(rider.th) > 0.4;
@@ -230,10 +233,10 @@ function updateCamera(dt) {
         const wall = q.w.prof.frontZAt(q.s, want.y) + q.w.zW;
         want.z = Math.max(wall + 0.5, Math.min(want.z, sl.lipZ + q.w.zW - 0.5));
       }
-      else if (q.zl > sl.topZ - 0.3 && want.y < sl.top + 0.3) {
+      else if (!standing && q.zl > sl.topZ - 0.3 && want.y < sl.top + 0.3) {
         const fz = q.w.prof.frontZAt(q.s, want.y) + q.w.zW;
         if (want.z < fz + 0.7) want.z = fz + 0.7;                  // pushed out in front of the wall, never inside it
-      }
+      } else if (standing && q.zl < sl.topZ + 0.3) want.y = Math.max(want.y, sl.top * (q.w.fade || 1) + 0.6);   // behind you over the top of the wave: rise above it, don't swing sideways
     }
     // stay above the water that's here now and the water that's about to arrive (a wave passing under shouldn't shove the camera)
     let wy = heightAt(waves, want.x, want.z);
@@ -255,8 +258,8 @@ function updateCamera(dt) {
   const ta = Math.atan2(_cv.z, _cv.x), tr = Math.hypot(_cv.x, _cv.z);
   if (snap) { cam.a = ta; cam.r = tr; cam.y = _cv.y; cam.va = cam.vr = cam.vy = 0; lookOff.subVectors(look, anchor); cam.vl.set(0, 0, 0); }
   else {
-    const w0 = st === 'WIPE' ? 3.2 : 3.6, damp = Math.max(0, 1 - 2 * w0 * dt), w2 = w0 * w0 * dt;
-    cam.va = (cam.va + Math.atan2(Math.sin(ta - cam.a), Math.cos(ta - cam.a)) * w2) * damp; cam.va = Math.max(-1.1, Math.min(1.1, cam.va)); cam.a += cam.va * dt;
+    const w0 = st === 'WIPE' ? 3.2 : rider.standing && lookBackK < 0.01 ? 6.5 : 3.6, damp = Math.max(0, 1 - 2 * w0 * dt), w2 = w0 * w0 * dt;
+    cam.va = (cam.va + Math.atan2(Math.sin(ta - cam.a), Math.cos(ta - cam.a)) * w2) * damp; cam.va = Math.max(-2.5, Math.min(2.5, cam.va)); cam.a += cam.va * dt;
     cam.vr = (cam.vr + (tr - cam.r) * w2) * damp; cam.vr = Math.max(-3, Math.min(3, cam.vr)); cam.r += cam.vr * dt;
     cam.vy = (cam.vy + (_cv.y - cam.y) * w2) * damp; cam.vy = Math.max(-3, Math.min(3, cam.vy)); cam.y += cam.vy * dt;
     // the point we look at: same kind of spring, a little quicker
@@ -271,10 +274,6 @@ function updateCamera(dt) {
   camera.position.copy(camPos);
   if (st === 'WIPE') { const sh = 0.12 * Math.exp(-(W.t || 0) * 2.5); camera.position.x += (Math.random() - .5) * sh; camera.position.y += (Math.random() - .5) * sh; }
   camera.lookAt(camLook);
-  // a touch of roll with the carve (a few degrees at most), smoothed: you feel the turn without getting seasick
-  const wantRoll = rider.standing && st !== 'WIPE' ? Math.max(-0.07, Math.min(0.07, -rider.turn * rider.v * 0.006)) : 0;
-  camRoll += (wantRoll - camRoll) * Math.min(1, dt * 4);
-  camera.rotateZ(camRoll);
 }
 
 // ---------- surfer pose on the board
