@@ -104,7 +104,7 @@ export class Rider {
     this.turn = 0; this.lean = 0; this.skid = 0; this.relS = 1; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
     this.wave = null; this.s = 99; this.zl = 99; this.inBarrel = false; this.onFace = false; this.lowT = 0;
     this.pumpHold = 0; this.pumping = false;
-    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, cutbacks: 0, snaps: 0, speed: 0, end: 0, score: 0 }; this.turnSign = 0; this.cbArmed = false; this.snapArm = 0; this.trick = null;
+    this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, cutbacks: 0, snaps: 0, speed: 0, end: 0, score: 0, moves: [], tubeT: 0, leanPk: 0 }; this.turnSign = 0; this.cbArmed = false; this.snapArm = 0; this.trick = null;
   }
   set(state) { this.state = state; this.stateT = 0; }
   get standing() { return this.state === 'POP' || this.state === 'RIDE'; }
@@ -269,20 +269,25 @@ export class Rider {
       if (this.inBarrel) this.ride.barrel += h;
       if (onFront && s > -0.5 * H && s < 3 * H && y > 0.2 * H) this.ride.pocket += h;
       this.ride.speed += Math.max(0, this.v - C.peel) * h;
+      this.ride.leanPk = Math.max(Math.abs(this.lean) / P.leanMax, this.ride.leanPk - h * 0.8);
+      const crit = Math.max(0, 1 - Math.abs(s + 0.5 * H) / (3 * H)) * 0.6 + 0.4 * Math.min(1, y / Math.max(0.3, sl.top));   // near the curl and high on the face = critical
+      // a barrel counts once you come out of it (make it out, or it doesn't count)
+      if (this.inBarrel) this.ride.tubeT += h;
+      else if (this.ride.tubeT > 0) { if (this.ride.tubeT > 0.5) this.move('BARREL', 0.6 + 0.4 * crit, this.ride.tubeT); this.ride.tubeT = 0; }
       // a turn counts when the carve swings hard one way and then hard the other at speed
       if (Math.abs(this.turn) > 0.9 && this.v > C.peel * 0.8) {
         const sg = Math.sign(this.turn);
-        if (sg !== this.turnSign) { if (this.turnSign !== 0) this.ride.turns++; this.turnSign = sg; }
+        if (sg !== this.turnSign) { if (this.turnSign !== 0) { this.ride.turns++; this.move('TURN', crit); } this.turnSign = sg; }
       }
       // a cutback: from running down the line, turn right round to face the breaking part, still with speed
       const hd = Math.cos(this.th);
       if (hd > 0.5) this.cbArmed = true;
-      else if (this.cbArmed && hd < -0.4 && this.v > 0.45 * C.speed) { this.cbArmed = false; this.ride.cutbacks++; this.trick = { name: 'CUTBACK', t: 0 }; }
+      else if (this.cbArmed && hd < -0.4 && this.v > 0.45 * C.speed) { this.cbArmed = false; this.ride.cutbacks++; this.move('CUTBACK', crit); }
       // a snap (top turn): climb hard up to the lip, then whip the board back down the face from up there
       const relVz = this.vz - C.speed, hTop = y / Math.max(sl.top, 0.3);
       if (relVz < -1.2 && hTop > 0.6) this.snapArm = 1.2; else this.snapArm = Math.max(0, this.snapArm - h);
-      if (this.snapArm > 0 && relVz > 0.8 && hTop > 0.5 && Math.abs(this.turn) > 0.9 && !(this.trick && this.trick.name === 'SNAP')) {
-        this.snapArm = 0; this.ride.snaps++; this.trick = { name: 'SNAP', t: 0 };
+      if (this.snapArm > 0 && relVz > 0.8 && hTop > 0.5 && Math.abs(this.turn) > 0.9 && !(this.trick && this.trick.name.endsWith('SNAP'))) {
+        this.snapArm = 0; this.ride.snaps++; this.move('SNAP', crit);
       }
       if (this.trick) { this.trick.t += h; if (this.trick.t > 1.4) this.trick = null; }
       if (w.peelX > w.xEnd) { this.ride.end = 1; return this.out('Made it to the end of the reef'); }
@@ -296,9 +301,35 @@ export class Rider {
   }
 
   // like a contest judge: turns, speed, time in the barrel and in the pocket; just riding along earns little
-  liveScore() { const r = this.ride; return Math.round(r.t * 2 + r.pocket * 4 + r.turns * 25 + r.cutbacks * 60 + r.snaps * 40 + r.speed * 6 + r.barrel * 80 + r.end * 100); }
-  wipe(why) { this.why = why; this.set('WIPE'); this.ride.score = Math.round(this.liveScore() * (this.ride.t > 0 ? 0.8 : 1)); }
-  out(why) { this.why = why; this.set('OUT'); this.ride.score = this.liveScore(); }
+  // a judged move: worth more done fast, laid over hard, and close to the breaking part (critical)
+  move(name, crit, dur = 0) {
+    const C = this.wave.cond, spd = Math.min(1, this.v / (C.speed * 1.1)), pow = this.ride.leanPk;
+    let q = Math.min(1, 0.35 * spd + 0.3 * pow + 0.35 * crit), base = { TURN: 1.2, SNAP: 2.0, CUTBACK: 2.2 }[name] || 0;
+    if (name === 'BARREL') { base = 1.4 + 1.1 * Math.min(dur, 6); q = crit; }
+    const pts = base * (0.4 + 0.6 * q) * (0.8 + 0.2 * Math.min(1.5, C.H / 3));   // bigger surf, bigger scores
+    this.ride.moves.push({ name, pts, t: this.ride.t });
+    const big = q > 0.75 ? (name === 'BARREL' ? 'DEEP ' : 'BIG ') : '';
+    this.trick = { name: big + name + (name === 'BARREL' ? ` ${dur.toFixed(1)}s` : ''), t: 0 };
+  }
+  // like a contest judge, out of 10: the best moves count most (diminishing after that), variety earns a bonus,
+  // flow (speed kept up along the wave) a little; riding along without doing anything earns almost nothing.
+  // A move you fall on doesn't count (judges score completed manoeuvres).
+  liveScore(fell = false) {
+    const r = this.ride, ms = fell ? r.moves.filter((m) => m.t < r.t - 0.8) : r.moves;
+    const seen = {}, pts = ms.map((m) => m.pts * Math.pow(0.8, (seen[m.name] = (seen[m.name] || 0) + 1) - 1)).sort((a, b) => b - a);   // the same move again is worth less (repetition)
+    const W = [1, 0.85, 0.7, 0.55, 0.45, 0.35, 0.28, 0.22];
+    let raw = pts.reduce((a, p, i) => a + p * (W[i] || 0.18), 0);
+    raw += 0.45 * Math.max(0, new Set(ms.map((m) => m.name)).size - 1);   // variety
+    raw += Math.min(0.6, r.speed * 0.03) + Math.min(0.3, r.t * 0.015) + (r.end ? 0.3 : 0);
+    if (fell) raw *= 0.9;
+    return Math.round(100 * (1 - Math.exp(-raw / 6))) / 10;
+  }
+  wipe(why) { this.why = why; this.set('WIPE'); this.ride.score = this.ride.t > 0 ? this.liveScore(true) : 0; }
+  out(why) {
+    this.why = why;
+    if (this.ride.tubeT > 0.5 && this.wave) this.move('BARREL', 0.8, this.ride.tubeT);   // rode it out of (or to the end in) the barrel: that counts
+    this.ride.tubeT = 0; this.set('OUT'); this.ride.score = this.ride.t > 0 ? this.liveScore() : 0;
+  }
 
   // world pose of the board: position, forward along the board, up out of the deck
   pose(out) {

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=44';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=67';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=71';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
 
@@ -25,7 +25,7 @@ skyDome(scene); ocean(scene); coast(scene);
 const fx = new WeatherFX(scene);
 const audio = new SurfAudio();
 fx.onFlash = () => audio.thunder(Math.random());
-addEventListener('visibilitychange', () => audio.pause(document.hidden));
+addEventListener('visibilitychange', () => audio.pause(document.hidden || !document.body.classList.contains('playing')));
 const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x3a4a48, 1.3); scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xfff0dd, 2.0); scene.add(sunLight); scene.add(sunLight.target);
 // fit the screen whenever it changes: rotation, the browser bar sliding away, split screen (iOS doesn't always send 'resize')
@@ -63,7 +63,7 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
 
 // ---------- the surf: a reef with the peak at x=0, z=0. Waves come in from the sea one swell period apart.
 // Each wave breaks at the peak when it gets there and peels off to the right. You sit in the lineup and pick your own.
-let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0 }, nextBreak = 0, setLeft = 0, setPos = 0;
+let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0, scores: [] }, nextBreak = 0, setLeft = 0, setPos = 0;
 const REEF = { xEnd: 190, zBeach: 150 }, PROFILES = new Map();   // room for the bigger swells to run (the sand starts ~185 m in)
 function condFor(m) { return m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {
@@ -182,20 +182,29 @@ function surfSteer(sx, stall) {
 }
 
 // your best ride per level, kept on this phone (quietly does nothing if storage is blocked)
-const bestFor = (m) => { try { return +localStorage.getItem('balisurf.best2.' + m) || 0; } catch (e) { return 0; } };
-const saveBest = (m, v) => { try { localStorage.setItem('balisurf.best2.' + m, String(v)); } catch (e) {} showBests(); };
+const bestFor = (m) => { try { return +localStorage.getItem('balisurf.best3.' + m) || 0; } catch (e) { return 0; } };
+const saveBest = (m, v) => { try { localStorage.setItem('balisurf.best3.' + m, String(v)); } catch (e) {} showBests(); };
 function showBests() {
   for (const b of document.querySelectorAll('[data-mode]')) {
     let el = b.querySelector('.best'); const v = bestFor(b.dataset.mode);
     if (!el) { el = document.createElement('em'); el.className = 'best'; b.appendChild(el); }
-    el.textContent = v ? `Best ${v}` : '';
+    el.textContent = v ? `Best wave ${v.toFixed(1)}` : '';
   }
 }
 showBests();
 for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => start(b.dataset.mode));
 let starting = false;
+// back to the level select: stop the game behind the menu (you pick a level again to restart)
+function toMenu() {
+  window.__g.paused = true; starting = false; audio.pause(true);
+  input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
+  document.body.classList.remove('playing', 'riding'); ui.msg.style.display = 'none';
+  ui.start.style.display = ''; showBests();
+}
+document.getElementById('menu').addEventListener('touchstart', (e) => { e.preventDefault(); toMenu(); }, { passive: false });
+document.getElementById('menu').addEventListener('click', toMenu);
 async function start(m) {
-  if (starting) return; starting = true;
+  if (starting) return; starting = true; if (window.__g) window.__g.paused = false;
   mode = m; setWeather(m); audio.start();
   // fullscreen + landscape lock must be asked for inside the tap, before any waiting (Android); iOS ignores both safely
   try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {}); } catch (e) {}
@@ -203,7 +212,7 @@ async function start(m) {
   try { await ready; } catch (e) { starting = false; return; }
   ui.load.textContent = '';
   ui.start.style.display = 'none'; document.body.classList.add('playing');
-  session = { waves: 0, total: 0, best: 0 };
+  session = { waves: 0, total: 0, best: 0, scores: [] };
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9;
   updateWaves(0); spawnRider();
   ui.cond.textContent = mode === 'random' ? 'Random' : CONDITIONS[mode].name;
@@ -439,7 +448,7 @@ const railSpray = (() => {
           }
         }
         // drifting: the tail sprays a big fan to the outside of the slide
-        const snapK = rider.trick && rider.trick.name === 'SNAP' && rider.trick.t < 0.3 ? 1 : 0;   // a snap throws a sheet of spray off the lip
+        const snapK = rider.trick && rider.trick.name.endsWith('SNAP') && rider.trick.t < 0.3 ? 1 : 0;   // a snap throws a sheet of spray off the lip
         const slideK = Math.max(rider.skid, Math.min(1, ((rider.slide || 0) - 0.12) * 2.2));   // tail hanging out ~7 deg+ starts to spray
         if (slideK > 0.05 || snapK) {
           fanAcc += (Math.max(slideK, 0.3 * snapK) + 1.5 * snapK) * rider.v * 55 * dt;
@@ -727,18 +736,20 @@ function updateHUD(dt) {
   const call = st !== 'RIDE' ? '' : rider.inBarrel ? 'BARREL' : rider.trick ? rider.trick.name : '';
   if (call) setText(ui.tube, call);
   ui.tube.style.opacity = call ? 1 : 0;
-  setText(ui.score, st === 'RIDE' ? '' + rider.liveScore() : '');
+  setText(ui.score, st === 'RIDE' ? rider.liveScore().toFixed(1) : '');
   if ((st === 'WIPE' || st === 'OUT') && endT < 0) {
     endT = 0;
     const r = rider.ride;
     const prevBest = bestFor(mode), newBest = r.t > 0 && r.score > prevBest && prevBest > 0;
     if (r.t > 0 && r.score > prevBest) saveBest(mode, r.score);
-    if (r.t > 0 || st === 'WIPE') { session.waves++; session.total += r.score; session.best = Math.max(session.best, r.score); }
+    if (r.t > 0 || st === 'WIPE') { session.waves++; session.total += r.score; session.best = Math.max(session.best, r.score); session.scores.push(r.score); }
+    // heat total, like a contest: your best two waves count
+    const two = [...session.scores].sort((a, b) => b - a).slice(0, 2), heat = two.reduce((a, b) => a + b, 0);
     ui.msgT.textContent = rider.why;
-    ui.msgN.innerHTML = r.t > 0 ? `${r.score}${newBest ? '<small>NEW BEST</small>' : ''}` : '';
+    ui.msgN.innerHTML = r.t > 0 ? `${r.score.toFixed(1)}${newBest ? '<small>NEW BEST</small>' : ''}` : '';
     const stat = (v, l) => `<div>${v}<span>${l}</span></div>`;
     ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.cutbacks ? stat(r.cutbacks, r.cutbacks > 1 ? 'CUTBACKS' : 'CUTBACK') : '') + (r.snaps ? stat(r.snaps, r.snaps > 1 ? 'SNAPS' : 'SNAP') : '') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
-    ui.sess.textContent = session.waves ? `Rides ${session.waves}  ·  session best ${session.best}  ·  all-time best ${Math.max(bestFor(mode), r.score)}` : '';
+    ui.sess.textContent = session.waves ? `Heat ${heat.toFixed(2)} / 20 (best two of ${session.waves})  ·  best wave ever ${Math.max(bestFor(mode), r.score).toFixed(1)}` : '';
   }
   // a wipeout plays out first (you see yourself go over), then the summary fades in
   if (endT >= 0) {
@@ -828,7 +839,7 @@ function tick(dt) {
 }
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
-  if (!window.__g.paused && !portrait.matches) tick(dt);   // turned upright: the game waits
+  if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
   renderer.render(scene, camera); autoQuality(dt);
 });
 window.__g = { paused: false, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 9; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
