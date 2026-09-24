@@ -214,7 +214,7 @@ export class Rider {
       ax += gx; az += gz;
       if (this.skid) { const loss = P.skidLoss * (1 - 0.5 * P.glide) * (latA - lim) * Math.sign(along); ax += -loss * dx; az += -loss * dz; }
       // pumping: weight the board on the way down, stay light going up. Legs only push for so long.
-      this.pumpHold = inp.pump ? this.pumpHold + h : Math.max(0, this.pumpHold - 0.6 * h);   // legs recover slowly: tapping doesn't reset them
+      this.pumpHold = inp.pump ? Math.min(1.2, this.pumpHold + h) : Math.max(0, this.pumpHold - 0.6 * h);   // legs recover slowly: tapping doesn't reset them
       const legs = 1 - smooth(0.45, 1.1, this.pumpHold);
       if (inp.pump) {
         const pull = g * Math.abs(this.gAlong) / (1 + slope2) * P.pump;
@@ -236,7 +236,7 @@ export class Rider {
     const P = RIDE;
     if (this.state === 'OUT') { this.inBarrel = false; this.onFace = false; return; }
     this.inBarrel = false; this.washed = false;
-    if (!w) { this.onFace = false; if (this.standing) this.lostSpeed(h); return; }
+    if (!w) { this.onFace = false; this.wwFloatT = 0; if (this.standing) this.lostSpeed(h); return; }
     // (heights in the wave's own shape: the drawn wave is the profile scaled by the set's size, so the rules compare
     // against the same scaled lip, top and barrel the player sees)
     const C = w.cond, H = C.H, s = q.s, zl = q.zl, y = q.y / (w.fade || 1), slope = Math.hypot(this.hx, this.hz);

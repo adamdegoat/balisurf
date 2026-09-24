@@ -1,8 +1,8 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=67';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=90';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=68';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=91';
 import { makeBoard } from './board.js?v=3';
 import { SurfAudio } from './audio.js?v=7';
 
@@ -144,7 +144,7 @@ function spawnRider() {
   // don't drop a wave on your head as you arrive
   // don't drop a wave on your head as you arrive: hold back every wave that hasn't reached you yet
   { const inc = incoming(); if (inc.t < 7) { const shift = 7 - inc.t;
-      for (const w of waves) if (rider.z - w.zW >= -2) w.tBreak += shift;
+      for (const w of waves) if (rider.z - w.zW >= -2) { w.tBreak += shift; if (w.px !== undefined) w.px -= w.cond.peel * shift; }   // (its break point too, or it breaks down the reef)
       nextBreak += shift; } }
   ui.msg.style.display = 'none';
 }
@@ -231,6 +231,7 @@ function toMenu() {
   if (surfer) endWipe(); rider = null; rig.visible = false; endT = -1;
   for (const w of waves) w.dispose(scene); waves = [];
   setWeather('medium'); ui.cond.textContent = '';
+  underK = 0; underEl.style.opacity = 0; setText(ui.speed, ''); setText(ui.score, ''); setText(ui.hint, ''); ui.tube.style.opacity = 0;
   input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
   keys.clear(); steerF = stickY = 0; ui.paddle.classList.remove('down'); ui.stall.classList.remove('down');
   document.body.classList.remove('playing', 'riding'); ui.msg.style.display = 'none';
@@ -750,7 +751,7 @@ function surfStance() {
   // how hard the turn is loading the legs (sideways g), smoothed; which way is the inside of the turn
   gLoad += (Math.min(1.4, Math.abs(rider.turn) * rider.v / 9.8) - gLoad) * (1 - Math.exp(-10 * dtArm));
   const leanN = Math.max(-1, Math.min(1, rider.lean / RIDE.leanMax));
-  _in.crossVectors(bodyFwd, bodyUp).normalize().multiplyScalar(-Math.sign(leanN) || 1);   // toward the inside of the carve
+  _in.crossVectors(bodyFwd, bodyUp).normalize().multiplyScalar(Math.sign(leanN) || 1);   // toward the inside of the carve (forward x up = your right; +lean turns right)
   for (const [s, sgn] of [['l', side], ['r', -side]]) {
     // legs: feet about shoulder-and-a-half apart, front foot toward the nose
     swingBone(bones['thigh_' + s], bones['foot_' + s], sgn, (0.36 + 0.06 * deep) * w);
@@ -788,7 +789,7 @@ function surfStance() {
   // a target in eye space: f forward, d down, x toward the wave (negative = open side)
   const at = (out, f, d, x) => out.copy(eye).addScaledVector(F, f).addScaledVector(WORLD_UP, -d).addScaledVector(R, x * ws);
   // the front arm is whichever shoulder is further ahead along your line (worked out, not assumed from the stance)
-  const frontArm = _ik1.clone().sub(eye).dot(F) > _ik2.clone().sub(eye).dot(F) ? 'l' : 'r';
+  const frontArm = _cv.subVectors(_ik1, eye).dot(F) > _ik4.subVectors(_ik2, eye).dot(F) ? 'l' : 'r';
   for (const s of ['l', 'r']) {
     const front = s === frontArm, sway = Math.sin(bodyT * 1.7 + (front ? 0 : 1.3)) * 0.03;
     const P = _ap;
@@ -952,6 +953,7 @@ function tick(dt) {
     // behind the start screen: a slow drift along a peeling wave
     if (!tick.demo) { tick.demo = new Wave(scene, CONDITIONS.medium); tick.demo.peelX = -30; }
     tick.demo.update(dt);
+    railSpray.update(dt); wake.update(dt);   // (let any spray left from the last ride fall and fade)
     const px = tick.demo.peelX;
     camera.position.set(px + 14, 2.2, 13); camera.lookAt(px - 2, 1.2, 0);
   }

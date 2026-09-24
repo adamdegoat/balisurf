@@ -611,7 +611,7 @@ export function coast(scene) {
     const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); fg.setIndex(idx); fg.computeVertexNormals();
     for (let k = 0; k < 9; k++) frondParts.push(fg.clone().rotateZ((k % 3 - 1) * 0.18).rotateY(k * Math.PI * 2 / 9 + (k % 2) * 0.2));
   }
-  const leafMat = mat.clone(); leafMat.side = THREE.DoubleSide;   // fronds are thin blades, seen from above and below
+  const leafMat = mat.clone(); leafMat.uniforms = ENV; leafMat.side = THREE.DoubleSide;   // (share the live weather uniforms: a clone would freeze them)   // fronds are thin blades, seen from above and below
   const crownG = colorize(mergeGeos(frondParts), [0.15, 0.3, 0.1], 0.25);
   const trunks = new THREE.InstancedMesh(trunkG, mat, N), crowns = new THREE.InstancedMesh(crownG, leafMat, N);
   for (let i = 0; i < N; i++) {
