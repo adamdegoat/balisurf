@@ -336,7 +336,7 @@ function updateRig(dt, t) {
   sitting = false;
   surfer.position.set(0, 0, 0); surfer.rotation.set(0, 0, 0);
   if (st === 'LIE' || st === 'OUT') {
-    if (rider.paddling && st === 'LIE') { play('paddle', { speed: 0.7 + rider.v / 3 }); surfer.position.set(0, -0.93, -0.25); }
+    if (rider.paddling && st === 'LIE') { play('paddle', { speed: 0.7 + rider.v / 3 }); surfer.position.set(0, -0.93, -0.5); }   // chest mid-board, feet at the tail
     else {
       // sitting astride: weight over the tail sinks it, nose tips up ~14 deg, legs hang in the water either side
       play('sit'); surfer.position.set(0, -0.36, -0.25);
