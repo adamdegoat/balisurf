@@ -739,7 +739,7 @@ function aimBone(bone, child, target, w) {
 // paddling: alternating crawl strokes. Each arm reaches far forward over the water, digs in and pulls back under the
 // board, comes out by the hip and swings forward elbow-high; the other arm half a stroke behind. (The stock clip is a
 // breaststroke that keeps both hands under the board, where your own eyes can never see them.)
-let paddlePh = 0, paddleW = 0; const _pf = new THREE.Vector3(), _pr = new THREE.Vector3(), _ps = new THREE.Vector3();
+let paddlePh = 0, paddleW = 0; const _pf = new THREE.Vector3(), _pr = new THREE.Vector3(), _ps = new THREE.Vector3(), _ppo = new THREE.Vector3();
 function paddleArms(dt) {
   const want = rider.state === 'LIE' && rider.paddling ? 1 : 0;
   paddleW += (want - paddleW) * Math.min(1, dt * 6);
@@ -752,9 +752,21 @@ function paddleArms(dt) {
     const ua = bones['upperarm_' + sd], la = bones['lowerarm_' + sd], hd = bones['hand_' + sd];
     if (!ua || !la || !hd) continue;
     ua.getWorldPosition(_ps); const side = Math.sign(_ps.sub(rig.position).dot(_pr)) || 1;
-    const a = -paddlePh + off, c = Math.cos(a), sn = Math.sin(a);   // 0 reach, -pi/2 pull, -pi out by the hip, -3pi/2 recovery
-    _t.copy(_pf).multiplyScalar(0.3 + 0.7 * c).addScaledVector(WORLD_UP, sn > 0 ? 0.55 * sn : 0.95 * sn).addScaledVector(_pr, side * (0.3 + 0.3 * Math.max(0, sn))).normalize();
-    aimBone(ua, la, _t, 0.9 * paddleW); aimBone(la, hd, _t, 0.8 * paddleW);
+    // the hand's path, like a real crawl stroke seen in paddling POV footage: it goes in the water ahead of your shoulder
+    // just outside the rail, pulls back under the surface to your hip, then comes out and swings forward over the
+    // water with the elbow high (bent-arm pull, not a straight windmill)
+    const u = ((paddlePh + off) / (Math.PI * 2)) % 1, sh = _ps.copy(ua.getWorldPosition(_ps));
+    const wl = rig.position.y + 0.02;                                                   // the water line beside the board
+    if (u < 0.55) { const k = u / 0.55;                                                  // pull: catch ahead -> hip, under the surface
+      _t.copy(sh).addScaledVector(_pf, 0.47 - 0.77 * k).addScaledVector(_pr, side * (0.05 + 0.05 * Math.sin(k * Math.PI)));
+      _t.y = wl - 0.03 - 0.18 * Math.sin(k * Math.PI);   // (full reach at the catch: the fingertips go in ahead, where you can see them)
+      _ppo.copy(_pr).multiplyScalar(side * 0.7).addScaledVector(WORLD_UP, 0.7);          // elbow up and out, like pulling over a barrel
+    } else { const k = (u - 0.55) / 0.45, e = k * k * (3 - 2 * k);                     // recovery: out by the hip, forward over the water
+      _t.copy(sh).addScaledVector(_pf, -0.3 + 0.77 * e).addScaledVector(_pr, side * (0.1 + 0.12 * Math.sin(k * Math.PI)));
+      _t.y = wl + 0.02 + 0.2 * Math.sin(k * Math.PI);
+      _ppo.copy(WORLD_UP).addScaledVector(_pr, side * 0.5).addScaledVector(_pf, -0.3);   // elbow high, leading
+    }
+    reachArm(ua, la, hd, _t, _ppo, 0.95 * paddleW);
   }
 }
 // two-bone arm reach: put the hand on T (or as close as the arm allows), elbow bending toward the pole direction
