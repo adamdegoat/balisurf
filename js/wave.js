@@ -8,6 +8,7 @@
 // The cross-section is one continuous sheet: trough -> up the (concave) face -> tube ceiling -> lip tip -> over the
 // top of the lip -> down the back of the wave. Rendered double-sided so you can see it from inside the tube.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Real numbers (surf-science literature): a wave breaks at about 0.78 x the depth; near breaking it travels at about
 // sqrt(g(d + H/2)); good surf breaks peel at 45-66 degrees, so the peel rate is c / tan(angle) and a surfer needs c / sin(angle).
@@ -448,7 +449,11 @@ export function waterMaterial({ wave = false } = {}) {
         float wall = abs(N.y) < .6 ? 1. : 0.;
         vec2 q = mix(vW.xz, vec2(vW.x, vW.y + vW.z), smoothstep(.75, .35, abs(N.y))) * .45 + vec2(uTime*.12, uTime*.07);
         float n1 = fbm(q), n2 = fbm(q*2.3 + 7.1);
-        N = normalize(N + vec3(n1 - .5, 0., n2 - .5) * .28 * uChop);
+        // wind slicks: long lanes where the breeze drops and the sea goes smooth, mirroring the sky (so the open sea
+        // isn't one even texture out to the horizon)
+        float slick = 0., dCam = length(cameraPosition - vW);
+        if (dCam > 45.) slick = smoothstep(.56, .78, vnoise(vec2(vW.x * .0045 + uTime * .003, vW.z * .016 - uTime * .002))) * (1. - uCloud) * smoothstep(45., 90., dCam);   // (only further off: up close the ripples hide it anyway)
+        N = normalize(N + vec3(n1 - .5, 0., n2 - .5) * .28 * uChop * (1. - .72 * slick));
         // fine wind ripples close to you (the big ripple pattern alone leaves the water glassy up close)
         float nearK = smoothstep(30., 3., length(cameraPosition - vW)) * step(.6, abs(N.y));
         if (nearK > .001) {   // (worked out only where it shows: most of the screen is further off than 30 m)
@@ -481,11 +486,18 @@ export function waterMaterial({ wave = false } = {}) {
         body = mix(vec3(dot(body, vec3(.3, .59, .11))), body, 1.2 - .2 * thin);   // (the filmic tone curve greys colours: the water gets a little back; not the glowing thin water, which went neon)
         // the reef under clear shallow water (flat water inside the break, toward the beach): pale turquoise over sand
         // with darker coral and rock patches, fading out in deep water, on the wave faces and under a stormy sky
-        float reefK = smoothstep(-45., 15., vW.z) * (1. - smoothstep(uReefEnd - 25., uReefEnd, vW.z)) * smoothstep(-160., -60., vW.x)
-                    * smoothstep(.55, .99, normalize(vN).y) * (1. - smoothstep(.05, 1.4, vW.y)) * (1. - .7 * uCloud) * uReef;
+        // (its outer edge wanders, as a real reef's does, and just outside it the water drops off to a darker blue; inside,
+        // big areas differ: bright sand flats, dense coral gardens browner and darker, the usual mix between)
+        float zone = .5, edge = -45.;
+        float calm = smoothstep(.55, .99, normalize(vN).y) * (1. - smoothstep(.05, 1.4, vW.y)) * (1. - .7 * uCloud) * uReef;
+        if (calm > .001 && vW.z > -120. && vW.z < uReefEnd && vW.x > -200.) {   // (only over the reef and its edge: not out on the open sea)
+          zone = vnoise(vW.xz * .011 + 3.7); edge = -45. + 55. * (vnoise(vW.xz * .006 + 11.3) - .5);
+          body = mix(body, uDeep * .72, smoothstep(edge - 45., edge - 5., vW.z) * (1. - smoothstep(edge - 5., edge + 25., vW.z)) * calm * .35 * smoothstep(-200., -80., vW.x));   // (the drop-off)
+        }
+        float reefK = smoothstep(edge, edge + 60., vW.z) * (1. - smoothstep(uReefEnd - 25., uReefEnd, vW.z)) * smoothstep(-160., -60., vW.x) * calm;
         if (reefK > .001) {
-          float rn = fbm(vW.xz * .06), rn2 = fbm(vW.xz * .27 + 3.1);
-          vec3 reefCol = mix(vec3(.3, .66, .62), vec3(.13, .25, .22), clamp(smoothstep(.46, .6, rn) + .35 * (rn2 - .5), 0., 1.));
+          float rn = fbm(vW.xz * .06), rn2 = fbm(vW.xz * .27 + 3.1), sandy = smoothstep(.56, .8, zone), coral = smoothstep(.42, .18, zone);
+          vec3 reefCol = mix(vec3(.3, .66, .62) + vec3(.06, .05, .02) * sandy, mix(vec3(.13, .25, .22), vec3(.21, .2, .13), coral * .7), clamp((smoothstep(.46, .6, rn) + .35 * (rn2 - .5)) * (1. - .85 * sandy) + coral * .4, 0., 1.));
           body = mix(body, reefCol * uReefTint * (.55 + .45 * uSunVis), reefK * .38);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
         }
         ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);\n        // the throwing lip is a moving sheet: light and dark streaks run through it, and its thinnest edge glows palest\n        if (glow > .001) {   // (the upper face and lip only)\n          vec2 shq = vec2(vW.x * .9, (vW.y - vW.z) * .3 + uTime * 1.2); float sheet = vnoise(shq) * .62 + vnoise(shq * 2.3 + 1.7) * .38;   // (two layers of noise: plenty for a streak, half the cost of the full four)\n          body *= 1. + (sheet - .5) * 1.4 * glow;\n          body += vec3(.3, .55, .5) * smoothstep(.8, 1., vFT.y) * glow * .25 * (.4 + .6 * uSunVis);\n        }' : ''}
@@ -656,6 +668,9 @@ function makeLandMat() {
         #else
           vN = normalize(mat3(modelMatrix) * normal);
         #endif
+        #ifdef BOAT
+          w.x += mod(uTime * 2.2 + 900., 1500.) - 750.; w.y += sin(uTime * .7) * .25;   // (sailing slowly along the horizon, round and round, rising on the swell)
+        #endif
         vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `uniform vec3 uSun, uSunCol, uHor, uZen, uFog; uniform float uSunVis, uFlash, uTime; varying vec3 vC; varying vec3 vW; varying vec3 vN;
       void main(){
@@ -813,11 +828,124 @@ function buildCoast(scene, O, mat) {
   // (placed inside the 900 m sky dome at the same apparent size it would have 30 km away)
   const agung = new THREE.ConeGeometry(470, 165, 40, 6, true); { const p = agung.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const n = Math.sin(p.getX(i) * 0.03) * Math.cos(p.getZ(i) * 0.04) * 10; p.setX(i, p.getX(i) * (1 + n / 470)); p.setY(i, y + (y < 60 ? n * 0.3 : 0)); } agung.computeVertexNormals(); }
   { const mt = at(new THREE.Mesh(colorize(agung, O.mountain, 0.1), mat), -230, 80 * O.mountainScale, 820); mt.scale.setScalar(O.mountainScale); group.add(mt); }
+  if (O.seascape !== false) seascape(group, O, mat);
   group.position.z = O.dz;   // the whole coast further back: a longer run in to the sand
   scene.add(group);
   return group;
 }
 function at(mesh, x, y, z) { mesh.position.set(x, y, z); return mesh; }
+// Out to sea from every break: limestone sea stacks and a natural arch standing offshore with the swell foaming round
+// their feet, a low rocky islet, and hazy islands on the horizon. All well out past where the waves start (z < -300),
+// so nothing ever stands in a wave. Joined into one mesh on the land material, plus one for all the foam.
+let _foamMat = null;
+function foamMat() {
+  return _foamMat || (_foamMat = new THREE.ShaderMaterial({ uniforms: ENV, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    vertexShader: `attribute vec2 aR; varying vec2 vR; varying vec3 vW; void main(){ vR = aR; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float uTime, uSunVis; uniform vec3 uSunCol, uZen; varying vec2 vR; varying vec3 vW;
+      ${NOISE}
+      void main(){ float r = vR.x;   // (0 against the rock, 1 at the ring's outer edge)
+        float surge = .5 + .5 * sin(uTime * .8 + vR.y * .05);                                   // (the swell surging up round the rock and draining)
+        float lace = vnoise(vec2(vR.y * .35, r * 5. - uTime * .45)) * .65 + vnoise(vec2(vR.y * 1.1, r * 13. - uTime * .9)) * .35;
+        float a = pow(1. - r, 1.4) * (.55 + .45 * surge) * smoothstep(.25 + r * .45, .75, lace + (1. - r) * .35);
+        a *= 1. - .55 * smoothstep(350., 950., length(cameraPosition - vW));
+        if (a < .01) discard;
+        gl_FragColor = vec4(vec3(.93, .95, .95) * (.6 + .4 * uSunVis) + uSunCol * .08 + uZen * .05, a * .9);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }` }));
+}
+function seascape(group, O, mat) {
+  let seed = 1 + Math.round(O.dz * 7.3 + O.rock[0] * 1000 + O.rock[2] * 333) % 997; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;   // (the same stacks every visit)
+  const rock = O.rock, parts = [], foam = [];
+  const color = (geo, fn) => { const pp = geo.attributes.position, c = new Float32Array(pp.count * 3);
+    for (let i = 0; i < pp.count; i++) { const col = fn(pp.getX(i), pp.getY(i), pp.getZ(i)), k = 0.9 + rnd() * 0.2; c[i * 3] = col[0] * k; c[i * 3 + 1] = col[1] * k; c[i * 3 + 2] = col[2] * k; }
+    geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); return geo; };
+  const WET = [rock[0] * 0.45, rock[1] * 0.45, rock[2] * 0.45], SCRUB = [0.13, 0.24, 0.1];
+  // a foam ring round a rock: two rows of points, the inner hugging the rock's waterline, the outer a few metres out
+  const ring = (x, z, r0, w) => { const n = 40, pos = [], ar = [], idx = [];
+    for (let i = 0; i <= n; i++) { const a = i / n * Math.PI * 2, j = 1 + 0.08 * Math.sin(a * 5 + x) + 0.05 * Math.sin(a * 11 + z);
+      for (const k of [0, 1]) { const rr = (r0 * j) * 0.97 + k * w * (0.8 + 0.4 * Math.sin(a * 3 + z)); pos.push(x + Math.cos(a) * rr, 0.08, z + Math.sin(a) * rr); ar.push(k, a * r0); }
+      if (i < n) { const b = i * 2; idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aR', new THREE.Float32BufferAttribute(ar, 2)); g.setIndex(idx); foam.push(g.toNonIndexed()); };
+  // a sea stack: a weathered tower, leaning a little, stepped with ledges, grooved by the rain, undercut in a notch at
+  // the waterline; dark streaks down its faces, scrub on its ledges and top, boulders fallen round its foot
+  const stackRock = (i, Y, h, a) => { const streak = Math.sin(a * 9 + Y * 0.05) > 0.55 || Math.sin(a * 4 - 1.3) > 0.85;
+    const k = (0.72 + 0.1 * Math.sin(Y * 0.55)) * (streak ? 0.62 : 1); return [rock[0] * k, rock[1] * k, rock[2] * k]; };
+  const stack = (x, z, h, r) => {
+    const lean = (rnd() - 0.5) * 0.12, tw = rnd() * 6, geo = new THREE.CylinderGeometry(r * 0.72, r, h + 4, 16, 16), pp = geo.attributes.position, ang = [];
+    for (let i = 0; i < pp.count; i++) { const y = pp.getY(i) + (h + 4) / 2 - 4, a = Math.atan2(pp.getZ(i), pp.getX(i)), t = Math.max(0, y) / h;
+      const ledge = 1 + 0.1 * Math.sign(Math.sin(y * 0.22 + tw)) * Math.pow(Math.abs(Math.sin(y * 0.22 + tw)), 0.3);   // (stepped: the harder layers stand out)
+      const n = (1 + 0.16 * Math.sin(a * 2 + tw + y * 0.04) + 0.1 * Math.sin(a * 5 + y * 0.13) + 0.05 * Math.sin(a * 14)) * ledge * (1 - 0.2 * Math.exp(-((y - 1.2) ** 2) / 3)) * (1 - 0.12 * t * t);
+      pp.setXYZ(i, pp.getX(i) * n + y * lean, y, pp.getZ(i) * n + y * lean * 0.6); ang.push(a); }
+    geo.computeVertexNormals();
+    { const nn = geo.attributes.normal, c = new Float32Array(pp.count * 3);
+      for (let i = 0; i < pp.count; i++) { const Y = pp.getY(i), up = nn.getY(i) > 0.45 && Y > 6;   // (anything that faces up, on a ledge, grows scrub)
+        const col = Y < 2.5 ? WET : Y > h - 2 || up ? SCRUB : stackRock(i, Y, h, ang[i]), k = 0.9 + rnd() * 0.2; c[i * 3] = col[0] * k; c[i * 3 + 1] = col[1] * k; c[i * 3 + 2] = col[2] * k; }
+      geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
+    geo.translate(x, 0, z); parts.push(geo);
+    const cap = new THREE.SphereGeometry(r * 0.66, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2); cap.scale(1, 0.4, 1); { const cp = cap.attributes.position; for (let i = 0; i < cp.count; i++) cp.setY(i, cp.getY(i) * (0.7 + 0.6 * rnd())); cap.computeVertexNormals(); }
+    color(cap, () => SCRUB); cap.translate(x + h * lean, h - 1.2, z + h * lean * 0.6); parts.push(cap);
+    for (let k = 0; k < 5; k++) { const bo = new THREE.DodecahedronGeometry(1, 0), a = rnd() * 6.3, br = 1.5 + rnd() * r * 0.18; bo.scale(br * 1.3, br * 0.8, br); color(bo, () => WET); bo.translate(x + Math.cos(a) * r * 1.05, 0.2, z + Math.sin(a) * r * 1.05); parts.push(bo); }   // (fallen boulders)
+    ring(x, z, r * 1.08, 7 + r * 0.4);
+  };
+  // a natural arch: two weathered legs and a thick, sagging span of rock between them, lower at one end
+  const arch = (x, z, span, h, t) => {
+    stack(x - span / 2, z, h, t * 1.15); stack(x + span / 2, z + 4, h * 0.8, t * 0.95);
+    const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(-span / 2 - 2, h * 0.62, 0), new THREE.Vector3(-span / 4, h * 0.86, 1), new THREE.Vector3(0, h * 0.9, 2), new THREE.Vector3(span / 4, h * 0.8, 3), new THREE.Vector3(span / 2 + 2, h * 0.55, 4)]);
+    const geo = new THREE.TubeGeometry(curve, 20, t * 0.62, 9, false), pp = geo.attributes.position;
+    for (let i = 0; i < pp.count; i++) { const X = pp.getX(i), Y = pp.getY(i), Z = pp.getZ(i), mid = 1 - Math.abs(X) / (span / 2 + 2), n = 1 + 0.18 * Math.sin(X * 0.35 + Z) + 0.12 * Math.sin(Y * 0.6 + X * 0.2);
+      pp.setXYZ(i, X, Y + (Y - h * 0.8) * 0.25 * n + (1 - mid) * 1.5, Z * n * (1.1 - 0.25 * mid)); }   // (thinner and lumpier over the middle)
+    geo.computeVertexNormals();
+    { const nn = geo.attributes.normal, c = new Float32Array(pp.count * 3);
+      for (let i = 0; i < pp.count; i++) { const col = nn.getY(i) > 0.5 ? SCRUB : stackRock(i, pp.getY(i), h, pp.getX(i) * 0.3), k = 0.9 + rnd() * 0.2; c[i * 3] = col[0] * k; c[i * 3 + 1] = col[1] * k; c[i * 3 + 2] = col[2] * k; }
+      geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
+    geo.translate(x, 0, z); parts.push(geo);
+  };
+  // a low islet: a rocky mound, green on top
+  const islet = (x, z, rx, rz, h) => {
+    const geo = new THREE.SphereGeometry(1, 20, 7, 0, Math.PI * 2, 0, Math.PI / 2), pp = geo.attributes.position;
+    for (let i = 0; i < pp.count; i++) { const X = pp.getX(i), Y = pp.getY(i), Z = pp.getZ(i), n = 1 + 0.15 * Math.sin(X * 6 + Z * 4) + 0.08 * Math.sin(X * 17 - Z * 11);
+      pp.setXYZ(i, X * rx * n, Math.pow(Y, 0.7) * h * n - 1, Z * rz * n); }
+    geo.computeVertexNormals(); color(geo, (X, Y) => Y < 1.5 ? WET : Y < h * 0.45 ? [rock[0] * 0.8, rock[1] * 0.8, rock[2] * 0.8] : SCRUB); geo.translate(x, 0, z); parts.push(geo);
+    ring(x, z, Math.min(rx, rz) * 0.97, 9);
+  };
+  // far islands on the horizon: long and low, blue with distance (the land material hazes them)
+  const island = (x, z, rx, rz, h) => {
+    const geo = new THREE.SphereGeometry(1, 28, 6, 0, Math.PI * 2, 0, Math.PI / 2), pp = geo.attributes.position;
+    for (let i = 0; i < pp.count; i++) { const X = pp.getX(i), Y = pp.getY(i), Z = pp.getZ(i), n = 1 + 0.2 * Math.sin(X * 4 + 1.3 * Z) + 0.1 * Math.sin(X * 11);
+      pp.setXYZ(i, X * rx, Math.pow(Y, 0.6) * h * n - 2, Z * rz); }
+    geo.computeVertexNormals(); color(geo, (X, Y) => Y < 3 ? [0.4, 0.38, 0.32] : [0.12, 0.2, 0.1]); geo.translate(x, 0, z); parts.push(geo);
+  };
+  const jx = () => (rnd() - 0.5) * 40, jz = () => (rnd() - 0.5) * 30;
+  if (O.stacks !== false) {   // (Gunung Laut has its own giant stacks)
+    // each spot its own arrangement: which side the big stacks stand, where the arch is, or no arch but a second islet
+    const L = [[-300, 330], [-360, 250], [-220, 420]][Math.floor(rnd() * 3)], f = rnd() < 0.5 ? -1 : 1, X = (x) => 100 + (x - 100) * f, form = rnd();
+    stack(X(L[0]) + jx(), -335 + jz(), 50 + rnd() * 22, 15 + rnd() * 4); stack(X(L[0] + 45) + jx(), -375 + jz(), 28 + rnd() * 12, 9); if (rnd() < 0.7) stack(X(L[0] - 45) + jx(), -395 + jz(), 18 + rnd() * 8, 6);
+    if (O.arch || form < 0.7) arch(X(-80 + rnd() * 200), -420 + jz(), 54 + rnd() * 20, 44 + rnd() * 12, 14);
+    else islet(X(40 + rnd() * 80), -440 + jz(), 60, 34, 22);
+    stack(X(L[1]) + jx(), -345 + jz(), 40 + rnd() * 16, 12 + rnd() * 4); if (rnd() < 0.6) stack(X(L[1] + 40) + jx(), -310 + jz(), 22 + rnd() * 6, 7);
+    islet(X(560) + jx(), -430 + jz(), 44 + rnd() * 12, 28, 12 + rnd() * 6); }
+  island(-560, -640, 260, 70, 55); island(160, -660, 190, 55, 30); island(640, -620, 230, 60, 44);
+  if (O.boat !== false) {   // a pinisi (the islands' two-masted wooden schooner) under sail, far out, crossing the horizon
+    const bp = [], DARK = [0.24, 0.15, 0.09], CREAM = [0.93, 0.89, 0.8], WHITE = [0.9, 0.9, 0.88];
+    const hull = new THREE.BoxGeometry(30, 3.6, 7, 12, 1, 2), hp = hull.attributes.position;
+    for (let i = 0; i < hp.count; i++) { const X = hp.getX(i), u = X / 15, Y = hp.getY(i); hp.setZ(i, hp.getZ(i) * (1 - 0.75 * Math.pow(Math.abs(u), 2.2)) * (Y < 0 ? 0.7 : 1)); hp.setY(i, Y + (u > 0 ? 2.2 * u * u : 1.2 * u * u)); }   // (a sheer rising to a high bow, fine at both ends)
+    hull.computeVertexNormals(); color(hull, (X, Y) => Y > 1.2 ? WHITE : DARK); hull.translate(0, 1.4, 0); bp.push(hull);
+    const house = new THREE.BoxGeometry(7, 2.2, 4.4); color(house, () => [0.55, 0.36, 0.2]); house.translate(-7, 4.2, 0); bp.push(house);
+    const mast = (x, h) => { const m0 = new THREE.CylinderGeometry(0.18, 0.28, h, 5); color(m0, () => DARK); m0.translate(x, 3 + h / 2, 0); bp.push(m0); };
+    mast(4, 24); mast(-5, 20);
+    const sail = (pts) => { const g0 = new THREE.BufferGeometry(); g0.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); g0.computeVertexNormals(); color(g0, () => CREAM); bp.push(g0); };
+    const quad = (x0, x1, y0, y1, top) => sail([x0, y0, 0.1, x1, y0, 0.1, x1 + top, y1, 0.1, x0, y0, 0.1, x1 + top, y1, 0.1, x0, y1, 0.1]);
+    quad(-4.6, 2.5, 6, 20, -2.5); quad(-13, -5.4, 6, 17, -2.5);        // (the two big gaff sails, trimmed back)
+    sail([4.3, 8, 0.1, 15, 4.5, 0.1, 4.3, 26, 0.1]); sail([4.3, 10, 0.1, 19, 5, 0.1, 4.3, 24, 0.1]);   // (jibs out to the bowsprit)
+    const bs = new THREE.CylinderGeometry(0.12, 0.12, 8, 4); bs.rotateZ(Math.PI / 2 - 0.25); color(bs, () => DARK); bs.translate(17, 5.2, 0); bp.push(bs);
+    const boatMat = mat.clone(); boatMat.uniforms = ENV; boatMat.defines = { BOAT: 1 }; boatMat.side = THREE.DoubleSide;
+    const boat = new THREE.Mesh(mergeGeometries(bp.map((p0) => { const q = p0.index ? p0.toNonIndexed() : p0; for (const k of Object.keys(q.attributes)) if (!['position', 'normal', 'color'].includes(k)) q.deleteAttribute(k); return q; })), boatMat);
+    boat.position.set(0, -0.4, -560); boat.frustumCulled = false; group.add(boat); }
+  const m = new THREE.Mesh(mergeGeometries(parts.map((p0) => { const q = p0.index ? p0.toNonIndexed() : p0; for (const k of Object.keys(q.attributes)) if (!['position', 'normal', 'color'].includes(k)) q.deleteAttribute(k); return q; })), mat);
+  group.add(m);
+  const fm = new THREE.Mesh(mergeGeometries(foam), foamMat()); fm.renderOrder = 2; fm.frustumCulled = false; group.add(fm);
+}
 function mergeGeos(list) {
   // join simple non-indexed-compatible geometries into one (positions + normals)
   const parts = list.map((g) => g.index ? g.toNonIndexed() : g);
