@@ -29,6 +29,11 @@ fx.onFlash = () => audio.thunder(Math.random());
 addEventListener('visibilitychange', () => audio.pause(document.hidden || !document.body.classList.contains('playing')));
 const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x3a4a48, 1.3); scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xfff0dd, 2.0); scene.add(sunLight); scene.add(sunLight.target);
+hemi.layers.enableAll(); sunLight.layers.enableAll();
+// your own body is drawn in a second pass through a normal lens (like the arms in first-person games): the ultra-wide
+// POV lens stretches anything this close to the eyes into a giant blob. Layer 1 = your body; the world is layer 0.
+const armCam = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 30); armCam.layers.set(1);
+let armK = 0;   // 0 = same lens as the world (lying/sitting: your hands are on the board and must line up with it), 1 = normal lens
 // fit the screen whenever it changes: rotation, the browser bar sliding away, split screen (iOS doesn't always send 'resize')
 let lastW = 0, lastH = 0;
 const fit = () => { const w = innerWidth, h = innerHeight; if (w === lastW && h === lastH) return; lastW = w; lastH = h; renderer.setSize(w, h); fitFov(); };
@@ -110,10 +115,11 @@ let surfer = null, mixer = null, clips = {}, curClip = null;
 const CUT = { value: 0.21 };   // just the neck and head (at 42 cm it cut your arms off at the elbow: floating hands)
 // which skeleton bones are "arm" (upper arm down to the fingertips): the cutaway never removes those, so you always see
 // whole arms, while your chest, shoulders and neck near the camera are hidden (they were showing as a stretched skin fin)
-const ARMBONE = { value: new Float32Array(96) };
+const ARMBONE = { value: new Float32Array(96) }, ARMCUT = { value: 0 };
 function cutaway(m) {
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uCut = CUT; sh.uniforms.uArmBone = ARMBONE; sh.uniforms.uNear = { value: m.userData.near || 0 };
+    sh.uniforms.uCut = CUT; sh.uniforms.uArmBone = ARMBONE; sh.uniforms.uNear = { value: m.userData.near || 0 }; sh.uniforms.uArmCut = ARMCUT;
+    sh.uniforms.uCap = { value: new THREE.Color(m.userData.cap || 0x7a4e36).convertSRGBToLinear() };
     sh.vertexShader = 'varying vec3 vCutW; varying float vArm; uniform float uArmBone[96];\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
 vCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;
 #ifdef USE_SKINNING
@@ -121,18 +127,21 @@ vArm = skinWeight.x * uArmBone[int(skinIndex.x)] + skinWeight.y * uArmBone[int(s
 #else
 vArm = 0.;
 #endif`);
-    sh.fragmentShader = 'uniform float uCut, uNear;\nvarying vec3 vCutW; varying float vArm;\n' + sh.fragmentShader.replace('void main() {', `void main() {
+    sh.fragmentShader = 'uniform float uCut, uNear, uArmCut; uniform vec3 uCap;\nvarying vec3 vCutW; varying float vArm;\n' + sh.fragmentShader.replace('void main() {', `void main() {
   vec3 cq = vCutW - cameraPosition; float cy = clamp(cq.y, -0.75, 0.);
   if (vArm < 0.12 && (length(cq - vec3(0., cy, 0.)) < uCut * 1.9 || length(cq) < uCut * 2.2)) discard;   // body near the eyes
+  if (vArm > 0.5 && length(cq) < uArmCut) discard;   // the upper arm is right at the lens: only forearms and hands show, like helmet-cam footage
+  if (!gl_FrontFacing) { gl_FragColor = vec4(uCap, 1.); return; }   // a cut shows solid skin/cloth, never the hollow inside (that was the 'fin')
   if (length(cq) < uCut * 0.6 + uNear) discard;   // (uNear > 0 on the shorts: sliced close to the lens they showed as teal hooks)   // anything right in the lens (arms are never cut: a cut shows the hollow inside of the arm as a 'fin')`);
   };
-  m.side = THREE.FrontSide;   // (so a cut shows nothing behind it, not the inside of the arm)
-  m.customProgramCacheKey = () => 'cutaway3' + (m.userData.near || 0);
+  m.side = THREE.DoubleSide;   // (inside faces are drawn as a solid cap colour, so a cut looks closed)
+  m.customProgramCacheKey = () => 'cutaway4' + (m.userData.near || 0);
   m.needsUpdate = true;
 }
 const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
   surfer = g.scene; rig.add(surfer);
-  surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else { if (/short/i.test(o.material.name + o.name)) o.material.userData.near = 0.45; cutaway(o.material); } } });
+  surfer.traverse((o) => o.layers.set(1));
+  surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else { if (/short/i.test(o.material.name + o.name)) { o.material.userData.near = 0.45; o.material.userData.cap = 0x0f3b3f; } cutaway(o.material); } } });
   surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/.test(b.name)) ARMBONE.value[i] = 1; }); });
   mixer = new THREE.AnimationMixer(surfer);
   for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale')); clips[c.name] = mixer.clipAction(c); }
@@ -1064,6 +1073,14 @@ function tick(dt) {
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
   if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
-  renderer.render(scene, camera); autoQuality(dt);
+  // pass 1: the world; pass 2: your body through its own lens (skipped when a test view shows the body in the world cam)
+  if (camera.layers.isEnabled(1)) renderer.render(scene, camera);
+  else {
+    armK += ((rider && rider.standing && !(W.on) ? 1 : 0) - armK) * Math.min(1, dt * 4);
+    armCam.position.copy(camera.position); armCam.quaternion.copy(camera.quaternion);
+    armCam.aspect = camera.aspect; armCam.fov = camera.fov + (62 - camera.fov) * armK; armCam.updateProjectionMatrix();
+    renderer.autoClear = false; renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(scene, armCam); renderer.autoClear = true;
+  }
+  autoQuality(dt);
 });
-window.__g = { paused: false, cutaway, CUT, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
+window.__g = { paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
