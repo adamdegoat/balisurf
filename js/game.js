@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=105';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=108';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=115';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
-import { SurfAudio } from './audio.js?v=13';
+import { SurfAudio } from './audio.js?v=14';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=16';
-import { villa, VILLA } from './villa.js?v=53';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=19';
+import { villa, VILLA } from './villa.js?v=56';
 import { makeBirds } from './birds.js?v=1';
 import { crew } from './crew.js?v=5';
 import { wildlife } from './wildlife.js?v=8';
@@ -424,7 +424,7 @@ for (const b of document.querySelectorAll('[data-board]')) b.addEventListener('c
 let starting = false;
 // back to the level select: stop the game behind the menu (you pick a level again to restart)
 function toMenu() {
-  starting = false; audio.quiet(true);
+  starting = false; if (drone.on) droneSet(false); audio.quiet(true);
   // clear the session: the menu gets its slow drifting wave behind it again (and nothing of the old ride keeps running)
   if (surfer) endWipe(); rider = null; rig.visible = false; endT = -1;
   for (const w of waves) w.dispose(scene); waves = [];
@@ -1305,8 +1305,10 @@ function startVilla() {
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
   if (surfer) endWipe(); rider = null; rig.visible = false;
   document.getElementById('vZoom').classList.remove('on'); document.querySelector('#vZoom span').textContent = 'ZOOM'; document.getElementById('vWatch').classList.remove('on'); document.querySelector('#vWatch span').textContent = 'WATCH A RIDE'; vSitB.classList.remove('on');
+  if (drone.on) droneSet(false);
   walker = { x: villaW.spawn.x, z: villaW.spawn.z, yaw: villaW.spawn.yaw, pitch: -0.08, y: VILLA.Y + 1.65, mx: 0, mz: 0 };
   ui.start.style.display = 'none'; document.body.classList.add('playing', 'villa'); ui.cond.textContent = 'Your villa';
+  document.getElementById('vTip').textContent = 'Left thumb walks, right thumb looks. Boards are in the board room.';
   document.getElementById('vTip').style.opacity = 1; setTimeout(() => { document.getElementById('vTip').style.opacity = 0; }, 7000);
 }
 document.getElementById('goVilla').addEventListener('click', startVilla);
@@ -1317,6 +1319,44 @@ document.getElementById('vGo').addEventListener('click', (e) => { e.stopPropagat
   const wb = document.getElementById('vWatch'), wt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.watch = !walker.watch; walker.watchI = -1; wb.classList.toggle('on', walker.watch); wb.querySelector('span').textContent = walker.watch ? 'STOP WATCHING' : 'WATCH A RIDE'; };
   wb.addEventListener('click', wt); wb.addEventListener('touchstart', wt, { passive: false }); }
 document.getElementById('vGo').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); toMenu(); }, { passive: false });
+// the drone: launch it off the balcony and fly out over the break. Left thumb flies (the way the camera faces), right
+// thumb turns and tilts the camera, hold UP / DOWN to climb and sink (on a keyboard: WASD, E or Space up, Q or Shift
+// down). It drifts and banks like a real one, keeps above the water (skims the faces if you let it), stays clear of the
+// house and the banyan, and has a range: out past the reef and back. LAND brings the view home to where you're standing
+const drone = { on: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, up: 0, roll: 0, t: 0, save: null };
+const droneB = document.getElementById('vDrone'), droneAlt = document.getElementById('vAlt');
+function droneSet(on) {
+  if (!walker || on === drone.on) return; const W_ = walker;
+  if (on) {
+    if (W_.sit) vStand(); if (W_.watch) document.getElementById('vWatch').click(); vSitB.classList.remove('on'); W_.near = null;
+    Object.assign(drone, { on: true, x: W_.x + Math.cos(W_.yaw) * 0.8, y: W_.y + 0.3, z: W_.z + Math.sin(W_.yaw) * 0.8, vx: 0, vy: 0, vz: 0, up: 0, roll: 0, t: 0, save: [W_.yaw, W_.pitch] });
+    W_.pitch = -0.15; const tip = document.getElementById('vTip'); tip.textContent = 'Left thumb flies, right thumb turns the camera. Hold UP or DOWN to climb and sink.'; tip.style.opacity = 1; clearTimeout(tip.t); tip.t = setTimeout(() => { tip.style.opacity = 0; }, 6000);
+  } else { drone.on = false; if (drone.save) [W_.yaw, W_.pitch] = drone.save; audio.droneBuzz(0); }
+  document.body.classList.toggle('drone', drone.on); droneB.classList.toggle('on', drone.on); droneB.querySelector('span').textContent = drone.on ? 'LAND' : 'FLY DRONE';
+}
+{ const t = (e) => { e.preventDefault(); e.stopPropagation(); droneSet(!drone.on); }; droneB.addEventListener('click', t); droneB.addEventListener('touchstart', t, { passive: false });
+  for (const [id, v] of [['vUp', 1], ['vDn', -1]]) { const b = document.getElementById(id), on = (e) => { e.preventDefault(); e.stopPropagation(); drone.up = v; b.classList.add('down'); }, off = (e) => { e.preventDefault(); if (drone.up === v) drone.up = 0; b.classList.remove('down'); };
+    b.addEventListener('touchstart', on, { passive: false }); b.addEventListener('touchend', off, { passive: false }); b.addEventListener('touchcancel', off, { passive: false }); b.addEventListener('mousedown', on); b.addEventListener('mouseup', off); b.addEventListener('mouseleave', off); } }
+// (the point the house stands on, in the drone's frame: the same spine and width villa.js builds it on)
+const onPoint = (x, wz) => { const lz = wz - 31 - SPOTS.medium.dz, lx = 88 - x, k = Math.min(1, Math.max(0, (lz - 70) / 150)), cxl = -93 + 4 * Math.sin((lz - 37) * 0.03) - 60 * k * k * (3 - 2 * k), hw = 13.6 + 11 * Math.min(1, Math.max(0, (lz - 60) / 120));
+  return lz > 24 && Math.abs(lx - cxl) < hw + 4; };
+function droneTick(dt, mx, mz) {
+  const D = drone, W_ = walker; D.t += dt;
+  const fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), lift = D.t < 2.2;   // (first it lifts straight up off the balcony, clear of the roof and the tree)
+  const SP = 15, tx = lift ? 0 : (fx * mz - fz * mx) * SP, tz = lift ? 0 : (fz * mz + fx * mx) * SP;
+  const kv = (keys.has('Space') || keys.has('KeyE') ? 1 : 0) - (keys.has('KeyQ') || keys.has('ShiftLeft') || keys.has('ShiftRight') ? 1 : 0);
+  const ty = lift ? 7.5 : Math.max(-1, Math.min(1, D.up + kv)) * 6;
+  const a = Math.min(1, dt * 2.2); D.vx += (tx - D.vx) * a; D.vz += (tz - D.vz) * a; D.vy += (ty - D.vy) * Math.min(1, dt * 3);
+  D.x += D.vx * dt; D.y += D.vy * dt; D.z += D.vz * dt;
+  const dz = SPOTS.medium.dz; D.x = Math.max(-60, Math.min(300, D.x)); D.z = Math.max(-150 - dz, Math.min(235 - dz, D.z));   // (range: the whole reef, not the coast behind)
+  const wz = D.z + dz, floor = !lift && onPoint(D.x, wz) ? VILLA.Y + 18 : heightAt(waves, D.x, wz) + 1.1;
+  if (D.y < floor) { D.y += (floor - D.y) * Math.min(1, dt * 5); if (D.vy < 0) D.vy *= 0.5; }
+  D.y = Math.min(D.y, 140);
+  const side = -D.vx * fz + D.vz * fx; D.roll += (-side * 0.014 - D.roll) * Math.min(1, dt * 3);
+  audio.droneBuzz(0.6 + 0.4 * Math.min(1, Math.hypot(D.vx, D.vz) / SP), Math.min(1, Math.hypot(D.vx, D.vy, D.vz) / 12));
+  const out = Math.hypot(D.x - W_.x, wz - (W_.z + dz)); droneAlt.textContent = `ALT ${Math.max(0, D.y - heightAt(waves, D.x, wz)).toFixed(0)} m    ${out.toFixed(0)} m OUT`;
+}
+
 // the board panel: what it is and how it feels, and a button to take it
 function vPick(type) {
   vPickType = type; vPanel.classList.toggle('on', !!type); if (!type) return;
@@ -1357,7 +1397,8 @@ function villaTick(dt) {
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
-  const mx = W_.mx || kx, mz = W_.mz || kz, fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), sp = 2.7 * dt;
+  let mx = W_.mx || kx, mz = W_.mz || kz; const fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), sp = 2.7 * dt;
+  if (drone.on) { droneTick(dt, mx, mz); mx = mz = 0; }   // (flying: the thumbs fly the drone; you stay standing where you launched it)
   // sitting: ease into the seat and its view; push the stick (or a key) and you stand back up where you were
   if (W_.sit && Math.hypot(mx, mz) > 0.3) vStand();
   if (W_.sit) { const S = W_.sit, k = Math.min(1, dt * 3); W_.x += (S.x - W_.x) * k; W_.z += (S.z - W_.z) * k;
@@ -1379,7 +1420,7 @@ function villaTick(dt) {
   // look at a board in the rack and its card comes up by itself (no need to tap); look away and it goes
   // a seat within reach (at your level): offer it
   W_.seatT = (W_.seatT || 0) - dt;
-  if (W_.seatT <= 0 && !W_.sit) { W_.seatT = 0.2; let best = null, bd = 2.1; for (const S of V.seats) { const d = Math.hypot(S.x - W_.x, S.z - W_.z); if (d < bd && Math.abs(S.eye - 1.1 - foot) < 1.3) { bd = d; best = S; } }
+  if (W_.seatT <= 0 && !W_.sit && !drone.on) { W_.seatT = 0.2; let best = null, bd = 2.1; for (const S of V.seats) { const d = Math.hypot(S.x - W_.x, S.z - W_.z); if (d < bd && Math.abs(S.eye - 1.1 - foot) < 1.3) { bd = d; best = S; } }
     if (best !== W_.near) { W_.near = best; vSitB.classList.toggle('on', !!best); if (best) vSitB.textContent = best.radio ? (radioOn ? 'MUSIC OFF' : 'MUSIC ON') : best.name; } }
   // the sounds of the place: the fire, the wind chimes, birds, and the lineup hooting a good barrel
   { const d3 = (p) => Math.hypot(p[0] - W_.x, p[1] - W_.z, p[2] - (W_.y - 1.2));
@@ -1395,6 +1436,7 @@ function villaTick(dt) {
   W_.y += ((W_.sit ? W_.sit.eye - 1.65 : V.floorAt(W_.x, W_.z, foot)) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
   camera.position.set(W_.x, W_.y, W_.z + SPOTS.medium.dz);
   _pe.set(W_.pitch, -W_.yaw - Math.PI / 2, 0); camera.quaternion.setFromEuler(_pe);
+  if (drone.on) { camera.position.set(drone.x, drone.y + Math.sin(drone.t * 2.1) * 0.04, drone.z + SPOTS.medium.dz); _pe.set(W_.pitch, -W_.yaw - Math.PI / 2, drone.roll); camera.quaternion.setFromEuler(_pe); }   // (the drone's camera: your look, its position, a little bank into turns and the hover's bob)
   // watching: the camera follows one surfer's ride (the one deepest in the barrel, else the longest ride going), zoomed
   // so they fill a good part of the view; between rides it rests on the lineup
   if (W_.watch) {
@@ -1417,7 +1459,7 @@ function villaTick(dt) {
 const _vb = { fw: new THREE.Vector3(), rt: new THREE.Vector3(), sh: new THREE.Vector3(), T: new THREE.Vector3(), P: new THREE.Vector3(), h: new THREE.Vector3(), reach: 0, rT: new THREE.Vector3() };
 function villaBody(dt, moving) {
   const W_ = walker; if (!surfer || !W_) return;
-  const show = !W_.sit && !W_.zoom && !W_.watch && hfovHalf > 40; rig.visible = show; board.visible = false; if (!show) return;
+  const show = !W_.sit && !W_.zoom && !W_.watch && !drone.on && hfovHalf > 40; rig.visible = show; board.visible = false; if (!show) return;
   if (!bones.upperarm_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   if (mixer) mixer.stopAllAction(); curClip = null;
   surfer.traverse((o) => { if (o.isSkinnedMesh && !o.userData.posed) { o.skeleton.pose(); } });
@@ -1535,4 +1577,4 @@ renderer.setAnimationLoop(() => {
   }
   autoQuality(dt); musicTick();
 });
-window.__g = { get walker() { return walker; }, get villaW() { return villaW; }, get crew() { return crewW; }, get wild() { return wildW; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, splashLens, get T() { return T; }, want: () => _want };
+window.__g = { get walker() { return walker; }, get villaW() { return villaW; }, get drone() { return drone; }, get crew() { return crewW; }, get wild() { return wildW; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, splashLens, get T() { return T; }, want: () => _want };

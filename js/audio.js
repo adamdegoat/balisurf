@@ -116,6 +116,14 @@ export class SurfAudio {
   hoot(k) { for (let i = 0; i < 3; i++) { const f = 230 + Math.random() * 120; this.tone(f, 0.05 * k, 0.55 + Math.random() * 0.3, { type: 'sawtooth', delay: i * 0.25 + Math.random() * 0.2, to: f * 1.4, band: 900 }); } }   // someone in the lineup hooting a barrel
   // music: a shuffled playlist of reggae tracks, streamed one at a time through its own level and tone (a lowpass
   // makes it sound like it's coming from the radio in the next room). It keeps going under everything else.
+  // your camera drone: four little props humming, the pitch rising as it works harder (made once, then just turned up and down)
+  droneBuzz(k, work = 0) {
+    if (!this.ok) return;
+    if (!this.dr) { const ctx = this.ctx, g = ctx.createGain(); g.gain.value = 0; const fl = ctx.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 900; fl.Q.value = 0.8;
+      const os = [185, 192, 371].map((f, i) => { const o = ctx.createOscillator(); o.type = i === 2 ? 'square' : 'sawtooth'; o.frequency.value = f; o.connect(fl); o.start(); return o; });
+      fl.connect(g).connect(this.master); this.dr = { g, os }; }
+    this.set(this.dr.g.gain, k * 0.045, 0.25); const f = 185 + work * 70; this.dr.os.forEach((o, i) => this.set(o.frequency, f * [1, 1.037, 2][i], 0.3));
+  }
   musicStart(tracks) {
     if (!this.ok || this.mel) return; this.tracks = tracks; this.order = [];
     const el = this.mel = new Audio(); el.preload = 'auto'; el.setAttribute('playsinline', '');

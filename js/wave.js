@@ -386,7 +386,7 @@ const SUNSET = /* glsl */`
     float h = clamp(d.y, 0., 1.);
     vec2 da = d.xz / max(length(d.xz), 1e-4), sa = uSun.xz / max(length(uSun.xz), 1e-4);
     float az = dot(da, sa) * .5 + .5;
-    vec3 horz = mix(vec3(.7, .42, .6), mix(vec3(.92, .36, .3), vec3(.95, .45, .1), az), smoothstep(.15, .8, az));   // (kept below full brightness: the filmic curve turns near-white orange into pastel)
+    vec3 horz = mix(vec3(.78, .5, .56), mix(vec3(.92, .38, .3), vec3(.95, .45, .1), az), smoothstep(.15, .8, az));   // (kept below full brightness: the filmic curve turns near-white orange into pastel)
     c = mix(c, horz, exp(-h * 5.) * uGold * .92);
     c = mix(c, c * vec3(.72, .78, 1.08), smoothstep(.2, .75, h) * uGold);
     return c + uSunCol * pow(max(dot(d, uSun), 0.), 5.) * .4 * uGold;
@@ -487,13 +487,13 @@ export function waterMaterial({ wave = false } = {}) {
         // own way (and rocking); it flashes only when it would really mirror the sun into your eye, so the sparkle gathers
         // toward the sun and none shows looking away from it. Kept a pixel or two wide, faded where it'd go sub-pixel
         vec2 gp = vW.xz * 2.5; float fw = fwidth(gp.x) * 1.4;   // (fwidth outside the branch: it needs every pixel of the block)
-        if (N.y > .5 && fw < .7 && uSunVis * (1. - uCloud) > .02) {   // (skipped wholesale where it can't show: steep faces, far off, a storm)
+        if (N.y > ${wave ? '.96' : '.5'} && fw < .7 && uSunVis * (1. - uCloud) > .02) {   // (on a wave, only its flat skirt: on the face they read as specks of dust)   // (skipped wholesale where it can't show: steep faces, far off, a storm)
         vec2 gi = floor(gp), gf = fract(gp);
         float sh = hash(gi), ph = sh * 60.;
         vec3 nC = normalize(vec3((hash(gi + 1.3) - .5) * 1.2 + .2 * sin(uTime * 2.1 + ph), 1., (hash(gi + 5.9) - .5) * 1.2 + .2 * cos(uTime * 1.7 + ph)));
         float spr = clamp(fw * .9, .03, .07);   // (up close a bigger point read as a white blob)
-        float spark = (1. - smoothstep(spr * .4, spr, length(gf - vec2(hash(gi + 3.1), hash(gi + 7.7)) * .7 - .15))) * smoothstep(.955, .99, dot(reflect(-V, nC), uSun)) * (1. - smoothstep(.3, .7, fw));
-        col += uSunCol * spark * 1.6 * uSunVis * (1. - uCloud);
+        float spark = (1. - smoothstep(spr * .4, spr, length(gf - vec2(hash(gi + 3.1), hash(gi + 7.7)) * .7 - .15))) * smoothstep(.93, .985, dot(reflect(-V, nC), uSun)) * (1. - smoothstep(.3, .7, fw));
+        col += uSunCol * spark * 0.9 * uSunVis * (1. - uCloud);   // (more of them, softer: a few hard white points read as dust, a field of soft ones as glitter)
         }
         ${wave ? `
         // foam: churned white where the lip throws and the whitewater rolls
