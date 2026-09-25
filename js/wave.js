@@ -107,9 +107,16 @@ export class Wave {
   // how tall the wave stands at distance s from the break: tallest at the peak, fading down the line (scaled by swell length)
   amp(s) { const L = this.cond.len || 1; return s > 0 ? 1 - 0.55 * smooth(8 * L, 70 * L, s) : 1 - 0.15 * smooth(0, 40 * L, -s); }
   // which blend of keyframes a slice at distance s ahead of the break has, plus how broken it is
+  // (cached by 10 cm: the particles ask for it hundreds of times a second, and building the blend each time made garbage
+  // that stuttered phones)
   shapeAt(s) {
+    const key = Math.round(s * 10), c = (this._shp ||= new Map()).get(key);
+    if (c) return c;
+    const r = this._shapeAt(key / 10); if (this._shp.size > 4000) this._shp.clear(); this._shp.set(key, r); return r;
+  }
+  _shapeAt(s) {
     const { H, hollow } = this.cond;
-    const barrel = lerpK(K.peak, K.barrel, Math.min(1, hollow * 1.25));  // gentle waves never get a full round tube
+    const barrel = this._barrel ||= lerpK(K.peak, K.barrel, Math.min(1, hollow * 1.25));  // gentle waves never get a full round tube (built once)
     let P, curl = 0, broken = 0;
     const L = this.cond.len || 1;
     if (s >= 45 * L) P = K.swell;
@@ -187,7 +194,7 @@ export class Wave {
         const sh = this.shapeAt(s), crest = sh.P[9], amp = this.amp(s);
         const atLip = Math.random() < 0.4 && sh.broken < 0.5;
         P[i * 3] = this.peelX + s + (Math.random() - .5) * 2;
-        P[i * 3 + 1] = atLip ? 0.2 * H : crest[1] * H * amp * (0.7 + Math.random() * 0.4);
+        P[i * 3 + 1] = (atLip ? 0.2 * H : crest[1] * H * amp * (0.7 + Math.random() * 0.4)) * this.fade;   // (the wave is drawn squashed by fade: particles too)
         P[i * 3 + 2] = (atLip ? sh.P[7][0] : crest[0]) * H * (this.cond.width || 1) + this.zW + this.bend(s) + (Math.random() - .5) * H;
         V[i * 3] = (Math.random() - .5) * 0.6; V[i * 3 + 1] = 0.5 + Math.random() * 1.2; V[i * 3 + 2] = this.cond.speed * 0.6 - 1.5 - Math.random() * 2;
         this.ml[i] = 1 + Math.random() * 1.5;
@@ -216,7 +223,7 @@ export class Wave {
       this.spitT = 5 + Math.random() * 5;
       for (let i = 0; i < this.spitN; i++) {
         const s0 = -(0.5 + Math.random() * 1.3) * H, sh = this.shapeAt(s0), amp = this.amp(s0);
-        P[i * 3] = this.peelX + s0; P[i * 3 + 1] = (0.2 + Math.random() * 0.3) * H * amp;
+        P[i * 3] = this.peelX + s0; P[i * 3 + 1] = (0.2 + Math.random() * 0.3) * H * amp * this.fade;
         P[i * 3 + 2] = sh.P[5][0] * H * (this.cond.width || 1) + this.zW + this.bend(s0) + (Math.random() - .5) * 0.4 * H;
         V[i * 3] = this.cond.peel * (1.5 + Math.random()); V[i * 3 + 1] = (Math.random() - .3) * 1.5; V[i * 3 + 2] = this.cond.speed * 0.9 + (Math.random() - .5) * 2;
         this.tl[i] = 0.6 + Math.random() * 0.9;
@@ -249,7 +256,7 @@ export class Wave {
         if (crest[1] < 0.55 || sh.broken > 0.3) { P[i * 3 + 1] = -99; continue; }
         const amp = this.amp(s);
         P[i * 3] = this.peelX + s + (Math.random() - .5) * 1.5;
-        P[i * 3 + 1] = crest[1] * H * amp + Math.random() * 0.15 * H;
+        P[i * 3 + 1] = (crest[1] * H * amp + Math.random() * 0.15 * H) * this.fade;
         P[i * 3 + 2] = crest[0] * H * (this.cond.width || 1) + this.zW + this.bend(s);
         V[i * 3] = (Math.random() - .5) * 0.8; V[i * 3 + 1] = 1 + Math.random() * 1.8; V[i * 3 + 2] = this.cond.speed - 4 - Math.random() * 5;   // rides in with the wave, blown back off its top
         this.vl[i] = 0.8 + Math.random() * 1.2;
@@ -264,7 +271,7 @@ export class Wave {
   }
   initSpray(scene) {
     const N = 900; this.sprayN = N;
-    this.sp = new Float32Array(N * 3); this.sv = new Float32Array(N * 3); this.sl = new Float32Array(N);
+    this.sp = new Float32Array(N * 3).fill(-99); this.sv = new Float32Array(N * 3); this.sl = new Float32Array(N);   // (parked out of sight until born)
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.sp, 3));
     // soft round droplet sprite
     const tex = sprite('drop', 32, [[0, 'rgba(255,255,255,1)'], [0.4, 'rgba(255,255,255,.5)'], [1, 'rgba(255,255,255,0)']]);
@@ -305,7 +312,7 @@ export class Wave {
         const crest = this.shapeAt(s).P[9];
         const top = Math.random() < 0.6;
         this.sp[i * 3] = x + (Math.random() - .5) * .3;
-        this.sp[i * 3 + 1] = top ? crest[1] * H : y;
+        this.sp[i * 3 + 1] = (top ? crest[1] * H : y) * this.fade;
         this.sp[i * 3 + 2] = top ? crest[0] * H * (this.cond.width || 1) + this.zW + this.bend(s) : z;
         this.sv[i * 3] = (Math.random() - .5) * .6; this.sv[i * 3 + 1] = 1 + Math.random() * 2.2 * (H / 2); this.sv[i * 3 + 2] = -1.5 - Math.random() * 3;   // offshore wind blows it back
         this.sl[i] = 0.6 + Math.random() * 1.2;
@@ -660,7 +667,7 @@ export function coast(scene) {
   for (let i = 0; i < N; i++) {
     const h = 8 + Math.random() * 7, lean = (Math.random() - 0.5) * 0.25 - 0.08, yaw = Math.PI / 2 + (Math.random() - 0.5) * 1.4;   // most lean out toward the sea
     const x = -700 + i * 8.2 + (Math.random() - .5) * 5, z = 222 + Math.random() * 12;
-    if (x < -95) { trunks.setMatrixAt(i, m4.makeScale(0, 0, 0)); crowns.setMatrixAt(i, m4.makeScale(0, 0, 0)); continue; }   // (under the cliffs)
+    if (x < -60) { trunks.setMatrixAt(i, m4.makeScale(0, 0, 0)); crowns.setMatrixAt(i, m4.makeScale(0, 0, 0)); continue; }   // (under the cliffs)
     q.setFromEuler(new THREE.Euler(lean, yaw, 0));
     trunks.setMatrixAt(i, m4.compose(ps.set(x, 1.8, z), q, sc.set(1, h, 1)));
     const top = new THREE.Vector3(0.9, h, 0).applyQuaternion(q).add(ps);   // the top of the curved trunk

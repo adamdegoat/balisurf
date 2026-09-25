@@ -2,9 +2,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=77';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=91';
-import { makeBoard } from './board.js?v=5';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=78';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=92';
+import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 
 const Q = new URLSearchParams(location.search);
@@ -85,7 +85,7 @@ const LEASH_N = 14, leash = new THREE.Line(new THREE.BufferGeometry().setAttribu
 leash.frustumCulled = false; scene.add(leash);
 const _la = new THREE.Vector3(), _lb = new THREE.Vector3(), _lc = new THREE.Vector3();
 function updateLeash() {
-  if (!surfer || !bones.foot_l || !rig.visible) { leash.visible = false; return; }
+  if (!surfer || !bones.foot_l || !rig.visible || !surfer.visible) { leash.visible = false; return; }   // (hidden while you tumble: you ARE the camera)
   leash.visible = true;
   rig.localToWorld(_la.set(0, 0.05, -0.9));                                              // the plug near the tail
   const fl = bones.foot_l.getWorldPosition(_lb), fr = bones.foot_r.getWorldPosition(_lc);
@@ -204,7 +204,7 @@ function incoming() {
   return { w: best, t: tBest };
 }
 function spawnRider() {
-  if (surfer) endWipe(); rig.visible = true;
+  if (surfer) endWipe(); rig.visible = true; for (const b of birds) b.visible = true;
   pumpC = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
   rider = rider || new Rider();
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
@@ -317,6 +317,7 @@ async function start(m) {
   ui.load.textContent = '';
   ui.start.style.display = 'none'; document.body.classList.add('playing');
   session = { waves: 0, total: 0, best: 0, scores: [] };
+  setLeft = 0; setPos = 0;
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15;   // a calm start: time to look around and find the set
   updateWaves(0); spawnRider();
   ui.cond.textContent = mode === 'random' ? 'Random' : CONDITIONS[mode].name;
@@ -1023,6 +1024,7 @@ function tick(dt) {
     if (!tick.demo) { tick.demo = new Wave(scene, CONDITIONS.medium); tick.demo.peelX = -30; }
     tick.demo.update(dt);
     railSpray.update(dt); wake.update(dt);   // (let any spray left from the last ride fall and fade)
+    rig.visible = false; leash.visible = false; jukung.visible = false; for (const L of locals) L.grp.visible = false; for (const b of birds) b.visible = false;   // the menu shows only the sea
     const px = tick.demo.peelX;
     camera.position.set(px + 14, 2.2, 13); camera.lookAt(px - 2, 1.2, 0);
   }

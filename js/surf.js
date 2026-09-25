@@ -283,7 +283,7 @@ export class Rider {
     this.inBarrel = lipDown && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
     // too deep: fall behind the curl and the foam ball (the broken wave churning inside the tube) catches you. You have
     // to keep your speed matched to the peel to stay in (pump, or come off the stall in time)
-    if (this.inBarrel && s < -2.0 * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > 2.5 || s < -2.8 * H) return this.wipe('Too deep: the foam ball swallowed you'); }
+    if (this.inBarrel && s < -2.0 * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > 2.5 || s < -3.6 * H) return this.wipe('Too deep: the foam ball swallowed you'); }   // (the instant line is well behind: a section surge alone can't drop you past it without warning) }
     else this.foamT = Math.max(0, (this.foamT || 0) - h);
     // over the back
     if (!onFront && y < 0.4 * Math.max(sl.top, 0.3)) return this.out('Kicked out over the back');
