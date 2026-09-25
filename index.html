@@ -131,6 +131,7 @@
     #start .boardrow { margin-top: 6px; }
     }
   #start .villarow { display: flex; gap: 12px; margin-top: 10px; align-items: center; }
+  #start .villarow .stl { margin-left: 10px; } #start #stances svg { width: 22px; height: 12px; }   /* (the filled foot is the front one) */
   /* the villa: walk (left thumb), look (right thumb), tap a board in the rack */
   body:not(.villa) .vui { display: none !important; }
   body.villa #paddle, body.villa #stall, body.villa #pad, body.villa #touch { display: none !important; }
@@ -279,16 +280,16 @@
     <button data-mode="ranch"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h60M0 18v10M60 18v10" stroke="currentColor" stroke-width="1" opacity=".45"/><path d="M4.0 28 C8.2 28 9.4 23.7 11.5 20.2 C13.7 19.6 16.1 21.4 15.8 23.7 C14.4 22.4 12.9 24.1 13.7 28.0 Z" fill="currentColor"/></svg><span class="nm">Surf Ranch</span><small><i>Wave pool</i>Order the wave you want</small></button>
   </div>
   <div class="boardrow"><span class="blabel">Board</span><b id="boardName" hidden></b><div class="boards" id="boards"></div></div>
-  <div class="villarow"><button id="goVilla"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M2 9.5 10 3l8 6.5"/><path d="M4.5 8v9h11V8"/><path d="M8.5 17v-4.5h3V17"/></svg><span>Your villa<small>Walk around, chill, watch the surf from the cliff</small></span></button></div>
+  <div class="villarow"><button id="goVilla"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M2 9.5 10 3l8 6.5"/><path d="M4.5 8v9h11V8"/><path d="M8.5 17v-4.5h3V17"/></svg><span>Your villa<small>Walk around, chill, watch the surf from the cliff</small></span></button><span class="blabel stl">Stance</span><div class="boards" id="stances"></div></div>
   <div id="load"></div>
   <p id="soundTip"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6 6 0 0 1 0 9"/></svg> Tap anywhere for music</p>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-2034</small>
+<small id="build">build 260925-2045</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=529"></script>
+<script type="module" src="js/game.js?v=534"></script>
 </body>
 </html>

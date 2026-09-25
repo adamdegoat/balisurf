@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=112';
-import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=115';
+import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=118';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
 import { SurfAudio } from './audio.js?v=16';
 import { ranch, POOL } from './ranch.js?v=4';
@@ -11,8 +11,8 @@ import { SPOTS, spotGroup, builtSpots } from './spots.js?v=23';
 import { villa, VILLA } from './villa.js?v=66';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=4';
-import { crew } from './crew.js?v=5';
-import { wildlife } from './wildlife.js?v=8';
+import { crew } from './crew.js?v=8';
+import { wildlife } from './wildlife.js?v=11';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -61,6 +61,10 @@ let board = makeBoard(); rig.add(board);
 // your board: the shortboard unless you've picked another (remembered on this phone). A longer board sits further forward
 // under you, so the nose reaches out ahead of your feet as on the real thing
 let boardType = 'short', boardTail = -0.9;
+// your stance: goofy (right foot forward) or regular (left foot forward). Every break here is a left, so goofy rides
+// facing the wave (frontside) and regular rides with your back to it (backside): a different, slightly harder ride
+let stance = 'goofy'; try { if (localStorage.getItem('sumbasurf.stance') === 'regular') stance = 'regular'; } catch (e) {}
+const stanceName = () => (stance === 'regular' ? 'Regular' : 'Goofy');
 const BOARD_INFO = {
   // name, how it feels, what it's best for, and 1-5 ratings (paddling, speed, turning, stability, airs)
   short: ['Shortboard', "6'2\" thruster. The high-performance board: sharp, snappy turns, snaps off the lip and airs. It's small, so it paddles slowly and you have to take off late and steep, and it loses speed if you stop pumping.", 'Tanjung Uma, Batu Hitam, the Ranch', [2, 4, 5, 2, 5]],
@@ -81,12 +85,28 @@ function boardPicker() {
     const pick = (e) => { e.preventDefault(); e.stopPropagation(); useBoard(t); }; b.addEventListener('click', pick); b.addEventListener('touchend', pick, { passive: false }); box.appendChild(b); }
   for (const b of box.children) b.classList.toggle('on', b.dataset.board === boardType); document.getElementById('boardName').textContent = BOARD_INFO[boardType][0];
 }
+// the stance picker, next to Your villa on the start screen
+function stancePicker() {
+  const box = document.getElementById('stances'); if (!box || box.childElementCount) return;
+  for (const [k, label, tip] of [['goofy', 'Goofy', 'Right foot forward: you face the waves'], ['regular', 'Regular', 'Left foot forward: your back to the waves']]) {
+    const b = document.createElement('button'); b.dataset.stance = k; b.title = tip;
+    b.innerHTML = `<svg viewBox="0 0 40 20"><ellipse cx="${k === 'goofy' ? 28 : 12}" cy="10" rx="5" ry="3.4" fill="currentColor"/><ellipse cx="${k === 'goofy' ? 12 : 28}" cy="10" rx="5" ry="3.4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span>${label}</span>`;
+    const pick = (e) => { e.preventDefault(); e.stopPropagation(); useStance(k); }; b.addEventListener('click', pick); b.addEventListener('touchend', pick, { passive: false }); box.appendChild(b); }
+  useStance(stance);
+}
+function useStance(k) {
+  stance = k; try { localStorage.setItem('sumbasurf.stance', k); } catch (e) {}
+  stanceQ.setFromAxisAngle(WORLD_UP, k === 'regular' ? -Math.PI / 2 : Math.PI / 2);
+  for (const b of document.querySelectorAll('[data-stance]')) b.classList.toggle('on', b.dataset.stance === k);
+  if (rider) rider.backside = k === 'regular';
+}
+setTimeout(stancePicker, 0);
 function useBoard(t) {
   boardType = t; try { localStorage.setItem('sumbasurf.board', t); } catch (e) {}
   rig.remove(board); board.geometry.dispose(); board = makeBoard(t); board.position.z = Math.max(0, (BOARD_LENGTH(t) - 1.88) * 0.33); rig.add(board);
   boardTail = board.position.z - BOARD_LENGTH(t) / 2 + 0.04; setBoard(t);
   for (const b of document.querySelectorAll('[data-board]')) b.classList.toggle('on', b.dataset.board === t);
-  document.getElementById('boardName').textContent = BOARD_INFO[t][0]; if (document.body.classList.contains('playing') && mode !== 'villa') ui.cond.textContent = modeName(mode) + '  \u00b7  ' + BOARD_INFO[t][0];
+  document.getElementById('boardName').textContent = BOARD_INFO[t][0]; if (document.body.classList.contains('playing') && mode !== 'villa') ui.cond.textContent = modeName(mode) + '  \u00b7  ' + BOARD_INFO[t][0] + '  \u00b7  ' + stanceName();
 
 }
 try { const t = localStorage.getItem('sumbasurf.board'); if (t && t !== 'short') setTimeout(() => useBoard(t), 0); } catch (e) {}
@@ -302,6 +322,7 @@ function spawnRider() {
   if (surfer) endWipe(); rig.visible = true; board.visible = true; for (const b of birds) b.visible = !isRanch();
   pumpC = 0; pumpA = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
   rider = rider || new Rider();
+  rider.backside = stance === 'regular';   // (all lefts: regular is backside)
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
   rider.reset(2 + Math.random() * 4, -7 - Math.random() * 3, -Math.PI / 2);
   // don't drop a wave on your head as you arrive
@@ -451,7 +472,7 @@ async function start(m) {
   setLeft = 0; setPos = 0;
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15;   // a calm start: time to look around and find the set
   updateWaves(0); spawnRider(); warmShaders();
-  ui.cond.textContent = modeName(mode) + '  \u00b7  ' + BOARD_INFO[boardType][0];   // (the spot, and the board you're on)
+  ui.cond.textContent = modeName(mode) + '  \u00b7  ' + BOARD_INFO[boardType][0] + '  \u00b7  ' + stanceName();   // (the spot, the board you're on, your stance)
 }
 // build the shader for everything that could show up in a session (the boat, the locals, spray, what's still hidden), now at the tap,
 // not in a stall mid-paddle the first time each thing comes into view
@@ -688,6 +709,7 @@ function updateCamera(dt) {
 const WORLD_UP = new THREE.Vector3(0, 1, 0), INTO_WAVE = new THREE.Vector3(0, 0, -1), tmpM = new THREE.Matrix4(), xAxis = new THREE.Vector3(), bodyUp = new THREE.Vector3(), bodyFwd = new THREE.Vector3(), bodyX = new THREE.Vector3();
 const _xAxis = new THREE.Vector3(1, 0, 0), _up = new THREE.Vector3(), _tq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
 // the rider's world orientation (bodyQ, plus side-on stance) expressed in the board's frame
+if (stance === 'regular') stanceQ.setFromAxisAngle(WORLD_UP, -Math.PI / 2);   // (turned the other way round on the board: left foot to the nose)
 const setStance = () => { invQ.copy(rig.quaternion).invert(); surfer.quaternion.copy(invQ).multiply(bodyQ).multiply(stanceQ); };
 // body moves between poses (sitting -> lying -> popping up) glide over ~0.15 s instead of jumping in one frame: the
 // camera rides on your head, so a jump was a jolt in the view (sit to paddle dropped 57 cm, paddle to pop rose 44 cm)
@@ -1126,7 +1148,7 @@ function surfStance() {
       at(P, (chest ? 0.62 : 0.58) + 0.6 * pumpUp, 0.42 - sway + pumpUp, chest ? 0.32 : -0.32);   // out over the rail, beside the board                       // trim
       if (bt) P.lerp(chest ? at(_aq, 0.6, 0.26, 0.26) : at(_aq, 0.45, 0.7, 0.34), bt);                               // bottom turn
       if (tt) P.lerp(at(_aq, 0.55, 0.5, -0.32), tt);                                                                  // top turn / cutback: leads round, points down the face
-      if (deep) P.lerp(chest ? at(_aq, 0.48, 0.55, 0.48) : at(_aq, 0.38, 0.7, -0.4), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
+      if (deep) P.lerp(chest ? at(_aq, 0.48, 0.55, 0.48) : at(_aq, 0.5, 0.56, -0.22), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
     } else {
       at(P, -0.08 - 0.9 * pumpUp, 0.78 - sway + 0.3 * pumpUp, -0.3);   // relaxed and low, just ahead of the back hip toward the rail (the shoulder is ~0.35 below the eyes)                                                                                // trim: by the back hip
       if (bt) P.lerp(chest ? at(_aq, -0.08, 0.92, 0.35) : at(_aq, -0.2, 0.62, -0.25), bt);

@@ -226,7 +226,10 @@ export class Rider {
       const pop = this.state === 'POP' ? 0.4 : 1;
       const speed = Math.hypot(this.vx, this.vz);
       // roll the board toward the lean your thumb asks for (weight shifts take a moment), then the lean carves the turn
-      const wantLean = inp.steer * P.leanMax * pop, dl = wantLean - this.lean, maxRoll = P.leanRate * h;
+      const wantLean = inp.steer * P.leanMax * pop, dl = wantLean - this.lean;
+      // backside (your back to the wave), rolling onto the heel rail to turn up into it is slower and blinder than
+      // frontside's toe rail: the board answers a little later (the wave is on your right when you head toward -x)
+      const intoWave = Math.cos(this.th) < 0 ? 1 : -1, maxRoll = P.leanRate * h * (this.backside && Math.sign(dl) === intoWave ? 0.82 : 1);
       this.lean += Math.max(-maxRoll, Math.min(maxRoll, dl * Math.min(1, h * P.leanEase)));
       // the board has momentum: its turning builds up and flows out over a fraction of a second, it doesn't switch on and off
       // the rail has to bite before the board turns: a flat board glides straight, a small lean barely turns,
@@ -361,7 +364,8 @@ export class Rider {
     this.inBarrel = C.hollow > 0.5 && sl.lipY < 0.62 * H && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
     // too deep: fall behind the curl and the foam ball (the broken wave churning inside the tube) catches you. You have
     // to keep your speed matched to the peel to stay in (pump, or come off the stall in time)
-    if (this.inBarrel && s < -2.0 * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > 2.5 || s < -3.6 * H) return this.wipe('Too deep: the foam ball swallowed you'); }   // (the instant line is well behind: a section surge alone can't drop you past it without warning) }
+    const deepAt = this.backside ? -1.9 : -2.0, foamMax = this.backside ? 2.0 : 2.5;   // (backside you can't see the curl behind you: the foam ball catches you a little sooner)
+    if (this.inBarrel && s < deepAt * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > foamMax || s < -3.6 * H) return this.wipe('Too deep: the foam ball swallowed you'); }   // (the instant line is well behind: a section surge alone can't drop you past it without warning) }
     else this.foamT = Math.max(0, (this.foamT || 0) - h);
     // over the back
     if (!onFront && y < 0.4 * Math.max(sl.top, 0.3)) return this.out('Kicked out over the back');
