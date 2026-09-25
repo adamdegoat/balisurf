@@ -446,11 +446,11 @@ export function waterMaterial({ wave = false } = {}) {
         // the reef under clear shallow water (flat water inside the break, toward the beach): pale turquoise over sand
         // with darker coral and rock patches, fading out in deep water, on the wave faces and under a stormy sky
         float reefK = smoothstep(-45., 15., vW.z) * (1. - smoothstep(165., 190., vW.z)) * smoothstep(-160., -60., vW.x)
-                    * smoothstep(.9, .99, normalize(vN).y) * (1. - smoothstep(.2, 1.2, vW.y)) * (1. - .7 * uCloud);
+                    * smoothstep(.55, .99, normalize(vN).y) * (1. - smoothstep(.05, 1.4, vW.y)) * (1. - .7 * uCloud);
         if (reefK > .001) {
           float rn = fbm(vW.xz * .06), rn2 = fbm(vW.xz * .27 + 3.1);
           vec3 reefCol = mix(vec3(.3, .66, .62), vec3(.13, .25, .22), clamp(smoothstep(.46, .6, rn) + .35 * (rn2 - .5), 0., 1.));
-          body = mix(body, reefCol * (.55 + .45 * uSunVis), reefK * .5);
+          body = mix(body, reefCol * (.55 + .45 * uSunVis), reefK * .38);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
         }
         ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);' : ''}
         vec3 col = mix(body, refl, fres);
