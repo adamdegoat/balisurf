@@ -1,6 +1,7 @@
-// Your friends at the villa: three surfers staying with you, each doing their own thing. Kai plays guitar by the fire,
+// Your friends at the villa: surfers staying with you, each doing their own thing. Kai plays guitar by the fire,
 // nodding along to the music; Wayan waxes a board on the stands in the garden; Nando is up on the tree deck with
-// binoculars, watching the sets. Same body as yours (their own skin, hair and boardshorts), posed bone by bone every
+// binoculars, watching the sets. In the living room, Coach Rudi stands at the open doors with his clipboard and gives
+// you tips on how to surf here, and Putu sits on the sofa with a map, talking up the other breaks. Same body as yours (their own skin, hair and boardshorts), posed bone by bone every
 // frame. Walk up and they look round and say something; Nando calls out the barrels he sees.
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
@@ -27,15 +28,44 @@ function reach(up, lo, hand, target, pole) {
   lo.getWorldPosition(_e); aim(lo, hand, _z.subVectors(_t, _e).normalize());
 }
 
-const LOOK = [
-  { skin: 0x9c6b4c, hair: 0x1b1512, shorts: 0x2f6f73 },   // Kai
-  { skin: 0x7a5238, hair: 0x120e0c, shorts: 0xd8592f },   // Wayan
-  { skin: 0xc79a7a, hair: 0x6b4a2a, shorts: 0x1f2f4f },   // Nando
-];
+const LOOK = {
+  kai: { skin: 0x9c6b4c, hair: 0x1b1512, shorts: 0x2f6f73 },
+  wayan: { skin: 0x7a5238, hair: 0x120e0c, shorts: 0xd8592f },
+  nando: { skin: 0xc79a7a, hair: 0x6b4a2a, shorts: 0x1f2f4f },
+  rudi: { skin: 0x8a5c40, hair: 0x9a958c, shorts: 0x3d4a2c },   // (the old coach: grey hair, olive shorts)
+  putu: { skin: 0xa8765a, hair: 0x16110e, shorts: 0xb8862c },
+};
 const LINES = {
   kai: ['Pull up a log, bro. Swell keeps building all evening.', 'This one is for the barrel you just got.', 'Fire is warm, waves are firing. Life is good.', 'Dawn patrol tomorrow? I am in.'],
   wayan: ['Fresh wax, ready for the morning session.', 'Take any board from the rack. All waxed up.', 'Tanjung Uma is pumping today.', 'Feel that offshore? Glassy all day.'],
   nando: ['Set coming! Look out the back.', 'Best seat on the point up here.', 'The peak is shifting right. Sit deeper.', 'Clean lines to the horizon, brother.'],
+  // the coach: how to actually surf in this game, one tip at a time
+  rudi: ['Watch the horizon out there. When a set comes, turn to the beach and hold PADDLE early. Late is how you miss it.',
+    'Once you are up, go along the wave, not straight to the beach. Left on the lefts, right on the rights.',
+    'Your right thumb is the steering wheel. Slide it to carve. Let go and the board just runs straight.',
+    'Hold PUMP for speed. Lose your speed and the wave leaves without you.',
+    'Want the barrel? Stay low on the face and hold STALL. Let the lip throw over your head.',
+    'Too deep in there? PUMP and steer up the face. The foam ball behind you does not forgive.',
+    'Do not climb too high near the lip. It will pull you over the falls, trust me.',
+    'Cutback: keep turning till you face the breaking part, then swing back into it. Keeps you in the power.',
+    'For airs, race down first, then turn hard up into the lip. Land it straight or your legs will buckle.',
+    'Caught inside? No panic. Hold on, then paddle back out past where it breaks.',
+    'New to it? Take the longboard. It catches waves easy and it is very stable. Shortboard later, for the snaps.',
+    'The fish is fast and loose. Beautiful on small, soft days. On the steep ones it gets twitchy.',
+    'Going to Gunung Laut? Only the gun. It paddles in early, before those giants stand up.',
+    'Goofy faces the wave on the lefts, regular faces it on the rights. Backside is a bit harder. Try both.',
+    'Boards are in the board room, next door. Walk up to one and it is yours.'],
+  // the local: every break in the book, told like he loves them
+  putu: ['Pantai Kuda means horse beach. We ride horses on that sand at sunset. Slow, friendly barrels. Where everybody starts.',
+    'You are sleeping on top of Tanjung Uma, bro. Clean four and a half metre lefts under the cliffs. Look out the window, that is her.',
+    'Batu Hitam, the black rock. Black sand, six metres, fast and heavy. When you make one out there, you remember it forever.',
+    'Gunung Laut, the mountain in the sea. She only wakes up in a storm. Fifteen metres. Take the gun and say a small prayer.',
+    'Watu Kanan goes right, off those red cliffs. Hollow but kind. Regular foot? That one is made for you.',
+    'Karang Hiu, the shark reef. Just the name, relax. Fast right, white sand, water so clear you see every coral.',
+    'Surf Ranch is the wave pool. You order the wave you want, same one again and again. Best place to practise airs.',
+    'Sumba is not Bali, you know. No crowds, no traffic. Just you, the horses and perfect waves.',
+    'My favourite? Tanjung Uma at sunset. Gold water, nobody out, the uma roof glowing up here.',
+    'First time? Start at Pantai Kuda, then come home to Tanjung Uma. The others will wait for you.'],
 };
 
 export function friends(scene, src, spots) {
@@ -44,7 +74,7 @@ export function friends(scene, src, spots) {
   spots.forEach((S, i) => {
     const body = cloneSkinned(src), root = new THREE.Group(); root.add(body); group.add(root);
     body.position.set(0, 0, 0); body.quaternion.identity(); body.scale.set(1, 1, 1);   // (the clone carries wherever your own body was last posed on the board)
-    const L = LOOK[i % LOOK.length];
+    const L = LOOK[S.id] || LOOK.kai;
     body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.frustumCulled = false; o.material = o.material.clone(); o.material.side = THREE.FrontSide;
       const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
     const B = {}; body.traverse((o) => { if (o.isBone) B[o.name] = o; });
@@ -68,24 +98,51 @@ export function friends(scene, src, spots) {
       const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.17, 0.012, 20), crown.material); brim.position.y = -0.035; brim.rotation.x = 0.12; hat.add(brim);
       group.add(hat); F.props.hat = hat;
     }
+    if (S.id === 'rudi') {   // a clipboard, a faded cap and a whistle on a cord
+      const cb = new THREE.Group(); const brd = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.012), new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.7 })); cb.add(brd);
+      const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.21, 0.27), new THREE.MeshStandardMaterial({ color: 0xf2eee4, roughness: 0.9 })); paper.position.set(0, -0.015, 0.0065); cb.add(paper);
+      const clip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.03, 0.02), new THREE.MeshStandardMaterial({ color: 0x9a9a9a, metalness: 0.6, roughness: 0.4 })); clip.position.set(0, 0.15, 0.01); cb.add(clip);
+      group.add(cb); F.props.clip = cb;
+      const cap = new THREE.Group(), cm = new THREE.MeshStandardMaterial({ color: 0x2f5a78, roughness: 0.85 });
+      const cr = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), cm); cr.scale.set(1, 0.75, 1.08); cap.add(cr);
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.01, 14, 1, false, -Math.PI / 2, Math.PI), cm); brim.position.set(0, 0.005, 0.07); brim.scale.set(1, 1, 0.9); cap.add(brim);
+      group.add(cap); F.props.cap = cap;
+      const wh = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.02, 0.05), new THREE.MeshStandardMaterial({ color: 0xd8b04a, metalness: 0.5, roughness: 0.4 })); group.add(wh); F.props.whistle = wh;
+    }
+    if (S.id === 'putu') {   // a folded paper map of the island, spots marked
+      const cv = document.createElement('canvas'); cv.width = 256; cv.height = 176; const c = cv.getContext('2d');
+      c.fillStyle = '#e8dcbc'; c.fillRect(0, 0, 256, 176); c.fillStyle = '#9cc7c4'; c.fillRect(0, 0, 256, 176);
+      c.fillStyle = '#e3d3a4'; c.beginPath(); c.moveTo(20, 60); c.bezierCurveTo(60, 20, 150, 30, 210, 50); c.bezierCurveTo(240, 70, 230, 120, 190, 135); c.bezierCurveTo(130, 160, 60, 150, 30, 120); c.bezierCurveTo(10, 100, 8, 75, 20, 60); c.fill();
+      c.fillStyle = '#7fa564'; c.beginPath(); c.ellipse(120, 90, 60, 28, -0.1, 0, 7); c.fill();
+      c.fillStyle = '#c0392b'; for (const [x, y] of [[40, 125], [95, 150], [160, 145], [205, 120], [30, 70], [215, 60]]) { c.beginPath(); c.arc(x, y, 5, 0, 7); c.fill(); }
+      c.strokeStyle = 'rgba(80,60,30,.35)'; c.lineWidth = 2; c.beginPath(); c.moveTo(128, 0); c.lineTo(128, 176); c.moveTo(0, 88); c.lineTo(256, 88); c.stroke();   // (fold lines)
+      const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+      const mp = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.32), new THREE.MeshStandardMaterial({ map: tx, roughness: 0.95, side: THREE.DoubleSide })); group.add(mp); F.props.map = mp;
+    }
     list.push(F);
   });
   // the speech bubble: over the head of whoever is talking
   const bub = document.createElement('div'); bub.id = 'fBubble'; document.body.appendChild(bub);
   let talking = null;
-  const say = (F, text) => { talking = F; F.talkT = 4.5; bub.innerHTML = `<b>${F.name}</b>${text}`; bub.classList.add('on'); };
+  const say = (F, text) => { talking = F; F.talkT = Math.min(9, 2.8 + text.length * 0.05); bub.innerHTML = `<b>${F.name}</b>${text}`; bub.classList.add('on'); };   // (long enough to read)
+  const CHATTY = { rudi: 1, putu: 1 };   // (these two keep talking while you stay: a new tip or a new spot every few seconds)
+  for (const id in LINES) if (CHATTY[id]) { const a = LINES[id]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }   // (a different order each visit)
 
   const V = new THREE.Vector3(), W = new THREE.Vector3(), fw = new THREE.Vector3(), rt = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), tgt = new THREE.Vector3(), tgt2 = new THREE.Vector3(), pole = new THREE.Vector3(), SD = new THREE.Vector3(), TA = new THREE.Vector3(), TB = new THREE.Vector3(), HP = new THREE.Vector3();
   function update(dt, t, beat, you, camera) {
     for (const F of list) {
       const { B, S, root } = F; F.cool -= dt;
+      if (F.posed && F.talkT <= 0 && Math.hypot(you.x - F.head.x, you.z - F.head.z) > 26) continue;   // (far off: keep the last pose, skip the work)
+      F.posed = true;
       for (const m of F.skins) m.skeleton.pose(); root.updateMatrixWorld(true);
-      fw.set(Math.sin(S.yaw), 0, Math.cos(S.yaw)); rt.set(-fw.z, 0, fw.x);   // (their right, looking along fw)
       // you nearby, on their level? then they look round at you, and say something
       B.head.getWorldPosition(F.head);
       const dx = you.x - F.head.x, dz = you.z - F.head.z, dist = Math.hypot(dx, dz), near = dist < 3.6 && Math.abs(you.y - F.head.y) < 1.6;
-      if (near && F.cool <= 0) { say(F, LINES[F.id][F.lineI++ % LINES[F.id].length]); F.cool = 18; }
-      const toYou = Math.atan2(dx, dz) - S.yaw, want = near ? Math.max(-1.1, Math.min(1.1, Math.atan2(Math.sin(toYou), Math.cos(toYou)))) : 0;
+      if (F.yaw === undefined) F.yaw = S.yaw;
+      if (S.pose === 'coach') { const want = near ? Math.atan2(dx, dz) : S.yaw, d = Math.atan2(Math.sin(want - F.yaw), Math.cos(want - F.yaw)); F.yaw += d * Math.min(1, dt * 2.5); root.rotation.y = F.yaw; root.updateMatrixWorld(true); }   // (the coach turns right round to talk to you)
+      fw.set(Math.sin(F.yaw), 0, Math.cos(F.yaw)); rt.set(-fw.z, 0, fw.x);   // (their right, looking along fw)
+      if (near && F.cool <= 0 && !(talking && talking !== F && talking.talkT > 0)) { say(F, LINES[F.id][F.lineI++ % LINES[F.id].length]); F.cool = CHATTY[F.id] ? F.talkT + 3.5 : 18; }   // (never over the top of someone else)
+      const toYou = Math.atan2(dx, dz) - F.yaw, want = near ? Math.max(-1.1, Math.min(1.1, Math.atan2(Math.sin(toYou), Math.cos(toYou)))) : 0;
       F.look += (want - F.look) * Math.min(1, dt * 3);
       const hip = B.pelvis.getWorldPosition(HP);
       if (S.pose === 'guitar') {
@@ -132,6 +189,36 @@ export function friends(scene, src, spots) {
           reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(at).addScaledVector(side, -0.07).addScaledVector(up, -0.03), pole.copy(up).multiplyScalar(-1).addScaledVector(side, -0.4)); }
         else { B.hand_r.getWorldPosition(bn.position); bn.position.addScaledVector(up, -0.05); bn.quaternion.setFromUnitVectors(_a.set(0, 0, 1), up); }   // (hanging from the right hand)
         const hat = F.props.hat; B.head.getWorldPosition(hat.position); hat.position.addScaledVector(up, 0.14); B.head.getWorldQuaternion(hat.quaternion); hat.quaternion.setFromUnitVectors(_a.set(0, 1, 0), tgt2.copy(up).addScaledVector(look, 0.35).normalize());
+      } else if (S.pose === 'coach') {
+        // standing at the open doors watching the waves, clipboard in his left hand, right hand on his hip; turns to
+        // you and talks with his hand when you come near
+        const talk = F.talkT > 0, look = tgt.copy(fw).applyAxisAngle(up, F.look + (near ? 0 : Math.sin(t * 0.25) * 0.3)); look.y = near ? 0.02 : -0.06; look.normalize();
+        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt2.copy(up).multiplyScalar(-1).addScaledVector(rt, sg * 0.1).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt2.copy(up).multiplyScalar(-1).normalize()); }
+        aim(B.spine_03, B.neck_01, tgt2.copy(up).addScaledVector(look, 0.08).normalize());
+        aim(B.neck_01, B.head, tgt2.copy(up).addScaledVector(look, 0.5).normalize());
+        B.spine_03.getWorldPosition(W); const chest = W;
+        const cb = F.props.clip; cb.position.copy(chest).addScaledVector(fw, 0.27).addScaledVector(rt, -0.14).addScaledVector(up, talk ? -0.12 : -0.2);
+        cb.quaternion.setFromUnitVectors(_a.set(0, 0, 1), TA.copy(fw).addScaledVector(up, 0.9).normalize());   // (face up, tipped toward him)
+        reach(B.upperarm_l, B.lowerarm_l, B.hand_l, TA.copy(cb.position).addScaledVector(rt, -0.1), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, -0.6));
+        if (talk) reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(chest).addScaledVector(fw, 0.38).addScaledVector(rt, 0.2).addScaledVector(up, -0.05 + 0.07 * Math.sin(t * 4.5)), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, 0.7));
+        else reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(hip).addScaledVector(rt, 0.24).addScaledVector(up, 0.08).addScaledVector(fw, -0.02), pole.copy(fw).multiplyScalar(-1).addScaledVector(rt, 0.5));
+        B.head.getWorldPosition(W); const cap = F.props.cap; cap.position.copy(W).addScaledVector(up, 0.1); cap.lookAt(TA.copy(cap.position).add(look));
+        F.props.whistle.position.copy(chest).addScaledVector(fw, 0.13).addScaledVector(up, -0.02);
+      } else if (S.pose === 'sofa') {
+        // on the sofa with the map open on his lap; looks up and points out to sea when he talks
+        root.position.y = S.y + S.seat + 0.02 - (hip.y - root.position.y); root.updateMatrixWorld(true);
+        const talk = F.talkT > 0;
+        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1;
+          aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(fw).multiplyScalar(0.95).addScaledVector(up, -0.12).addScaledVector(rt, sg * 0.2).normalize());
+          aim(B['calf_' + sd], B['foot_' + sd], tgt.copy(up).multiplyScalar(-0.95).addScaledVector(fw, 0.2).addScaledVector(rt, sg * 0.05).normalize()); }
+        aim(B.spine_02, B.spine_03, tgt.copy(up).addScaledVector(fw, -0.12).normalize());   // (leaning back into the cushions)
+        aim(B.neck_01, B.head, tgt.copy(up).addScaledVector(fw, talk || near ? 0.25 : 0.9).addScaledVector(rt, Math.sin(F.look) * 0.9).normalize());
+        B.pelvis.getWorldPosition(W); const mp = F.props.map; mp.position.copy(W).addScaledVector(fw, 0.34).addScaledVector(up, 0.3);
+        mp.quaternion.setFromUnitVectors(_a.set(0, 0, 1), TA.copy(up).multiplyScalar(0.8).addScaledVector(fw, -1).normalize());   // (held up in front of him, tipped back so he reads it)
+        const side = SD.copy(rt);
+        reach(B.upperarm_l, B.lowerarm_l, B.hand_l, TA.copy(mp.position).addScaledVector(side, -0.22), pole.copy(up).multiplyScalar(-1).addScaledVector(side, -0.6));
+        if (talk) { B.spine_03.getWorldPosition(TB); reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.addScaledVector(fw, 0.5).addScaledVector(rt, 0.3).addScaledVector(up, 0.15 + 0.04 * Math.sin(t * 3)), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, 0.5)); }   // (pointing out to sea)
+        else reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(mp.position).addScaledVector(side, 0.22), pole.copy(up).multiplyScalar(-1).addScaledVector(side, 0.6));
       }
       if (F.talkT > 0) F.talkT -= dt;
     }
