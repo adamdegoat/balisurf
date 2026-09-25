@@ -114,6 +114,7 @@ export class Rider {
     this.paddling = false; this.paddleT = 0; this.catchT = 0;
     this.turn = 0; this.lean = 0; this.skid = 0; this.relS = 1; this.v = 0; this.hx = 0; this.hz = 0; this.gAlong = 0;
     this.wave = null; this.s = 99; this.zl = 99; this.inBarrel = false; this.onFace = false; this.lowT = 0;
+    this.air = null; this.vyS = 0; this.prevY = undefined;
     this.pumpHold = 0; this.pumping = false; this.foamT = 0; this.wwFloatT = 0; this.tubeOut = 0; this.turnHold = 0; this.recentPaddle = 0; this.slide = 0; this.stalling = 0;
     this.ride = { t: 0, top: 0, barrel: 0, pocket: 0, turns: 0, cutbacks: 0, snaps: 0, speed: 0, end: 0, score: 0, moves: [], tubeT: 0, leanPk: 0 }; this.turnSign = 0; this.cbArmed = false; this.snapArm = 0; this.trick = null;
   }
@@ -131,6 +132,7 @@ export class Rider {
   }
 
   step(h, inp, waves) {
+    if (this.air) return this.airStep(h, inp, waves);
     const P = RIDE, g = P.g;
     // the water here: height, slope (finite differences), which wave
     const q = waterAt(waves, this.x, this.z, _c), e = 0.15;
@@ -138,6 +140,9 @@ export class Rider {
     const hz = (heightAt(waves, this.x, this.z + e) - heightAt(waves, this.x, this.z - e)) / (2 * e);
     this.y = q.y; this.hx = hx; this.hz = hz; this.wave = q.w; this.s = q.w ? q.s : 99; this.zl = q.w ? q.zl : 99;
     const w = q.w, C = w ? w.cond : null, H = C ? C.H : 1, cw = C ? C.speed : 0;
+    // how fast the board is rising: climbing the slope as you move, plus the face lifting as the wave runs in under you
+    // (smooth, from the slope; the height itself can step between the face and the crest), eased like a real body would
+    this.vyS += (Math.max(-12, Math.min(12, hx * this.vx + hz * (this.vz - cw))) - this.vyS) * Math.min(1, h * 12);
     const dx = Math.cos(this.th), dz = Math.sin(this.th);
     const slope2 = hx * hx + hz * hz;
     this.gAlong = hx * dx + hz * dz;                                   // rise per metre in the direction the board points
@@ -304,6 +309,13 @@ export class Rider {
       } else return this.wipe(C.hollow > 0.5 ? 'The whitewater caught you' : 'The whitewater knocked you off');
     } else if (inFoam) return this.wipe(C.hollow > 0.5 ? 'The whitewater caught you' : 'The whitewater knocked you off');
     else if (this.wwFloatT > 0) { if (this.wwFloatT > 0.35) this.move('FLOATER', Math.min(1, this.wwFloatT / 1.2)); this.wwFloatT = 0; }   // made it back onto the clean face
+    // an air: come up the face fast and hit the lip, and it throws you into the sky with it (going up slowly, it just
+    // takes you over the falls, below). Needs speed and a steep, rising face; not from inside the tube
+    if (this.state === 'RIDE' && this.stateT > 0.8 && onFront && s > -0.25 * H && y > 0.78 * sl.top && this.vyS > Math.max(1.8, 0.28 * Math.sqrt(9.8 * H)) && this.v > 0.75 * C.speed) {
+      this.air = { t: 0, vy: Math.min(0.9 * Math.sqrt(9.8 * H), this.vyS * 1.1 + 1.2), spin: 0, peak: 0 };   // (capped: you fly about as high as the wave is steep, not further)
+      this.vz = Math.max(this.vz, C.speed * 1.02);   // the throwing lip carries you forward with it
+      this.inBarrel = false; this.onFace = false; return;
+    }
     // too high while it's throwing
     // (only a wave that pitches can throw you; a soft, crumbly one just breaks around you and the whitewater rule decides)
     if (C.hollow > 0.5 && onFront && y > Math.min(0.97, 0.86 / Math.sqrt(C.forgive || 1)) * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
@@ -361,14 +373,49 @@ export class Rider {
 
   // like a contest judge: turns, speed, time in the barrel and in the pocket; just riding along earns little
   // a judged move: worth more done fast, laid over hard, and close to the breaking part (critical)
+  // in the air: you fly on your own momentum and gravity; your thumb spins the board. Land lined up with where you're
+  // going and you ride away; land sideways, too hard from too high, or spun wrong, and it's a wipeout
+  airStep(h, inp, waves) {
+    const P = RIDE, A = this.air; A.t += h;
+    A.vy -= P.g * h; this.y += A.vy * h;
+    this.x += this.vx * h; this.z += this.vz * h; this.v = Math.hypot(this.vx, this.vz);
+    // with your thumb near the middle your body does what a surfer's does by instinct: swings the board round under you to
+    // face where you're flying, ready to land. Push the thumb over and you spin it yourself (a 360 needs a full turn)
+    const travel = Math.atan2(this.vz, this.vx), off = Math.atan2(Math.sin(travel - this.th), Math.cos(travel - this.th));
+    const spin = Math.abs(inp.steer) > 0.3 ? inp.steer * 5.2 : Math.max(-2.8, Math.min(2.8, off * 5));
+    this.th += spin * h; A.spin += Math.abs(inp.steer) > 0.3 ? spin * h : 0; this.turn = spin * 0.5;
+    this.lean += (inp.steer * 0.3 - this.lean) * Math.min(1, h * 6);
+    this.skid = 0; this.slide = 0; this.stalling = 0; this.pumping = false; this.inBarrel = false; this.onFace = false;
+    this.ride.t += h;
+    const q = waterAt(waves, this.x, this.z, _c), e = 0.15;
+    if (q.w) { this.wave = q.w; this.s = q.s; this.zl = q.zl; }
+    A.peak = Math.max(A.peak, this.y - q.y);
+    if (A.t > 0.12 && this.y <= q.y) {
+      const hx = (heightAt(waves, this.x + e, this.z) - heightAt(waves, this.x - e, this.z)) / (2 * e);
+      const hz = (heightAt(waves, this.x, this.z + e) - heightAt(waves, this.x, this.z - e)) / (2 * e);
+      this.land(q, hx, hz);
+    }
+  }
+  land(q, hx, hz) {
+    const A = this.air; this.air = null; this.y = q.y; this.prevY = q.y; this.hx = hx; this.hz = hz;
+    const w = q.w || this.wave, C = w.cond, H = C.H, travel = Math.atan2(this.vz, this.vx);
+    const off = Math.abs(Math.atan2(Math.sin(this.th - travel), Math.cos(this.th - travel))), rot = Math.abs(A.spin);
+    if (off > 0.65) return this.wipe(rot > 2 ? 'Over-rotated: you landed sideways' : 'Landed sideways off the air');
+    if (-A.vy > 11) return this.wipe('Too high: the landing buckled your legs');
+    const crit = Math.min(1, 0.35 + 0.5 * Math.min(1, A.peak / (0.5 * H)) + 0.3 * Math.min(1, rot / (2 * Math.PI)));
+    this.move(rot > 5.5 ? 'AIR 360' : 'AIR', crit, A.peak);
+    const sl = q.w ? q.w.prof.slice(q.s) : null;
+    if (!sl || q.zl < sl.topZ - 0.3) return this.out('Landed the air out the back');   // (the air still counts)
+    this.vx *= 0.85; this.vz *= 0.85; this.v = Math.hypot(this.vx, this.vz);   // your legs soak up the landing
+  }
   move(name, crit, dur = 0) {
     const C = this.wave.cond, spd = Math.min(1, this.v / (C.speed * 1.1)), pow = this.ride.leanPk;
-    let q = Math.min(1, 0.35 * spd + 0.3 * pow + 0.35 * crit), base = { TURN: 1.2, SNAP: 2.0, CUTBACK: 2.2, FLOATER: 1.8 }[name] || 0;
+    let q = Math.min(1, 0.35 * spd + 0.3 * pow + 0.35 * crit), base = { TURN: 1.2, SNAP: 2.0, CUTBACK: 2.2, FLOATER: 1.8, AIR: 2.6, 'AIR 360': 3.4 }[name] || 0;
     if (name === 'BARREL') { base = 1.4 + 1.1 * Math.min(dur, 6); q = crit; }
     const pts = base * (0.4 + 0.6 * q) * (0.8 + 0.2 * Math.min(1.5, C.H / 3));   // bigger surf, bigger scores
     this.ride.moves.push({ name, pts, t: this.ride.t });
     const big = q > 0.75 ? (name === 'BARREL' ? 'DEEP ' : 'BIG ') : '';
-    this.trick = { name: big + name + (name === 'BARREL' ? ` ${dur.toFixed(1)}s` : ''), t: 0 };
+    this.trick = { name: big + name + (name === 'BARREL' ? ` ${dur.toFixed(1)}s` : name.startsWith('AIR') ? ` ${dur.toFixed(1)}m` : ''), t: 0 };
   }
   // like a contest judge, out of 10: the best moves count most (diminishing after that), variety earns a bonus,
   // flow (speed kept up along the wave) a little; riding along without doing anything earns almost nothing.
@@ -399,6 +446,7 @@ export class Rider {
     out.fwd.set(dx, Math.max(-lim, Math.min(lim, this.gAlong)), dz).normalize();
     const k = Math.min(1, (this.standing ? 2.2 : 0.8) / Math.max(0.01, Math.hypot(this.hx, this.hz)));   // same limit for how far the deck tips
     out.up.set(-this.hx * k, 1, -this.hz * k).normalize();
+    if (this.air) { out.fwd.set(dx, Math.max(-0.6, Math.min(0.6, this.air.vy * 0.06)), dz).normalize(); out.up.set(0, 1, 0).addScaledVector(out.fwd, -out.fwd.y).normalize(); }   // flying: the board level under your feet, nose following your arc
     return out;
   }
 }

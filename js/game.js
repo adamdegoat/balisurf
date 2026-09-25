@@ -2,12 +2,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=92';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=101';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=93';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=105';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=4';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=5';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -226,7 +226,7 @@ function updateWaves(dt) {
       // set up in the pocket (standing, just ahead of the curl, low on the face, not racing away) and the next section
       // throws right over you soon: real barrels mostly come to you like this, rather than after a long wait
       if (rider && rider.wave === w && rider.state === 'RIDE' && !rider.inBarrel && rider.s > 0.2 * C.H && rider.s < 2.2 * C.H && rider.y < 0.6 * C.H && !(w.secK > 0) && w.secT > 0.6) { w.secT = 0.6; w.secSoft = true; }   // (a softer section: it covers you rather than racing past)
-      if (w.secK === undefined || w.secK <= 0) { w.secT -= dt; if (w.secT <= 0) { w.secK = 1.1; w.secA = w.secSoft ? 0.35 : 1; w.secSoft = false; w.secT = 5 + Math.random() * 5; if (w.spitT !== undefined) w.spitT = 0.25; } }
+      if (w.secK === undefined || w.secK <= 0) { w.secT -= dt; if (w.secT <= 0) { w.secK = 1.1; w.secA = w.secSoft ? (C.name === 'Hard' || C.name === 'Extreme' ? 0.8 : 0.35) : 1; w.secSoft = false; w.secT = 5 + Math.random() * 5; if (w.spitT !== undefined) w.spitT = 0.25; } }   // (a heavy wave's section throws hard over you: race it or it closes on you)
       else { w.secK -= dt; const ph = 1 - w.secK / 1.1, A = C.name === 'Easy' ? 1.1 : C.name === 'Medium' ? 1.3 : C.name === 'Hard' ? 1.5 : 2.1; rate *= ph < 0.75 ? 1 + A * (w.secA || 1) * Math.sin(Math.PI * ph / 0.75) : 1 - 0.4 * (w.secA || 1); }
     }
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
@@ -600,7 +600,8 @@ function updateRig(dt, t) {
   rig.position.y += 0.1 * sitTilt;                                     // the rider's weight sinks the tail
   if (standing || (rider.state === 'WIPE' && rider.stateT < 0.1)) {
     // the rider stands on the deck, leaning into the turn and a little toward the wave
-    barrelK += ((rider.inBarrel ? 1 : 0) - barrelK) * Math.min(1, dt * 2.5);   // eased: going in or out of the tube never snaps the body (or your eyes with it)
+    barrelK += ((rider.inBarrel ? 1 : 0) - barrelK) * Math.min(1, dt * 2.5);
+    airK += ((rider.air ? 1 : 0) - airK) * Math.min(1, dt * 8);   // in the air: knees up into a tuck, then they take the landing   // eased: going in or out of the tube never snaps the body (or your eyes with it)
     const lean = 0.15 + 0.12 * barrelK;
     // stand over the board but closer to upright than the deck (legs absorb the tilt), leaning into the wave
     bodyUp.copy(pose.up).lerp(WORLD_UP, 0.4).addScaledVector(INTO_WAVE, Math.tan(lean * 0.6)).normalize();
@@ -637,7 +638,7 @@ function updateRig(dt, t) {
     // pumping is a rhythm, not a held squat: compress onto the board on the way down, spring up light, ~1.4 times a second
     pumpA += ((input.paddle ? 1 : 0) - pumpA) * Math.min(1, dt * 5); if (pumpA > 0.01) pumpPh += dt * Math.PI * 2 * 1.4;
     // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
-    const deep = Math.min(0.7, (0.14 + 0.06 * Math.min(1, rider.v / 10) + (0.31 - 0.06 * Math.min(1, rider.v / 10)) * barrelK) + 0.22 * pumpA * (0.5 + 0.5 * Math.sin(pumpPh)) + 0.25 * gLoad + 0.22 * Math.min(1, Math.abs(rider.lean) / RIDE.leanMax) + 0.2 * (rider.stalling || 0));   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
+    const deep = Math.min(0.7, (0.14 + 0.06 * Math.min(1, rider.v / 10) + (0.31 - 0.06 * Math.min(1, rider.v / 10)) * barrelK) + 0.22 * pumpA * (0.5 + 0.5 * Math.sin(pumpPh)) + 0.2 * airK + 0.25 * gLoad + 0.22 * Math.min(1, Math.abs(rider.lean) / RIDE.leanMax) + 0.2 * (rider.stalling || 0));   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     // rising out of the pop-up's deep squat over half a second (not snapping up: that jerks your eyes up 16 cm in a frame)
     const up_ = Math.min(1, rider.stateT / 0.6), rise = up_ * up_ * (3 - 2 * up_);
@@ -900,7 +901,7 @@ function swingBone(bone, end, sgn, ang) {
   bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));
   bone.updateMatrixWorld(true);
 }
-let stanceW = 0, pumpC = 0, pumpA = 0, pumpPh = 0, barrelK = 0, sitting = false, sitTilt = 0;
+let stanceW = 0, pumpC = 0, pumpA = 0, pumpPh = 0, barrelK = 0, airK = 0, sitting = false, sitTilt = 0;
 const rigQ = new THREE.Quaternion();
 function straddle() { straddleFor(bones, rig, surfer); }
 // the same straddle for any sitting body B (bone map) on its board frame R (the locals use it too)
@@ -1062,6 +1063,7 @@ function updateHUD(dt) {
   else if (st === 'RIDE' && rider.inBarrel && (rider.foamT || 0) > 0.4) hint = 'Too deep! PUMP and steer up the face to get out';
   else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Slide your thumb left and right to carve, like a steering wheel' : rider.stateT < 5 ? 'Hold PUMP for speed, STALL to brake and let the barrel catch you' : 'Let go and the board just glides straight';
   else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: keep turning right till you face the breaking wave, then turn back';
+  else if (st === 'RIDE' && rider.stateT > 13 && rider.stateT < 17 && session.waves >= 1 && session.waves < 6 && !rider.ride.moves.some((m) => m.name.startsWith('AIR'))) hint = 'Air: race down, then turn hard up the face into the lip and it launches you';
   // the curl is right behind you: tell the player how to get covered (a barrel comes to whoever sets up for it)
   if (st === 'RIDE' && !hint && !rider.inBarrel && rider.wave && rider.s > 0 && rider.s < 2.2 * rider.wave.cond.H && rider.wave.cond.hollow > 0.5 && session.barrels < 2) hint = rider.y < 0.6 * rider.wave.cond.H ? 'Barrel coming! Stay low and hold STALL' : 'The lip is pitching behind you: drop low to get barreled';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');

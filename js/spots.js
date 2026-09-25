@@ -2,7 +2,7 @@
 // landmarks of its own. Distances are in the coast's own frame: the beach is ~185-225 m in from the break, and the
 // whole coast is pushed back by dz (a longer run to the sand makes a longer ride).
 import * as THREE from 'three';
-import { coast, landMaterial } from './wave.js?v=92';
+import { coast, landMaterial } from './wave.js?v=93';
 
 export const SPOTS = {
   // beginners: a wide white-sand bay, low green points, calm turquoise over a pale reef, a village of beach huts
