@@ -26,7 +26,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.08, 2000);
 // POV: a wide, GoPro-like view (about 100 degrees across); the outside wipeout shot uses a normal ~80
 let hfovHalf = 50;
-const fitFov = () => { if (!innerWidth || !innerHeight) return; camera.aspect = innerWidth / innerHeight; camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(hfovHalf)) / Math.min(camera.aspect, 2.0))); camera.updateProjectionMatrix(); };
+const fitFov = () => { if (!innerWidth || !innerHeight) return; camera.aspect = innerWidth / innerHeight; camera.fov = Math.min(THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(hfovHalf)) / Math.min(camera.aspect, 2.0))), camera.aspect < 1 ? 78 : 180); camera.updateProjectionMatrix(); };   // (held upright the wave behind the turn-your-phone screen is framed like a photo, not stretched 140 degrees tall)
 const setHfov = (h) => { if (h !== hfovHalf) { hfovHalf = h; fitFov(); } };
 fitFov();
 skyDome(scene); ocean(scene);
@@ -386,7 +386,8 @@ const _rc = new THREE.Color();
 // ---------- controls: PADDLE/PUMP (hold, left) and a thumb pad (right half). Keyboard for testing.
 const input = { paddle: false, steer: 0 };
 const keys = new Set();
-addEventListener('keydown', (e) => { keys.add(e.code); if (/^(Space|Arrow)/.test(e.code) && ui.start.style.display === 'none') { e.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });   // (in play, Space and the arrows are the controls: never 'press' a button left focused, never scroll) addEventListener('keyup', (e) => keys.delete(e.code)); addEventListener('blur', () => keys.clear());   // (switching apps mid-press)
+addEventListener('keydown', (e) => { keys.add(e.code); if (/^(Space|Arrow)/.test(e.code) && ui.start.style.display === 'none') { e.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });   // (in play, Space and the arrows are the controls: never 'press' a button left focused, never scroll)
+addEventListener('keyup', (e) => keys.delete(e.code)); addEventListener('blur', () => keys.clear());   // (switching apps mid-press)
 const ui = {
   paddle: document.getElementById('paddle'), stall: document.getElementById('stall'), pad: document.getElementById('pad'), touch: document.getElementById('touch'), knob: document.querySelector('#touch b'),
   speed: document.getElementById('speed'), score: document.getElementById('score'), cond: document.getElementById('cond'),
@@ -1351,6 +1352,14 @@ function autoQuality(dt) {
 
 // ---------- loop
 const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)'); let lastPortrait = false;
+// the turn-your-phone screen: Android can be turned for you (full screen, locked sideways); its rotation lock has another name
+{ const rtT = document.getElementById('rtTurn'), android = /Android/i.test(navigator.userAgent);
+  if (android) document.querySelector('#rotate .rtLock span').innerHTML = '<b>Screen will not turn?</b> Auto rotate is off. Swipe down from the top of your screen and tap Auto rotate to switch it on.';
+  if (android && screen.orientation && screen.orientation.lock && document.documentElement.requestFullscreen) {
+    rtT.hidden = false;
+    rtT.addEventListener('click', () => { try { document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation.lock('landscape')).catch(() => { rtT.hidden = true; }); } catch (e) { rtT.hidden = true; } });
+  } }
+let liveShown = false;
 let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1, lastPump = false;
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
 const _wl = new THREE.Vector3();
@@ -1706,7 +1715,8 @@ const flipProj = (cam) => { cam.projectionMatrix.elements[0] *= -1; cam.projecti
 { const gl = renderer.getContext(), ff = gl.frontFace.bind(gl); gl.frontFace = (m) => ff(MIRROR ? (m === gl.CW ? gl.CCW : gl.CW) : m); }
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
-  if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
+  if (!(window.__g && window.__g.paused) && (!portrait.matches || ui.start.style.display !== 'none')) tick(dt);   // turned upright: the game waits (the menu's wave keeps rolling behind the turn-your-phone screen)
+  if (!liveShown && (tick.demo || mode)) { liveShown = true; requestAnimationFrame(() => document.body.classList.add('live')); }   // (the wave is drawn: the poster behind the turn-your-phone screen fades away)
   if (portrait.matches !== lastPortrait) { lastPortrait = portrait.matches; if (document.body.classList.contains('playing')) audio.pause(portrait.matches); }   // (and so does the sound: no endless drone while it waits)
   // pass 1: the world; pass 2: your body through its own lens (skipped when a test view shows the body in the world cam)
   const mir = MIRROR; if (mir) flipProj(camera);   // (a right-hand spot: the picture drawn flipped left to right)
