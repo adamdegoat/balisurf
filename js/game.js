@@ -386,7 +386,8 @@ function povCamera(dt) {
   if (tubeLook > 0.01) yawT += Math.atan2(Math.sin(-0.15 - yawT), Math.cos(-0.15 - yawT)) * 0.65 * tubeLook;   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
   // popping up, the head drives forward over the board (the eye ahead of the shoulders, which stay out of view), easing back as you rise
   const popFwd = st === 'POP' ? 0.15 : st === 'RIDE' ? 0.15 * Math.max(0, 1 - rider.stateT / 0.8) : 0;
-  const ef = standing ? POVCAM.fwd + popFwd : -0.05, eu = standing ? POVCAM.up : 0.2;   // lying: eyes at the head, a bit up, so your paddling hands pass below them
+  const sK = standing ? (st === 'POP' ? Math.min(1, rider.stateT / 0.25) : 1) : 0;   // (lying -> standing eye point blended over the start of the pop, not switched in a frame)
+  const ef = -0.05 + (POVCAM.fwd + popFwd + 0.05) * sK, eu = 0.2 + (POVCAM.up - 0.2) * sK;   // lying: eyes at the head, a bit up, so your paddling hands pass below them
   _eye.x += Math.cos(yawT) * ef; _eye.z += Math.sin(yawT) * ef; _eye.y += eu;   // camera just in front of the face, like a surfer's mouth-mounted camera
   // smooth the eye's position relative to the board (not in the world, or at speed it would trail behind your head)
   _eye.sub(rig.position);
@@ -423,7 +424,7 @@ function povCamera(dt) {
   if (pitchLook > pitchT) pitchT = pitchLook;
   pitchT += 0.14 * tubeLook;   // and up a little: the lip over your head
   pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * (st === 'POP' ? 4 + 20 * Math.min(1, rider.stateT / 0.3) : 5));   // (the pop: eyes snap down to the board between your hands)
-  pov.roll += ((standing ? -rider.lean * 0.28 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve
+  pov.roll += ((standing ? -rider.lean * 0.2 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve (less than the board: people hold their head nearer level)
   // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
   _pe.set(pov.pitch, -pov.yaw - Math.PI / 2, pov.roll);
   camera.quaternion.setFromEuler(_pe);
@@ -500,6 +501,13 @@ const WORLD_UP = new THREE.Vector3(0, 1, 0), INTO_WAVE = new THREE.Vector3(0, 0,
 const _xAxis = new THREE.Vector3(1, 0, 0), _up = new THREE.Vector3(), _tq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), bodyQ = new THREE.Quaternion(), stanceQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), invQ = new THREE.Quaternion();
 // the rider's world orientation (bodyQ, plus side-on stance) expressed in the board's frame
 const setStance = () => { invQ.copy(rig.quaternion).invert(); surfer.quaternion.copy(invQ).multiply(bodyQ).multiply(stanceQ); };
+// body moves between poses (sitting -> lying -> popping up) glide over ~0.15 s instead of jumping in one frame: the
+// camera rides on your head, so a jump was a jolt in the view (sit to paddle dropped 57 cm, paddle to pop rose 44 cm)
+const _gp = new THREE.Vector3();
+function glideTo(x, y, z, dt) {
+  _gp.set(x, y, z);
+  if (snapCam || surfer.position.distanceTo(_gp) > 1.5) surfer.position.copy(_gp); else surfer.position.lerp(_gp, 1 - Math.exp(-dt * 18));
+}
 function updateRig(dt, t) {
   if (rider.state === 'WIPE' && W.on) { wipeout(dt); return; }
   rider.pose(pose);
@@ -541,12 +549,12 @@ function updateRig(dt, t) {
   if (!surfer) return;
   const st = rider.state;
   sitting = false;
-  surfer.position.set(0, 0, 0); surfer.rotation.set(0, 0, 0);
+  surfer.rotation.set(0, 0, 0);   // (position: every state below sets it; lying/sitting/popping glide from the last pose)
   if (st === 'LIE' || st === 'OUT') {
-    if (rider.paddling && st === 'LIE') { play('paddle', { speed: 0.7 + rider.v / 3 }); surfer.position.set(0, -0.93, -0.5); }   // chest mid-board, feet at the tail
+    if (rider.paddling && st === 'LIE') { play('paddle', { speed: 0.7 + rider.v / 3 }); glideTo(0, -0.93, -0.5, dt); }   // chest mid-board, feet at the tail
     else {
       // sitting astride: weight over the tail sinks it, nose tips up ~14 deg, legs hang in the water either side
-      play('sit'); surfer.position.set(0, -0.36, -0.25);
+      play('sit'); glideTo(0, -0.36, -0.25, dt);
       sitting = true;
     }
   } else if (st === 'POP') {
@@ -556,7 +564,7 @@ function updateRig(dt, t) {
     clips.crouch.weight = 0.8; clips.stand.weight = 0.2;
     setStance();
     if (e < 1) surfer.quaternion.slerp(_yq.identity(), 1 - e);          // rotate up from lying along the board to standing side-on
-    surfer.position.set(0, -0.45 * (1 - e) - 0.04, -0.1);
+    glideTo(0, -0.45 * (1 - e) - 0.04, -0.1, dt);
   } else if (st === 'RIDE') {
     // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
     pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
