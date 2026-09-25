@@ -130,12 +130,13 @@ vArm = 0.;
     sh.fragmentShader = 'uniform float uCut, uNear, uArmCut; uniform vec3 uCap;\nvarying vec3 vCutW; varying float vArm;\n' + sh.fragmentShader.replace('void main() {', `void main() {
   vec3 cq = vCutW - cameraPosition; float cy = clamp(cq.y, -0.75, 0.);
   if (vArm < 0.12 && (length(cq - vec3(0., cy, 0.)) < uCut * 1.9 || length(cq) < uCut * 2.2)) discard;   // body near the eyes
-  if (vArm > 0.5 && length(cq) < uArmCut) discard;   // the upper arm is right at the lens: only forearms and hands show, like helmet-cam footage
+  if (vArm >= 0.12 && length(cq) < uArmCut) discard;   // (>= 0.12: the shoulder skin is only part arm-weighted)   // the upper arm is right at the lens: only forearms and hands show, like helmet-cam footage
+  if (!gl_FrontFacing && vArm >= 0.12 && uArmCut > 0.) discard;   // (the shoulder hidden during the pop-up: no dark cap at the lens)
   if (!gl_FrontFacing) { gl_FragColor = vec4(uCap, 1.); return; }   // a cut shows solid skin/cloth, never the hollow inside (that was the 'fin')
   if (length(cq) < uCut * 0.6 + uNear) discard;   // (uNear > 0 on the shorts: sliced close to the lens they showed as teal hooks)   // anything right in the lens (arms are never cut: a cut shows the hollow inside of the arm as a 'fin')`);
   };
   m.side = THREE.DoubleSide;   // (inside faces are drawn as a solid cap colour, so a cut looks closed)
-  m.customProgramCacheKey = () => 'cutaway4' + (m.userData.near || 0);
+  m.customProgramCacheKey = () => 'cutaway6' + (m.userData.near || 0);
   m.needsUpdate = true;
 }
 const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
@@ -381,7 +382,9 @@ function povCamera(dt) {
   // in the barrel look down the tube toward the exit (along the line), not out through the open side at the beach
   tubeLook += ((rider.inBarrel && standing ? 1 : 0) - tubeLook) * Math.min(1, dt * 3);
   if (tubeLook > 0.01) yawT += Math.atan2(Math.sin(-0.15 - yawT), Math.cos(-0.15 - yawT)) * 0.65 * tubeLook;   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
-  const ef = standing ? POVCAM.fwd : -0.05, eu = standing ? POVCAM.up : 0.2;   // lying: eyes at the head, a bit up, so your paddling hands pass below them
+  // popping up, the head drives forward over the board (the eye ahead of the shoulders, which stay out of view), easing back as you rise
+  const popFwd = st === 'POP' ? 0.15 : st === 'RIDE' ? 0.15 * Math.max(0, 1 - rider.stateT / 0.8) : 0;
+  const ef = standing ? POVCAM.fwd + popFwd : -0.05, eu = standing ? POVCAM.up : 0.2;   // lying: eyes at the head, a bit up, so your paddling hands pass below them
   _eye.x += Math.cos(yawT) * ef; _eye.z += Math.sin(yawT) * ef; _eye.y += eu;   // camera just in front of the face, like a surfer's mouth-mounted camera
   // smooth the eye's position relative to the board (not in the world, or at speed it would trail behind your head)
   _eye.sub(rig.position);
@@ -1095,6 +1098,7 @@ renderer.setAnimationLoop(() => {
   // pass 1: the world; pass 2: your body through its own lens (skipped when a test view shows the body in the world cam)
   if (camera.layers.isEnabled(1)) renderer.render(scene, camera);
   else {
+    ARMCUT.value = 0;
     armK += ((rider && rider.standing && !(W.on) ? 1 : 0) - armK) * Math.min(1, dt * 4);
     armCam.position.copy(camera.position); armCam.quaternion.copy(camera.quaternion);
     armCam.aspect = camera.aspect; armCam.fov = camera.fov + (62 - camera.fov) * armK; armCam.updateProjectionMatrix();
