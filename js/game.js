@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=78';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=80';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=92';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
@@ -299,7 +299,7 @@ function toMenu() {
   if (surfer) endWipe(); rider = null; rig.visible = false; endT = -1;
   for (const w of waves) w.dispose(scene); waves = [];
   setWeather('medium'); ui.cond.textContent = '';
-  underK = 0; underEl.style.opacity = 0; setText(ui.speed, ''); setText(ui.score, ''); setText(ui.hint, ''); ui.tube.style.opacity = 0;
+  underK = 0; underEl.style.opacity = 0; underEl.style.display = 'none'; setText(ui.speed, ''); setText(ui.score, ''); setText(ui.hint, ''); ui.tube.style.opacity = 0;
   input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
   keys.clear(); steerF = stickY = 0; ui.paddle.classList.remove('down'); ui.stall.classList.remove('down');
   document.body.classList.remove('playing', 'riding'); ui.msg.style.display = 'none';
@@ -420,10 +420,23 @@ function povCamera(dt) {
 
 // underwater: the screen goes murky green-blue (the water surface can't be seen from below, so this is the whole look)
 const underEl = document.createElement('div');
-underEl.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:5;opacity:0;background:radial-gradient(ellipse at 50% 0%,rgba(150,225,220,.75),rgba(30,110,125,.9) 45%,rgba(6,40,55,.97))';
+underEl.style.cssText = 'position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:5;opacity:0;background:radial-gradient(ellipse at 50% 0%,rgba(150,225,220,.75),rgba(30,110,125,.9) 45%,rgba(6,40,55,.985))';
 document.body.appendChild(underEl);
+// under the whitewater: swirling churned foam and bubbles racing up past you (plain CSS: cheap, and drawn over the tint)
+{ const st = document.createElement('style');
+  st.textContent = `@keyframes bub{0%{transform:translate(0,0) scale(.6);opacity:0}15%{opacity:.9}100%{transform:translate(var(--dx),-115vh) scale(1.15);opacity:.2}}
+  @keyframes churn{0%{background-position:0 0,0 0,0 0}100%{background-position:-240px -900px,180px -600px,-90px -760px}}
+  .bub{position:absolute;bottom:-6vh;border-radius:50%;border:1.5px solid rgba(235,250,250,.75);background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.7),rgba(255,255,255,.08) 55%,transparent 70%);animation:bub linear infinite}
+  .churn{position:absolute;inset:-20%;opacity:.55;animation:churn 2.6s linear infinite;
+    background-image:radial-gradient(ellipse 60px 34px at 30% 40%,rgba(240,250,250,.5),transparent 70%),radial-gradient(ellipse 120px 60px at 70% 20%,rgba(220,240,240,.32),transparent 70%),radial-gradient(ellipse 90px 140px at 15% 80%,rgba(230,245,245,.28),transparent 70%);
+    background-size:173px 211px,263px 337px,389px 293px;transform:rotate(-17deg);filter:blur(5px)}`;
+  document.head.appendChild(st);
+  const ch = document.createElement('div'); ch.className = 'churn'; underEl.appendChild(ch);
+  for (let i = 0; i < 46; i++) { const b = document.createElement('div'); b.className = 'bub'; const sz = 4 + Math.random() * Math.random() * 26;
+    b.style.cssText = `left:${Math.random() * 100}%;width:${sz}px;height:${sz}px;--dx:${(Math.random() - .5) * 120}px;animation-duration:${0.9 + Math.random() * 1.6}s;animation-delay:${-Math.random() * 2.5}s`;
+    underEl.appendChild(b); } }
 let underK = 0;
-function setUnder(k, dt) { underK += (k - underK) * Math.min(1, dt * (k > underK ? 14 : 5)); underEl.style.opacity = underK.toFixed(3); }
+function setUnder(k, dt) { underK += (k - underK) * Math.min(1, dt * (k > underK ? 14 : 5)); underEl.style.opacity = underK.toFixed(3); underEl.style.display = underK > 0.01 ? '' : 'none'; }   // (hidden = the bubbles stop animating)
 // wiping out, in first person: thrown, rolled under the whitewater (the view tumbles, but damped so it doesn't make
 // you sick), then you surface, the view levels out and you look for your board
 const _wiq = new THREE.Quaternion(), _wm = new THREE.Matrix4();

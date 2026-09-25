@@ -36,7 +36,7 @@ const K = {
 };
 // per control point: how much it glows (thin water) and where spray/foam sits when curling
 const THIN = [0, 0, .05, .2, .45, .75, .95, 1, .8, .45, .1, 0];
-const SPRAY = [0, 0, 0, 0, 0, .1, .5, 1, .8, .2, 0, 0];
+const SPRAY = [0, 0, 0, 0, 0, 0, .12, .7, .6, .15, 0, 0];   // foam only where the lip lands (the falling curtain itself is clear water)
 const NU = 64;                                     // samples across the wave (Catmull-Rom through the 12 points)
 const AHEAD = 70, BEHIND = 55;                     // metres of wave drawn ahead of / behind the break
 const NX = 150;
@@ -147,7 +147,7 @@ export class Wave {
       const push = (0.45 + 0.3 * smooth(0, 30 * L, s)) * Fat * (1 - 0.8 * curl) * Math.pow(1 - smooth(0, 0.85, y), 1.3) * below;
       const back = i >= 9 ? 1.6 : i === 8 ? 1 + 0.6 * t : 1;
       out[k++] = (z * back + push) * H * Wd; out[k++] = Math.max(0, y) * H * amp;
-      out[k++] = Math.min(1, broken * 0.9 + spray * curl * 0.7);
+      out[k++] = Math.min(1, broken * 0.9 + spray * curl * 0.5);
       out[k++] = thin * (1 - broken * 0.7);
     }
     out[0] += 9 * H; out[1] = 0; out[2] = 0; out[3] = 0;   // skirt: the first sample runs far out over the flat water so the mesh edge sits well away from the rider
@@ -275,7 +275,7 @@ export class Wave {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.sp, 3));
     // soft round droplet sprite
     const tex = sprite('drop', 32, [[0, 'rgba(255,255,255,1)'], [0.4, 'rgba(255,255,255,.5)'], [1, 'rgba(255,255,255,0)']]);
-    this.spray = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xfff1e0, size: 0.1, map: tex, alphaMap: tex, transparent: true, opacity: 0.6, depthWrite: false, fog: false }));
+    this.spray = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xfff1e0, size: 0.22, map: tex, alphaMap: tex, transparent: true, opacity: 0.65, depthWrite: false, fog: false }));
     this.spray.frustumCulled = false; scene.add(this.spray);
     for (let i = 0; i < N; i++) this.sl[i] = -1;
   }
@@ -305,7 +305,7 @@ export class Wave {
     const H = this.cond.H;
     for (let i = 0; i < this.sprayN; i++) {
       if (this.sl[i] <= 0) {
-        if (Math.random() > 0.08) continue;
+        if (Math.random() > 0.16) continue;   // (plenty of droplets along the lip: they break up its edge)
         // born along the throwing lip and the top of the tube behind it
         const s = -Math.random() * 4 * H;
         const [x, y, z] = this.lipAt(s);
@@ -685,7 +685,8 @@ export function coast(scene) {
       p.setXYZ(i, x, y, 214 + n + y * 0.12 + (v > 0.97 ? 3 : 0));   // leans back a little; the top lip rolls back into the plateau
       const streak = 0.7 + 0.3 * Math.pow(0.5 + 0.5 * Math.sin(x * 0.9 + Math.sin(y * 0.3) * 2), 2) + 0.1 * band, wet = Math.min(1, y / 4), green = Math.max(0, (v - 0.84) / 0.16) + Math.max(0, Math.sin(x * 0.13) * Math.sin(y * 0.2) - 0.75) * 2;   // weathered streaks, tufts of green on ledges
       const crev = 0.6 + 0.4 * Math.min(1, Math.abs(Math.sin(x * 0.47 + Math.sin(y * 0.11) * 1.5)) * 2.2);   // dark vertical cracks and gullies
-      const k = streak * crev * (0.45 + 0.55 * wet) * (0.85 + 0.15 * v), r = 0.7 * k, g = 0.63 * k, b = 0.52 * k;
+      const ledge = 0.72 + 0.28 * Math.min(1, Math.max(0, band * 2 + 0.6));   // shadow under each ledge
+      const k = streak * crev * ledge * (0.4 + 0.6 * wet) * (0.8 + 0.2 * v), r = 0.9 * k, g = 0.8 * k, b = 0.63 * k;   // warm cream limestone
       const gr = Math.min(1, green); c[i * 3] = r + (0.16 - r) * gr; c[i * 3 + 1] = g + (0.25 - g) * gr; c[i * 3 + 2] = b + (0.11 - b) * gr;
     }
     { const ix = cliff.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; } }   // face the sea
