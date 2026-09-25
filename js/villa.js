@@ -6,7 +6,7 @@
 // spot's dz. The waves break at x 0 (coast z about -60) and peel off toward +x, toward the point. A banyan beside the
 // house carries a spiral stair up to a deck in its canopy, the highest seat on the point.
 import * as THREE from 'three';
-import { makeBoard } from './board.js?v=10';
+import { makeBoard } from './board.js?v=12';
 import { landMaterial } from './wave.js?v=95';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -396,12 +396,20 @@ export function villa(scene) {
     const ch = root.userData.chime; if (ch) { ch.rotation.z = 0.06 * Math.sin(fT * 1.7) + 0.03 * Math.sin(fT * 4.1); ch.rotation.x = 0.05 * Math.sin(fT * 1.3 + 1); }
   }
 
-  // join the static timber into one mesh (a phone draws it in one go instead of hundreds)
-  for (const M of [mat, leafMat]) { const parts = g.children.filter((m) => m.isMesh && m.material === M);
-    const geos = parts.map((m) => { m.updateMatrix(); const q = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
-      for (const k of Object.keys(q.attributes)) if (!['position', 'normal', 'color'].includes(k)) q.deleteAttribute(k); return q; });
-    const merged = mergeGeometries(geos);
-    if (merged) { for (const m of parts) { g.remove(m); m.geometry.dispose(); } g.add(new THREE.Mesh(merged, M)); } }
+  // join everything that doesn't move into one mesh per material (a phone draws each in one go instead of hundreds of
+  // little pieces): the timber, the furniture, the speakers' cabinets, lamps, tub... Not the moving parts (speaker cones,
+  // the fire, the boards you pick from the rack) and not anything drawn mirrored, which would turn inside out merged
+  { g.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), rel = new THREE.Matrix4();
+    const keep = new Set([...woofers, flame, flame2]); for (const b of rack) b.traverse((o) => keep.add(o));
+    const byMat = new Map(); g.traverse((o) => { if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || keep.has(o)) return; rel.multiplyMatrices(inv, o.matrixWorld); if (rel.determinant() < 0) return;
+      if (!byMat.has(o.material)) byMat.set(o.material, []); byMat.get(o.material).push(o); });
+    for (const [M, parts] of byMat) { if (parts.length < 2) continue;
+      const want = ['position', 'normal', ...(M.vertexColors ? ['color'] : []), ...(M.map ? ['uv'] : [])], ok = [], geos = [];
+      for (const o of parts) { let q = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); if (!q.attributes.normal) q.computeVertexNormals();
+        if (!want.every((k) => q.attributes[k])) continue; for (const k of Object.keys(q.attributes)) if (!want.includes(k)) q.deleteAttribute(k);
+        rel.multiplyMatrices(inv, o.matrixWorld); q.applyMatrix4(rel); geos.push(q); ok.push(o); }
+      if (ok.length < 2) continue; const merged = mergeGeometries(geos); if (!merged) continue;
+      for (const o of ok) { o.parent.remove(o); o.geometry.dispose(); } g.add(new THREE.Mesh(merged, M)); } }
 
   // walking: which surface is under you (the house and balcony floor, a stair tread, or the tree deck), and where you
   // can't go. Both know how high your feet are now, since the stair winds over itself and the deck is over the stair
@@ -461,5 +469,5 @@ export function villa(scene) {
     const bm = new THREE.MeshStandardMaterial({ color: 0xb89a62, roughness: 0.6 }); const top = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12), bm); ch.add(top);
     for (let k = 0; k < 6; k++) { const an = k / 6 * Math.PI * 2, L = 0.28 + (k % 3) * 0.1, c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, L, 6), bm); c.position.set(Math.cos(an) * 0.12, -0.12 - L / 2, Math.sin(an) * 0.12); ch.add(c); }
     root.userData.chime = ch; }
-  return { group: root, rack, colliders, walk, floorAt, solid, fix, tick, seats, sounds, setSong, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.75 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
+  return { group: root, rack, colliders, walk, floorAt, solid, fix, tick, seats, sounds, setSong, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.2 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
 }

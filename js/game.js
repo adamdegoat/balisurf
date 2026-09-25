@@ -4,11 +4,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=95';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
-import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
+import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=12';
 import { SurfAudio } from './audio.js?v=13';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
-import { villa, VILLA } from './villa.js?v=32';
+import { villa, VILLA } from './villa.js?v=35';
 import { crew } from './crew.js?v=4';
 import { wildlife } from './wildlife.js?v=6';
 

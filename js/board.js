@@ -44,6 +44,27 @@ const PAINT = {
     if (Math.abs(v) < 0.1 && u > 0.12) return [0.96, 0.95, 0.92];
     return RED; },
 };
+// the paint job as a sharp picture, pixel by pixel (it used to be one colour per mesh point, ~2 cm apart across the
+// board, which smeared the logo, stripes and pad into blobs). One sheet per board type, made once and shared
+const SHEETS = {};
+function paintSheet(type, S) {
+  if (SHEETS[type]) return SHEETS[type];
+  const FW = 256, H = 1024, cv = document.createElement('canvas'); cv.width = FW * 2; cv.height = H; const c = cv.getContext('2d'), img = c.createImageData(FW * 2, H), d = img.data;
+  const paint = PAINT[type in PAINT ? type : 'short'], srgb = (x) => Math.round(255 * Math.pow(Math.min(1, Math.max(0, x)), 1 / 2.2));
+  for (let y = 0; y < H; y++) { const u = 1 - y / (H - 1);
+    for (let x = 0; x < FW * 2; x++) { const deck = x < FW, v = ((x % FW) + 0.5) / FW * 2 - 1;
+      let pc = paint(u, v, deck);
+      // tail pad: dark traction pad over the fins, crisp grooves across it, a raised kick at the very back
+      if (S.pad && deck && u > 0.05 && u < 0.3 && Math.abs(v) < 0.86) { const gr = (u * 140) % 1 < 0.28 ? 0.62 : 1, kick = u < 0.08 ? 1.25 : 1, edge = Math.abs(v) > 0.8 || u > 0.29 ? 1.35 : 1; pc = [0.1 * gr * kick * edge, 0.1 * gr * kick * edge, 0.11 * gr * kick * edge]; }
+      const wax = 0.97 + 0.03 * Math.sin(x * 0.9 + y * 1.3) * Math.sin(x * 0.53 - y * 0.71);   // waxed deck: faintly mottled
+      const i = (y * FW * 2 + x) * 4; d[i] = srgb(pc[0] * wax); d[i + 1] = srgb(pc[1] * wax); d[i + 2] = srgb(pc[2] * wax); d[i + 3] = 255; } }
+  c.putImageData(img, 0, 0);
+  if (type === 'short' || !(type in PAINT)) {   // the shortboard's logo: a white curl inside the dark oval
+    const cx = FW / 2, cy = (1 - 0.62) * (H - 1); c.save(); c.translate(cx, cy); c.rotate(-Math.PI / 2); c.fillStyle = '#f2efe8'; c.beginPath();
+    c.moveTo(-26, 14); c.bezierCurveTo(-14, 14, -10, -2, 2, -14); c.bezierCurveTo(12, -22, 26, -14, 24, -2); c.bezierCurveTo(20, -10, 10, -8, 8, 2); c.bezierCurveTo(6, 10, 10, 14, 16, 14); c.closePath(); c.fill(); c.restore(); }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.generateMipmaps = true;
+  return (SHEETS[type] = t);
+}
 export const BOARD_LENGTH = (type) => (SHAPES[type] || SHAPES.short).L;
 export const BOARD_WIDTH = (type) => (SHAPES[type] || SHAPES.short).W;
 
@@ -77,11 +98,7 @@ export function makeBoard(type = 'short') {
         const notch = type === 'fish' && u < 0.09 ? 0.13 * Math.max(0, 1 - Math.abs(v) / 0.55) * (1 - u / 0.09) : 0;   // the fish's swallow tail
         const y = r + (side > 0 ? th * 0.62 * Math.pow(e, 0.55) : -th * 0.38 * Math.pow(e, 0.3));
         pos.push(x, y, z + notch);
-        // tail pad: a dark grooved traction pad on the deck over the fins, with a raised kick at the very back
-        const pad = S.pad && side > 0 && u > 0.05 && u < 0.3 && Math.abs(v) < 0.86, groove = 0.82 + 0.18 * (0.5 + 0.5 * Math.sin(u * 110));   // (soft grooves: finer than the mesh can show turned to blotches)
-        const wax = 0.965 + 0.035 * Math.sin(x * 97 + z * 131) * Math.sin(x * 53 - z * 71);   // waxed deck: faintly mottled
-        const pc = PAINT[type in PAINT ? type : 'short'](u, v, side > 0);
-        col.push(...(pad ? [0.12 * groove, 0.12 * groove, 0.13 * groove] : [pc[0] * wax, pc[1] * wax, pc[2] * wax]));
+        col.push((v * 0.5 + 0.5) * 0.5 + (side > 0 ? 0 : 0.5), u);   // (where on the painted sheet: deck on its left half, bottom on its right)
       }
     }
     for (let i = 0; i < NL; i++) for (let j = 0; j < NW; j++) {
@@ -91,9 +108,9 @@ export function makeBoard(type = 'short') {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(col, 2));
   g.setIndex(idx); g.computeVertexNormals();
-  const board = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, side: THREE.DoubleSide }));
+  const board = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: paintSheet(type, S), roughness: 0.35, side: THREE.DoubleSide }));
   // three fins under the tail
   const fin = new THREE.Shape(); fin.moveTo(0, 0); fin.quadraticCurveTo(0.02, -0.1, 0.07, -0.11); fin.lineTo(0.09, 0); fin.lineTo(0, 0);
   const fg = new THREE.ExtrudeGeometry(fin, { depth: 0.006, bevelEnabled: false });
