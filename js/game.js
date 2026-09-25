@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=77';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=91';
-import { makeBoard } from './board.js?v=3';
+import { makeBoard } from './board.js?v=5';
 import { SurfAudio } from './audio.js?v=7';
 
 const Q = new URLSearchParams(location.search);
@@ -43,6 +43,22 @@ fit();
 // ---------- surfer on a board
 const rig = new THREE.Group(); scene.add(rig);           // board frame: +z along the board, +y out of the deck
 const board = makeBoard(); rig.add(board);
+// the leash: from the tail of the board to your back ankle, hanging in a loose curve (a thin dark line: 7 mm cord)
+const LEASH_N = 14, leash = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(LEASH_N * 3), 3)),
+  new THREE.LineBasicMaterial({ color: 0x1b1f24 }));
+leash.frustumCulled = false; scene.add(leash);
+const _la = new THREE.Vector3(), _lb = new THREE.Vector3(), _lc = new THREE.Vector3();
+function updateLeash() {
+  if (!surfer || !bones.foot_l || !rig.visible) { leash.visible = false; return; }
+  leash.visible = true;
+  rig.localToWorld(_la.set(0, 0.05, -0.9));                                              // the plug near the tail
+  const fl = bones.foot_l.getWorldPosition(_lb), fr = bones.foot_r.getWorldPosition(_lc);
+  const ankle = fl.distanceToSquared(_la) < fr.distanceToSquared(_la) ? fl : fr;         // whichever foot is at the back
+  const d = _la.distanceTo(ankle), sag = Math.max(0, 1.8 - d) * 0.35, p = leash.geometry.attributes.position;
+  for (let i = 0; i < LEASH_N; i++) { const t = i / (LEASH_N - 1);
+    p.setXYZ(i, _la.x + (ankle.x - _la.x) * t, _la.y + (ankle.y - _la.y) * t - sag * 4 * t * (1 - t), _la.z + (ankle.z - _la.z) * t); }
+  p.needsUpdate = true;
+}
 let surfer = null, mixer = null, clips = {}, curClip = null;
 // first-person cutaway: your own head, neck, chest and shoulders (a column from your eyes down, this wide) aren't drawn (your neck, shoulders
 // and upper arms are right at the camera and would fill the screen); hands, forearms, legs and the board stay
@@ -926,6 +942,7 @@ function tick(dt) {
     if (rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out('Drifted out of the lineup'); }
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); paddleArms(dt); dtArm = dt; surfStance(); }
+    updateLeash();
     railSpray.update(dt);
     wake.update(dt);
     updateCamera(dt);

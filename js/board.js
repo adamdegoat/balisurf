@@ -31,7 +31,10 @@ export function makeBoard() {
         pos.push(x, y, z);
         const stringer = Math.abs(x) < 0.0045 && side > 0;
         const stripe = side > 0 && u > 0.7 && u < 0.735;
-        col.push(...(stringer ? [0.55, 0.42, 0.28] : stripe ? [0.9, 0.35, 0.18] : side > 0 ? [0.95, 0.94, 0.91] : [0.87, 0.88, 0.91]));
+        // tail pad: a dark grooved traction pad on the deck over the fins, with a raised kick at the very back
+        const pad = side > 0 && u > 0.05 && u < 0.3 && Math.abs(v) < 0.86, groove = 0.8 + 0.2 * (Math.sin(u * 260) > 0 ? 1 : 0);
+        const wax = 0.965 + 0.035 * Math.sin(x * 97 + z * 131) * Math.sin(x * 53 - z * 71);   // waxed deck: faintly mottled
+        col.push(...(pad ? [0.12 * groove, 0.12 * groove, 0.13 * groove] : stringer ? [0.55, 0.42, 0.28] : stripe ? [0.9, 0.35, 0.18] : side > 0 ? [0.95 * wax, 0.94 * wax, 0.91 * wax] : [0.87, 0.88, 0.91]));
       }
     }
     for (let i = 0; i < NL; i++) for (let j = 0; j < NW; j++) {
