@@ -75,10 +75,24 @@
   #start button { font: 600 13px "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); background: rgba(8,14,20,.35); border: 1.5px solid rgba(253,247,238,.6); padding: 12px 16px; border-radius: 3px; min-width: 104px; text-align: left; }
   #start button small { display: block; font-weight: 400; color: var(--dim); margin-top: 3px; font-size: 11px; }
   #start button small i { display: block; font-style: normal; font-weight: 700; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #9fe3d6; margin-bottom: 2px; }
-  #start .boards { display: flex; gap: 6px; margin-top: 10px; align-items: stretch; flex-wrap: wrap; }
-  #start .boards span { align-self: center; color: var(--dim); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; margin-right: 4px; }
-  #start .boards button { min-width: 0; flex: 1 1 0; padding: 7px 10px; font-size: 12px; border-color: rgba(253,247,238,.3); }
-  #start .boards button.on { border-color: #9fe3d6; background: rgba(159,227,214,.16); }
+  #start .villarow { display: flex; gap: 12px; margin-top: 10px; align-items: center; }
+  #start .villarow button { flex: 0 0 auto; min-width: 250px; border-color: #9fe3d6; }
+  #start .villarow span { color: var(--dim); font-size: 12px; }
+  /* the villa: walk (left thumb), look (right thumb), tap a board in the rack */
+  body:not(.villa) .vui { display: none !important; }
+  body.villa #paddle, body.villa #stall, body.villa #pad, body.villa #touch { display: none !important; }
+  #vMove { position: fixed; left: 0; top: 56px; bottom: 0; width: 45%; z-index: 7; touch-action: none; }
+  #vLook { position: fixed; right: 0; top: 56px; bottom: 0; width: 55%; z-index: 7; touch-action: none; }
+  #vStick { position: fixed; width: 90px; height: 90px; margin: -45px 0 0 -45px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); pointer-events: none; opacity: 0; z-index: 8; }
+  #vStick.live { opacity: 1; } #vStick b { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: rgba(255,255,255,.7); }
+  #vGo { position: fixed; right: max(16px, env(safe-area-inset-right)); top: max(10px, env(safe-area-inset-top)); z-index: 9; font: 700 12px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em;
+    color: #0d1720; background: #9fe3d6; border: 0; border-radius: 3px; padding: 11px 16px; touch-action: none; }
+  #vPanel { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: none; min-width: 300px; max-width: 80vw;
+    background: rgba(8,14,20,.72); border: 1.5px solid rgba(253,247,238,.5); border-radius: 4px; padding: 12px 14px; text-align: left; }
+  #vPanel.on { display: block; } #vPanel b { display: block; font-size: 16px; } #vPanel span { display: block; color: var(--dim); margin: 4px 0 10px; font-size: 12px; }
+  #vPanel button { font: 700 12px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .08em; color: #0d1720; background: #ffcf8a; border: 0; border-radius: 3px; padding: 9px 14px; touch-action: none; }
+  #vPanel button.mine { background: rgba(255,255,255,.2); color: var(--ink); }
+  #vTip { position: fixed; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 6; color: var(--ink); font-size: 13px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.6); pointer-events: none; text-align: center; white-space: nowrap; transition: opacity .6s; }
   #load { margin-top: 12px; min-height: 1.3em; color: var(--dim); }
   #start button .best { display: block; margin-top: 6px; font-style: normal; font-size: 11px; font-weight: 700; color: #ffcf8a; min-height: 1em; }
   #start button:active { background: rgba(253,247,238,.18); }
@@ -108,6 +122,10 @@
 <div class="ctl" id="pad"></div>
 <!-- thumb: no slider drawn; where you touch appears as a faint ring, the dot shows how far you're leaning -->
 <div class="ctl" id="touch"><b></b></div>
+<div class="vui" id="vMove"></div><div class="vui" id="vLook"></div><div class="vui" id="vStick"><b></b></div>
+<button class="vui" id="vGo">GO SURFING</button>
+<div class="vui" id="vTip">Left thumb to walk, right thumb to look around. Tap a board in the surf room.</div>
+<div class="vui" id="vPanel"><b id="vName"></b><span id="vDesc"></span><button id="vTake">TAKE THIS BOARD</button></div>
 <div class="ctl" id="ranch"><span>ORDER A WAVE</span><button data-wave="easy">MELLOW<small>3.5 m, slow</small></button><button data-wave="medium">BARREL<small>4.5 m, hollow</small></button><button data-wave="hard">HEAVY<small>6 m, fast</small></button></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
@@ -120,15 +138,15 @@
     <button data-mode="extreme">Gunung Laut<small><i>Experts only</i>15 m in a storm</small></button>
     <button data-mode="ranch">Surf Ranch<small><i>Wave pool</i>Order the wave you want</small></button>
   </div>
-  <div class="boards"><span>Board</span><button data-board="short" class="on">Shortboard<small>6'2", sharp and fast</small></button><button data-board="fish">Fish<small>5'8", fast and loose</small></button><button data-board="long">Longboard<small>9'2", easy and smooth</small></button><button data-board="gun">Gun<small>9'6", for giant waves</small></button></div>
+  <div class="villarow"><button id="goVilla">Your villa<small><i>Home base</i>Walk around, pick your board, watch the surf from the cliff</small></button><span id="curBoard">Board: Shortboard</span></div>
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1435</small>
+<small id="build">build 260925-1447</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=442"></script>
+<script type="module" src="js/game.js?v=443"></script>
 </body>
 </html>

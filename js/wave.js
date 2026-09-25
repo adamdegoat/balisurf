@@ -349,6 +349,7 @@ export const WEATHER = {
   medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2862a6, hor: 0xc4dfe9, sunCol: 0xfff7e6, fog: 0xcde3ea, deep: 0x094c66, turq: 0x15a99f, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
   hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2458a0, hor: 0xbcd6e4, sunCol: 0xffe6bf, fog: 0xc6dbe4, deep: 0x083f55, turq: 0x149a90, cloud: 0.2, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
   extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
+  villa:   { sun: [-0.35, 0.22, -0.9], zen: 0x3a64a8, hor: 0xf0c9a2, sunCol: 0xffc68a, fog: 0xe8c9ac, deep: 0x0a4a62, turq: 0x15a39a, cloud: 0.25, chop: 0.9, fogFar: 1100, rain: 0, sunVis: 1 },   // golden hour at the villa: the sun going down over the sea
   ranch:   { sun: [0.45, 0.72, -0.5], zen: 0x2a6cb8, hor: 0xcfe2ea, sunCol: 0xfff3dd, fog: 0xd4e5ec, deep: 0x1a8ea0, turq: 0x3fd6c8, cloud: 0.08, chop: 0.3, fogFar: 700, rain: 0, sunVis: 1 },   // dry, clear country sky; calm pool water
   random:  { sun: [0.3, 0.7, -0.6],  zen: 0x2b66aa, hor: 0xc2dde8, sunCol: 0xfff3dc, fog: 0xcbe1e9, deep: 0x0a4e69, turq: 0x16a6a0, cloud: 0.32, chop: 1.1, fogFar: 310, rain: 0, sunVis: 1 },
 };
@@ -583,7 +584,7 @@ export function landMaterial() { return _landMat || (_landMat = makeLandMat()); 
 // (a longer run to the sand = a longer ride), and a few landmarks
 export function coast(scene, opt = {}) {
   const O = Object.assign({ dz: 0, sandWet: [0.36, 0.3, 0.22], sandDry: [0.4, 0.35, 0.25], land: [0.12, 0.2, 0.1], palms: 1, cliffH: 1, rock: [0.9, 0.8, 0.63],
-    cliffGreen: 1, temple: true, mountain: [0.26, 0.3, 0.3], mountainScale: 1, jungle: 1 }, opt);
+    cliffGreen: 1, temple: true, mountain: [0.26, 0.3, 0.3], mountainScale: 1, jungle: 1, clear: null }, opt);   // clear: a patch of clifftop kept flat and bare (where the villa stands)
   const mat = landMaterial();
   return buildCoast(scene, O, mat);
 }
@@ -713,11 +714,12 @@ function buildCoast(scene, O, mat) {
   group.add(new THREE.Mesh(cliff, mat));
   // the plateau on top, and jungle along the edge
   const plat = new THREE.PlaneGeometry(CW, 140, 66, 6); plat.rotateX(-Math.PI / 2);
-  { const p = plat.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i) - 400, z = p.getZ(i) + 290; p.setXYZ(i, x, cliffTop(x) + 1 + Math.sin(x * 0.05) * Math.cos(z * 0.04) * 2, z); } plat.computeVertexNormals(); }
+  { const p = plat.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i) - 400, z = p.getZ(i) + 290; let y = cliffTop(x) + 1 + Math.sin(x * 0.05) * Math.cos(z * 0.04) * 2; const C = O.clear; if (C && x > C.x0 && x < C.x1 && z > C.z0 && z < C.z1) y = Math.min(y, C.y - 0.6); p.setXYZ(i, x, y, z); } plat.computeVertexNormals(); }
   group.add(new THREE.Mesh(colorize(plat, [0.13, 0.21, 0.1], 0.2), mat));
   const NE = 160, edge = new THREE.InstancedMesh(blob, mat, NE);
-  for (let i = 0; i < NE; i++) { const x = -720 + Math.random() * 640, r = 3 + Math.random() * 4, t = cliffTop(x); if (t < 4) { edge.setMatrixAt(i, m4.makeScale(0, 0, 0)); continue; }
-    edge.setMatrixAt(i, m4.compose(ps.set(x, t + r * 0.3, 219 + Math.random() * 30), q.setFromEuler(new THREE.Euler(0, Math.random() * 6, 0)), sc.set(r * 1.3, r * 0.7, r))); }
+  for (let i = 0; i < NE; i++) { const x = -720 + Math.random() * 640, r = 3 + Math.random() * 4, t = cliffTop(x), ez = 219 + Math.random() * 30, C = O.clear;
+    if (t < 4 || (C && x > C.x0 - r && x < C.x1 + r && ez > C.z0 - r && ez < C.z1 + r)) { edge.setMatrixAt(i, m4.makeScale(0, 0, 0)); continue; }
+    edge.setMatrixAt(i, m4.compose(ps.set(x, t + r * 0.3, ez), q.setFromEuler(new THREE.Euler(0, Math.random() * 6, 0)), sc.set(r * 1.3, r * 0.7, r))); }
   group.add(edge);
   // a Balinese temple on the cliff edge: stone base, a meru tower of stacked dark thatch roofs
   if (O.temple) { const tx = -190, ty = cliffTop(tx), tz = 226, stone = [0.62, 0.56, 0.48], thatch = [0.14, 0.11, 0.09];
