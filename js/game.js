@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=93';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=105';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=110';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 import { ranch, POOL } from './ranch.js?v=4';
@@ -119,21 +119,23 @@ let surfer = null, mixer = null, clips = {}, curClip = null;
 const CUT = { value: 0.21 };   // just the neck and head (at 42 cm it cut your arms off at the elbow: floating hands)
 // which skeleton bones are "arm" (upper arm down to the fingertips): the cutaway never removes those, so you always see
 // whole arms, while your chest, shoulders and neck near the camera are hidden (they were showing as a stretched skin fin)
-const ARMBONE = { value: new Float32Array(96) }, ARMCUT = { value: 0 }, WATERY = { value: -99 };
+const ARMBONE = { value: new Float32Array(96) }, LEGBONE = { value: new Float32Array(96) }, HIDELEGS = { value: 0 }, ARMCUT = { value: 0 }, WATERY = { value: -99 };
 function cutaway(m) {
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uCut = CUT; sh.uniforms.uArmBone = ARMBONE; sh.uniforms.uNear = { value: m.userData.near || 0 }; sh.uniforms.uArmCut = ARMCUT; sh.uniforms.uWaterY = WATERY;
+    sh.uniforms.uCut = CUT; sh.uniforms.uArmBone = ARMBONE; sh.uniforms.uNear = { value: m.userData.near || 0 }; sh.uniforms.uArmCut = ARMCUT; sh.uniforms.uWaterY = WATERY; sh.uniforms.uLegBone = LEGBONE; sh.uniforms.uHideLegs = HIDELEGS;
     sh.uniforms.uCap = { value: new THREE.Color(m.userData.cap || 0x7a4e36).convertSRGBToLinear() };
-    sh.vertexShader = 'varying vec3 vCutW; varying float vArm; uniform float uArmBone[96];\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+    sh.vertexShader = 'varying vec3 vCutW; varying float vArm; varying float vLeg; uniform float uArmBone[96]; uniform float uLegBone[96];\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
 vCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;
 #ifdef USE_SKINNING
 vArm = skinWeight.x * uArmBone[int(skinIndex.x)] + skinWeight.y * uArmBone[int(skinIndex.y)] + skinWeight.z * uArmBone[int(skinIndex.z)] + skinWeight.w * uArmBone[int(skinIndex.w)];
+vLeg = skinWeight.x * uLegBone[int(skinIndex.x)] + skinWeight.y * uLegBone[int(skinIndex.y)] + skinWeight.z * uLegBone[int(skinIndex.z)] + skinWeight.w * uLegBone[int(skinIndex.w)];
 #else
-vArm = 0.;
+vArm = 0.; vLeg = 0.;
 #endif`);
-    sh.fragmentShader = 'uniform float uCut, uNear, uArmCut, uWaterY; uniform vec3 uCap;\nvarying vec3 vCutW; varying float vArm;\n' + sh.fragmentShader.replace('void main() {', `void main() {
+    sh.fragmentShader = 'uniform float uCut, uNear, uArmCut, uWaterY, uHideLegs; uniform vec3 uCap;\nvarying vec3 vCutW; varying float vArm; varying float vLeg;\n' + sh.fragmentShader.replace('void main() {', `void main() {
   vec3 cq = vCutW - cameraPosition; float cy = clamp(cq.y, -0.75, 0.);
-  if (vArm < 0.12 && (length(cq - vec3(0., cy, 0.)) < uCut * 1.9 || length(cq) < uCut * 2.2)) discard;   // body near the eyes
+  if (vArm < 0.02 && (length(cq - vec3(0., cy, 0.)) < uCut * 1.9 || length(cq) < uCut * 2.2)) discard;   // body near the eyes (any skin belonging to an arm or shoulder is kept whole: cutting it left holes)
+  if (uHideLegs > .5 && vLeg > .35) discard;   // your own legs aren't drawn in your view (knees coming up at the lens read as a glitch): arms and board only
   if (vCutW.y < uWaterY) discard;   // lying or sitting on the board: hands and legs under the surface are hidden by the water (the body is drawn after the world, so it would show on top)
   if (vArm >= 0.12 && length(cq) < uArmCut) discard;   // (>= 0.12: the shoulder skin is only part arm-weighted)   // the upper arm is right at the lens: only forearms and hands show, like helmet-cam footage
   if (!gl_FrontFacing && vArm >= 0.12 && uArmCut > 0.) discard;   // (the shoulder hidden during the pop-up: no dark cap at the lens)
@@ -141,14 +143,15 @@ vArm = 0.;
   if (length(cq) < uCut * 0.6 + uNear) discard;   // (uNear > 0 on the shorts: sliced close to the lens they showed as teal hooks)   // anything right in the lens (arms are never cut: a cut shows the hollow inside of the arm as a 'fin')`);
   };
   m.side = THREE.DoubleSide;   // (inside faces are drawn as a solid cap colour, so a cut looks closed)
-  m.customProgramCacheKey = () => 'cutaway7' + (m.userData.near || 0);
+  m.customProgramCacheKey = () => 'cutaway9' + (m.userData.near || 0);
   m.needsUpdate = true;
 }
 const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
   surfer = g.scene; rig.add(surfer);
   surfer.traverse((o) => o.layers.set(1));
   surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else { if (/short/i.test(o.material.name + o.name)) { o.material.userData.near = 0.45; o.material.userData.cap = 0x0f3b3f; } cutaway(o.material); } } });
-  surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/.test(b.name)) ARMBONE.value[i] = 1; }); });
+  surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(clavicle|upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/.test(b.name)) ARMBONE.value[i] = 1; }); });
+  surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(thigh|calf|foot|ball)/.test(b.name)) LEGBONE.value[i] = 1; }); });
   mixer = new THREE.AnimationMixer(surfer);
   for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale')); clips[c.name] = mixer.clipAction(c); }
   // two locals sitting in the lineup either side of you, waiting for a set like you (same body, their own board)
@@ -427,7 +430,7 @@ const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 // A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
 // and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
 const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.5, drop: 0.08 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
-const _pq2 = new THREE.Quaternion(); let tubeLook = 0;
+const _pq2 = new THREE.Quaternion(); let tubeLook = 0, roofOff = 0;
 const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
 function povCamera(dt) {
   if (!bones.head && surfer) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -500,8 +503,9 @@ function povCamera(dt) {
   // inside a barrel your eyes stay under its roof (the lip's underside), never poking out through the top of the tube
   if (standing && rider.wave && rider.wave.prof) {
     const w = rider.wave, s = camera.position.x - w.peelX, zl = camera.position.z - w.zW - w.bend(s), cy = w.prof.ceiling(s, zl) * (w.fade || 1);
-    if (camera.position.y > cy - 0.4) camera.position.y = Math.max(cy - 0.4, rig.position.y + 0.6);
-  }
+    const need = Math.max(0, camera.position.y - Math.max(cy - 0.4, rig.position.y + 0.6));
+    roofOff += (need - roofOff) * Math.min(1, dt * 12); camera.position.y -= roofOff;   // (eased: snapping under the roof in one frame read as a glitch)
+  } else roofOff *= Math.max(0, 1 - dt * 12);
   // the eyes are always above your own board (never ask the water height here: under a lip or in the barrel the
   // 'surface' overhead is the lip, and pushing above it would lift you out of the tube)
   const minY = rig.position.y + (st === 'RIDE' ? 0.5 : 0.22); if (camera.position.y < minY) camera.position.y = minY;
@@ -1041,7 +1045,7 @@ let dtArm = 1 / 60;
 
 // ---------- HUD + end of ride
 const setText = (el, t) => { if (el && el._t !== t) { el._t = t; el.textContent = t; } };   // only touch the page when the text changes
-let endT = -1, snapCam = true;
+let endT = -1, snapCam = true, tubeShowT = 0;
 function updateHUD(dt) {
   const st = rider.state;
   setText(ui.speed, rider.standing ? `${Math.round(rider.v * 3.6)} km/h` : '');
@@ -1068,7 +1072,8 @@ function updateHUD(dt) {
   if (st === 'RIDE' && !hint && !rider.inBarrel && rider.wave && rider.s > 0 && rider.s < 2.2 * rider.wave.cond.H && rider.wave.cond.hollow > 0.5 && session.barrels < 2) hint = rider.y < 0.6 * rider.wave.cond.H ? 'Barrel coming! Stay low and hold STALL' : 'The lip is pitching behind you: drop low to get barreled';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
   // the callout: BARREL while you're in it, or the move you just landed
-  const call = st !== 'RIDE' ? '' : rider.inBarrel ? 'BARREL' : rider.trick ? rider.trick.name : '';
+  tubeShowT = rider.inBarrel ? 0.4 : Math.max(0, tubeShowT - dt);   // (held a moment: a wobble at the tube's edge doesn't flicker the word)
+  const call = st !== 'RIDE' ? '' : tubeShowT > 0 ? 'BARREL' : rider.trick ? rider.trick.name : '';
   if (call) setText(ui.tube, call);
   ui.tube.style.opacity = call ? 1 : 0;
   setText(ui.score, st === 'RIDE' ? rider.liveScore().toFixed(1) : '');
@@ -1179,6 +1184,7 @@ renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
   if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
   // pass 1: the world; pass 2: your body through its own lens (skipped when a test view shows the body in the world cam)
+  HIDELEGS.value = camera.layers.isEnabled(1) ? 0 : 1;   // (outside views, e.g. tests and replays, show the whole body)
   if (camera.layers.isEnabled(1)) renderer.render(scene, camera);
   else {
     ARMCUT.value = 0; WATERY.value = rider && rider.state === 'LIE' && !W.on ? rig.position.y + 0.01 : -99;

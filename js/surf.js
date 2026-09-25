@@ -71,16 +71,21 @@ export class Profile {
     if (zl >= F[F.length - 1][0]) {
       for (let i = 1; i < F.length; i++) if (zl >= F[i][0]) { const t = (zl - F[i][0]) / (F[i - 1][0] - F[i][0] || 1e-6); return F[i][1] + (F[i - 1][1] - F[i][1]) * t; }
     }
+    // under an overhanging lip the face ends at the tube's roof: past the top of that wall there's no riding surface up at
+    // the crest (a jump up to it popped you onto the back of the wave), so the height stays at the wall's top
+    // (under an overhanging lip, anywhere behind the top of the face is capped at that top: the back of the wave there is
+    // on the far side of the tube's roof, not a surface you can step up onto)
+    const cap = c.U && c.U.length >= 3 && c.curl > 0.3 ? F[F.length - 1][1] : Infinity;   // (only where the lip is actually throwing)
     if (zl <= B[0][0]) return 0;
     if (zl <= B[B.length - 1][0]) {
-      for (let i = 1; i < B.length; i++) if (zl <= B[i][0]) { const t = (zl - B[i][0]) / (B[i - 1][0] - B[i][0] || 1e-6); return B[i][1] + (B[i - 1][1] - B[i][1]) * t; }
+      for (let i = 1; i < B.length; i++) if (zl <= B[i][0]) { const t = (zl - B[i][0]) / (B[i - 1][0] - B[i][0] || 1e-6); return Math.min(cap, B[i][1] + (B[i - 1][1] - B[i][1]) * t); }
     }
-    return c.top;                                     // over the crest
+    return Math.min(cap, c.top);                      // over the crest
   }
   // the height of the tube's roof above a point (in the wave's own frame), or Infinity where nothing hangs overhead
   ceiling(s, zl) {
-    const U = this.slice(s).U;
-    if (U.length < 3 || zl <= U[0][0] || zl >= U[U.length - 1][0]) return Infinity;
+    const c = this.slice(s), U = c.U;
+    if (c.curl <= 0.3 || U.length < 3 || zl <= U[0][0] || zl >= U[U.length - 1][0]) return Infinity;
     for (let i = 1; i < U.length; i++) if (zl <= U[i][0]) { const t = (zl - U[i - 1][0]) / Math.max(1e-6, U[i][0] - U[i - 1][0]); return U[i - 1][1] + (U[i][1] - U[i - 1][1]) * t; }
     return Infinity;
   }
@@ -143,6 +148,8 @@ export class Rider {
     // how fast the board is rising: climbing the slope as you move, plus the face lifting as the wave runs in under you
     // (smooth, from the slope; the height itself can step between the face and the crest), eased like a real body would
     this.vyS += (Math.max(-12, Math.min(12, hx * this.vx + hz * (this.vz - cw))) - this.vyS) * Math.min(1, h * 12);
+    // pointing straight up the face without carving (the run at the lip that makes an air, not the swing of a turn)
+    this.upT = this.standing && Math.sin(this.th) < -0.2 && Math.abs(this.turn) < 1.7 ? (this.upT || 0) + h : 0;
     const dx = Math.cos(this.th), dz = Math.sin(this.th);
     const slope2 = hx * hx + hz * hz;
     this.gAlong = hx * dx + hz * dz;                                   // rise per metre in the direction the board points
@@ -170,9 +177,9 @@ export class Rider {
     let ax = -gs * hx, az = -gs * hz;
     // the roof of the barrel: under an overhanging lip the face ends at the ceiling. Riding up toward it, the curtain
     // pouring over pushes you back down the face (harder on a forgiving wave); right up into it and the lip takes you
-    if (this.standing && sl && sl.U.length >= 3 && sl.lipY < 0.62 * H && q.s < -0.3 * H && q.zl < sl.lipZ) {
-      const roof = sl.F[sl.F.length - 1][1] * (w.fade || 1), k = smooth(0.62 * roof, 0.9 * roof, q.y);
-      if (k > 0) az += 9 * k / (C.forgive || 1);
+    if (this.standing && sl && sl.U.length >= 3 && sl.curl > 0.3 && sl.lipY < 0.62 * H && q.s < -0.3 * H && q.zl < sl.lipZ) {
+      const roof = sl.F[sl.F.length - 1][1] * (w.fade || 1), k = smooth(0.5 * roof, 0.88 * roof, q.y);
+      if (k > 0) { az += 15 * k / (C.forgive || 1); const up = -(this.vz - cw); if (up > 0) az += up * 4 * k; }   // (and it takes the climb out of you)
     }
     // board velocity relative to the water: along the board and sideways
     const rx = this.vx, rz = this.vz - uz;
@@ -311,7 +318,7 @@ export class Rider {
     else if (this.wwFloatT > 0) { if (this.wwFloatT > 0.35) this.move('FLOATER', Math.min(1, this.wwFloatT / 1.2)); this.wwFloatT = 0; }   // made it back onto the clean face
     // an air: come up the face fast and hit the lip, and it throws you into the sky with it (going up slowly, it just
     // takes you over the falls, below). Needs speed and a steep, rising face; not from inside the tube
-    if (this.state === 'RIDE' && this.stateT > 0.8 && onFront && s > -0.25 * H && y > 0.78 * sl.top && this.vyS > Math.max(1.8, 0.28 * Math.sqrt(9.8 * H)) && this.v > 0.75 * C.speed) {
+    if (this.state === 'RIDE' && this.stateT > 0.8 && onFront && s > -0.25 * H && y > 0.78 * sl.top && this.vyS > Math.max(2.6, 0.42 * Math.sqrt(9.8 * H)) && this.v > 0.8 * C.speed && this.upT > 0.12) {   // (a deliberate hit: fast, and pointing up at the lip, not a top turn that happens to rise)
       this.air = { t: 0, vy: Math.min(0.9 * Math.sqrt(9.8 * H), this.vyS * 1.1 + 1.2), spin: 0, peak: 0 };   // (capped: you fly about as high as the wave is steep, not further)
       this.vz = Math.max(this.vz, C.speed * 1.02);   // the throwing lip carries you forward with it
       this.inBarrel = false; this.onFace = false; return;
@@ -320,8 +327,8 @@ export class Rider {
     // (only a wave that pitches can throw you; a soft, crumbly one just breaks around you and the whitewater rule decides)
     if (C.hollow > 0.5 && onFront && y > Math.min(0.97, 0.86 / Math.sqrt(C.forgive || 1)) * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
     // ...and you can't get out through the roof: the only way out of a barrel is the open end
-    const roofY = sl.U.length >= 3 && sl.lipY < 0.62 * H ? sl.F[sl.F.length - 1][1] : Infinity;
-    if (C.hollow > 0.5 && onFront && s < -0.3 * H && s > -4.5 * H && zl < sl.lipZ && y > 0.95 * roofY) return this.wipe('Too high in the tube: the lip took you over the falls');
+    const roofY = sl.U.length >= 3 && sl.curl > 0.3 && sl.lipY < 0.62 * H ? sl.F[sl.F.length - 1][1] : Infinity;
+    if (C.hollow > 0.5 && onFront && s < -0.3 * H && s > -4.5 * H && zl < sl.lipZ && y > 0.97 * roofY) return this.wipe('Too high in the tube: the lip took you over the falls');
     // covered: the lip is out in front of you and over your head (on a small wave that's while it's still coming down, at
     // about half the wave's height: the landing rules above keep the stricter 'lip is down' test)
     this.inBarrel = C.hollow > 0.5 && sl.lipY < 0.62 * H && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
@@ -382,8 +389,9 @@ export class Rider {
     // with your thumb near the middle your body does what a surfer's does by instinct: swings the board round under you to
     // face where you're flying, ready to land. Push the thumb over and you spin it yourself (a 360 needs a full turn)
     const travel = Math.atan2(this.vz, this.vx), off = Math.atan2(Math.sin(travel - this.th), Math.cos(travel - this.th));
-    const spin = Math.abs(inp.steer) > 0.3 ? inp.steer * 5.2 : Math.max(-2.8, Math.min(2.8, off * 5));
-    this.th += spin * h; A.spin += Math.abs(inp.steer) > 0.3 ? spin * h : 0; this.turn = spin * 0.5;
+    const mine = A.t > 0.3 && Math.abs(inp.steer) > 0.5;   // (the thumb you were carving with doesn't spin you as you take off: a spin is a fresh push)
+    const spin = mine ? inp.steer * 5.2 : Math.max(-2.8, Math.min(2.8, off * 5));
+    this.th += spin * h; A.spin += mine ? spin * h : 0; this.turn = spin * 0.5;
     this.lean += (inp.steer * 0.3 - this.lean) * Math.min(1, h * 6);
     this.skid = 0; this.slide = 0; this.stalling = 0; this.pumping = false; this.inBarrel = false; this.onFace = false;
     this.ride.t += h;
