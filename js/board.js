@@ -59,9 +59,11 @@ function paintSheet(type, S) {
       const wax = 0.97 + 0.03 * Math.sin(x * 0.9 + y * 1.3) * Math.sin(x * 0.53 - y * 0.71);   // waxed deck: faintly mottled
       const i = (y * FW * 2 + x) * 4; d[i] = srgb(pc[0] * wax); d[i + 1] = srgb(pc[1] * wax); d[i + 2] = srgb(pc[2] * wax); d[i + 3] = 255; } }
   c.putImageData(img, 0, 0);
-  if (type === 'short' || !(type in PAINT)) {   // the shortboard's logo: a white curl inside the dark oval
-    const cx = FW / 2, cy = (1 - 0.62) * (H - 1); c.save(); c.translate(cx, cy); c.rotate(-Math.PI / 2); c.fillStyle = '#f2efe8'; c.beginPath();
-    c.moveTo(-26, 14); c.bezierCurveTo(-14, 14, -10, -2, 2, -14); c.bezierCurveTo(12, -22, 26, -14, 24, -2); c.bezierCurveTo(20, -10, 10, -8, 8, 2); c.bezierCurveTo(6, 10, 10, 14, 16, 14); c.closePath(); c.fill(); c.restore(); }
+  if (type === 'short' || !(type in PAINT)) {   // the shortboard's logo inside its dark oval: the SumbaSurf wave (the game's icon)
+    const cx = FW / 2, cy = (1 - 0.62) * (H - 1); c.save(); c.translate(cx, cy); c.scale(0.2, 0.2); c.translate(-261, -265);
+    c.fillStyle = '#f2efe8'; c.beginPath(); c.moveTo(70, 390); c.bezierCurveTo(150, 390, 190, 300, 250, 190); c.bezierCurveTo(300, 110, 420, 110, 440, 200); c.bezierCurveTo(450, 250, 420, 300, 370, 300);
+    c.bezierCurveTo(400, 260, 390, 210, 350, 205); c.bezierCurveTo(300, 200, 280, 260, 290, 330); c.bezierCurveTo(296, 370, 330, 390, 380, 390); c.closePath(); c.fill();
+    c.fillStyle = '#ffc978'; c.fillRect(60, 405, 392, 16); c.restore(); }
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.generateMipmaps = true;
   return (SHEETS[type] = t);
 }
