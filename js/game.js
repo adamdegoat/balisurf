@@ -467,8 +467,21 @@ function toMenu() {
 }
 document.getElementById('menu').addEventListener('touchstart', (e) => { e.preventDefault(); toMenu(); }, { passive: false });
 document.getElementById('menu').addEventListener('click', toMenu);
+// someone's playing: a note to the owner's Telegram (through /api/ping on Cloudflare), once per visit: 'new player' the
+// first time a phone or computer plays, 'back again' on a later day. Never for the owner's own devices (open the game
+// once with ?me=1 to mark one), never from localhost or GitHub Pages. Nothing personal is sent: which spot, that's all.
+let helloSent = false;
+try { if (/[?&]me=1\b/.test(location.search)) localStorage.setItem('sumbasurf.me', '1'); if (/[?&]me=0\b/.test(location.search)) localStorage.removeItem('sumbasurf.me'); } catch (e) {}
+function hello(where) {
+  if (helloSent || !/\.pages\.dev$/.test(location.hostname)) return; helloSent = true;
+  let kind = 'new';
+  try { if (localStorage.getItem('sumbasurf.me') === '1') return; const last = localStorage.getItem('sumbasurf.seen'), today = new Date().toISOString().slice(0, 10);
+    if (last === today) return; kind = last ? 'back' : 'new'; localStorage.setItem('sumbasurf.seen', today); } catch (e) {}
+  fetch('/api/ping', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, where }), keepalive: true }).catch(() => {});
+}
 async function start(m) {
   if (starting) return; starting = true; if (window.__g) window.__g.paused = false;
+  hello(m === 'ranch' ? 'Surf Ranch' : (SPOTS[m] && SPOTS[m].name) || m);
   mode = m; setWeather(m); setSpot(m); audio.start(); audio.quiet(false); audio.musicStart(MUSIC); document.body.classList.toggle('reef', m !== 'ranch');
   // fullscreen + landscape lock must be asked for inside the tap, before any waiting (Android); iOS ignores both safely
   try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {}); } catch (e) {}
@@ -1403,6 +1416,7 @@ function warmAll() {
 { const idle = (f) => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 2500 }) : setTimeout(f, 60));
   ready.then(() => setTimeout(() => idle(() => { if (mode === 'villa' || starting) return; prepVilla(); if (villaW) { villaW.group.visible = false; crewW.group.visible = false; wildW.group.visible = false; } idle(() => { if (!starting) warmAll(); }); }), 1800)).catch(() => {}); }
 function startVilla() {
+  hello('the villa');
   if (starting) return;
   mode = 'villa'; setWeather('villa'); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
   prepVilla();
