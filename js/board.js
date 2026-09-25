@@ -12,6 +12,13 @@ const SHAPES = {
     OUT: [[-.05, .62], [0, .7], [.08, .82], [.25, .95], [.45, 1], [.62, .99], [.78, .95], [.88, .87], [.94, .75], [.975, .57], [.992, .33], [1, .0], [1.01, -.1]] },
   gun: { L: 2.9, W: 0.5, T: 0.075, nose: 0.14, fins: 'thruster', deck: [0.96, 0.96, 0.95], stripe: [0.75, 0.12, 0.1], pad: true,
     OUT: [[-.05, .16], [0, .26], [.08, .45], [.25, .78], [.45, .97], [.55, 1], [.7, .92], [.82, .75], [.9, .55], [.95, .35], [.985, .14], [1, .0], [1.01, -.1]] },
+  // (display boards in the villa, never ridden: a 70s single fin, a pastel egg and a wooden alaia with no fins at all)
+  retro: { L: 2.36, W: 0.55, T: 0.07, nose: 0.1, fins: 'single', pad: false,
+    OUT: [[-.05, .5], [0, .58], [.08, .72], [.25, .9], [.45, 1], [.62, .98], [.78, .9], [.88, .77], [.94, .6], [.975, .42], [.992, .22], [1, .0], [1.01, -.1]] },
+  egg: { L: 2.13, W: 0.57, T: 0.072, nose: 0.08, fins: 'single', pad: false,
+    OUT: [[-.05, .7], [0, .76], [.08, .86], [.25, .96], [.45, 1], [.62, .99], [.78, .93], [.88, .83], [.94, .7], [.975, .52], [.992, .28], [1, .0], [1.01, -.1]] },
+  alaia: { L: 2.2, W: 0.46, T: 0.028, nose: 0.03, fins: 'none', pad: false,
+    OUT: [[-.05, .8], [0, .84], [.08, .88], [.25, .95], [.45, 1], [.62, 1], [.78, .96], [.88, .88], [.94, .75], [.975, .56], [.992, .3], [1, .0], [1.01, -.1]] },
 };
 // each board's paint job, by where you are on it: u along (tail 0 -> nose 1), v across (-1 rail .. 0 stringer .. 1 rail),
 // deck or bottom. Four completely different looks, so you know your board at a glance
@@ -42,6 +49,20 @@ const PAINT = {
     if (!deck) return mix(RED, [0.5, 0.06, 0.06], sm(0.9, 1, Math.abs(v)));
     if (Math.abs(v) < 0.1 && u > 0.12) return [0.96, 0.95, 0.92];
     return RED; },
+  // 70s single fin: cream deck, a wooden stringer, orange, rust and brown stripes across the nose, amber tinted bottom
+  retro: (u, v, deck) => { const CREAM = [0.94, 0.88, 0.74], AMBER = [0.8, 0.52, 0.22];
+    if (!deck) return mix(AMBER, [0.62, 0.34, 0.14], sm(0.5, 1, Math.abs(v)));
+    if (Math.abs(v) < 0.025) return [0.5, 0.33, 0.18];
+    for (const [a, c] of [[0.7, [0.95, 0.55, 0.16]], [0.745, [0.78, 0.3, 0.12]], [0.79, [0.42, 0.24, 0.12]]]) if (u > a && u < a + 0.035) return c;
+    return Math.abs(v) > 0.9 ? AMBER : CREAM; },
+  // pastel egg: pink deck fading to peach at the rails, a white pinline, mint bottom
+  egg: (u, v, deck) => { const PINK = [0.96, 0.66, 0.66], PEACH = [0.98, 0.8, 0.62];
+    if (!deck) return [0.6, 0.86, 0.76];
+    if (Math.abs(Math.abs(v) - 0.7) < 0.03) return [0.98, 0.97, 0.94];
+    return mix(PINK, PEACH, sm(0.4, 0.95, Math.abs(v))); },
+  // alaia: one plank of paulownia, oiled, its grain running nose to tail
+  alaia: (u, v) => { const k = 0.86 + 0.14 * Math.sin(v * 38 + Math.sin(u * 7) * 2.5) * Math.sin(v * 11 + 1.3);
+    return [0.66 * k, 0.45 * k, 0.26 * k]; },
 };
 // the paint job as a sharp picture, pixel by pixel (it used to be one colour per mesh point, ~2 cm apart across the
 // board, which smeared the logo, stripes and pad into blobs). One sheet per board type, made once and shared
@@ -118,11 +139,11 @@ export function makeBoard(type = 'short') {
   // three fins under the tail
   const fin = new THREE.Shape(); fin.moveTo(0, 0); fin.quadraticCurveTo(0.02, -0.1, 0.07, -0.11); fin.lineTo(0.09, 0); fin.lineTo(0, 0);
   const fg = new THREE.ExtrudeGeometry(fin, { depth: 0.006, bevelEnabled: false });
-  const fm = new THREE.MeshStandardMaterial({ color: { long: 0x8a5a32, fish: 0x7a4a2a }[type] || 0x1c1c1e, roughness: 0.4 });   // (wooden keels and single fin on the retro boards)
+  const fm = new THREE.MeshStandardMaterial({ color: { long: 0x8a5a32, fish: 0x7a4a2a, retro: 0x8a5a32, egg: 0xd8d2c4 }[type] || 0x1c1c1e, roughness: 0.4 });   // (wooden keels and single fin on the retro boards)
   const FINS = { thruster: [[0, -L / 2 + 0.1, 0, 1], [-0.13, -L / 2 + 0.24, 0.06, 1], [0.13, -L / 2 + 0.24, -0.06, 1]],
     twin: [[-0.15, -L / 2 + 0.16, 0.05, 1.35], [0.15, -L / 2 + 0.16, -0.05, 1.35]],   // two big keel fins
     single: [[0, -L / 2 + 0.22, 0, 1.9]] };                                            // one tall fin
-  for (const [x, z, rot, sc] of FINS[S.fins]) {
+  for (const [x, z, rot, sc] of FINS[S.fins] || []) {
     const f = new THREE.Mesh(fg, fm); f.rotation.y = Math.PI / 2 + rot; f.position.set(x, 0, z); f.scale.setScalar(sc); board.add(f);
   }
   board.userData.length = L;
