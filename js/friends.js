@@ -238,17 +238,18 @@ export function friends(scene, src, spots) {
         if (talk) { B.spine_03.getWorldPosition(TB); reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.addScaledVector(fw, 0.5).addScaledVector(rt, 0.3).addScaledVector(up, 0.15 + 0.04 * Math.sin(t * 3)), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, 0.5)); }   // (pointing out to sea)
         else reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(mp.position).addScaledVector(side, 0.22), pole.copy(up).multiplyScalar(-1).addScaledVector(side, 0.6));
       } else if (S.pose === 'pool') {
-        // standing in the pool with her back to the end wall, arms spread along the coping behind her, the water at
-        // her shoulders; she looks out to sea, and round at you when you come by
+        // leaning on the end wall at the sea corner, forearms folded on the ledge, looking out at the view (her back to
+        // the house: she talks over her shoulder, she doesn't turn round)
         B.spine_03.scale.set(0.9, 1, 0.92);   // (narrower shoulders than the lads)
-        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, 0.12).addScaledVector(rt, sg * 0.08).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, -0.05).normalize()); }
-        aim(B.spine_02, B.spine_03, tgt.copy(up).addScaledVector(fw, -0.1).normalize());   // (leaning back on the wall)
-        const lookOut = near ? 0 : 0.9 + 0.25 * Math.sin(t * 0.2);   // (out to sea, which is her left)
-        aim(B.neck_01, B.head, tgt.copy(up).addScaledVector(fw, 0.55).applyAxisAngle(up, F.look + lookOut).normalize());
-        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; B['upperarm_' + sd].getWorldPosition(W);
-          reach(B['upperarm_' + sd], B['lowerarm_' + sd], B['hand_' + sd], TA.set(S.x, 0, S.z).addScaledVector(rt, sg * 0.5).addScaledVector(fw, -0.34).setY(S.edgeY), pole.copy(up).multiplyScalar(-0.5).addScaledVector(fw, -1)); }
+        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, -0.08).addScaledVector(rt, sg * 0.07).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, 0.04).normalize()); }
+        aim(B.spine_02, B.spine_03, tgt.copy(up).addScaledVector(fw, 0.28).normalize());   // (leaning in on the ledge)
+        const lookOut = 0.3 * Math.sin(t * 0.13) + 0.15 * Math.sin(t * 0.37);   // (her gaze drifting slowly along the horizon)
+        aim(B.neck_01, B.head, tgt.copy(up).addScaledVector(fw, 0.35).applyAxisAngle(up, lookOut).normalize());
+        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1;
+          reach(B['upperarm_' + sd], B['lowerarm_' + sd], B['hand_' + sd], TA.set(S.x, 0, S.z).addScaledVector(fw, 0.42).addScaledVector(rt, -sg * 0.12).setY(S.edgeY), pole.copy(rt).multiplyScalar(sg).addScaledVector(up, -0.4)); }   // (forearms crossed on the ledge, elbows out)
+        F.look = 0;
         // (a frame for the head from world directions: up along the neck, forward where she looks; the bone's own axes aren't upright)
-        B.neck_01.getWorldPosition(TA); B.head.getWorldPosition(W); const hu = TB.subVectors(W, TA).normalize(), hf = SD.copy(fw).applyAxisAngle(up, F.look + lookOut); hf.addScaledVector(hu, -hf.dot(hu)).normalize();
+        B.neck_01.getWorldPosition(TA); B.head.getWorldPosition(W); const hu = TB.subVectors(W, TA).normalize(), hf = SD.copy(fw).applyAxisAngle(up, lookOut); hf.addScaledVector(hu, -hf.dot(hu)).normalize();
         HM.makeBasis(HX.crossVectors(hu, hf), hu, hf); const k = L2(F);
         const hr = F.props.hair; hr.position.copy(W); hr.quaternion.setFromRotationMatrix(HM); hr.scale.setScalar(k);
         B.spine_03.getWorldPosition(W); const tp = F.props.top; tp.position.copy(W).addScaledVector(up, 0.075).addScaledVector(fw, 0.015); tp.quaternion.setFromUnitVectors(_a.set(0, 1, 0), up); tp.rotateY(Math.atan2(fw.x, fw.z)); tp.scale.set(1, 1, 0.74);
