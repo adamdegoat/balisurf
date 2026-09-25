@@ -466,7 +466,25 @@ export function villa(scene) {
     for (let k = 0; k < 4; k++) { const z = PL.z0 + 0.8 + k * (wz - 1.6) / 3; beam(PL.x1, Y - d - 0.1, z, PL.x0 - 2.6, Y - d - 3.6, z, 0.12); }   // brackets back into the rock
     // the water: the same water as the sea (sky in it, ripples, the sun's sparkle), in the pool's clear turquoise
     const wm = waterMaterial(); wm.uniforms.uDeep = { value: new THREE.Color(0.1, 0.46, 0.52) }; wm.uniforms.uTurq = { value: new THREE.Color(0.3, 0.8, 0.8) }; wm.uniforms.uReef = { value: 0 };
-    const wg = new THREE.PlaneGeometry(wx + 0.12, wz); wg.rotateX(-Math.PI / 2); const w = new THREE.Mesh(wg, wm); w.position.set(cx + 0.06, Y - 0.04, cz); g.add(w); root.userData.pool = w; }
+    // (see-through where you look down into it, a mirror of the sky where you look across it)
+    wm.transparent = true; wm.fragmentShader = wm.fragmentShader.replace('gl_FragColor = vec4(col, 1.);', 'gl_FragColor = vec4(col, .5 + .5 * fres);');
+    const wg = new THREE.PlaneGeometry(wx + 0.12, wz); wg.rotateX(-Math.PI / 2); const w = new THREE.Mesh(wg, wm); w.position.set(cx + 0.06, Y - 0.04, cz); g.add(w); root.userData.pool = w;
+    // the floor: a pale aqua glass mosaic, and the sun's rippling light nets playing over it (two layers drifting apart)
+    const mosaic = canvasTex(256, 256, (c) => { c.fillStyle = '#cfe9e6'; c.fillRect(0, 0, 256, 256);
+      for (let y = 0; y < 256; y += 16) for (let x = 0; x < 256; x += 16) { const k = Math.random(); c.fillStyle = k < 0.55 ? '#8fd3d0' : k < 0.85 ? '#6cc2c4' : '#b8e6e2'; c.fillRect(x + 1, y + 1, 14, 14); } });
+    mosaic.wrapS = mosaic.wrapT = THREE.RepeatWrapping; mosaic.repeat.set(wx / 0.8, wz / 0.8);
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(wx, wz).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: mosaic, roughness: 0.6 })); fl.position.set(cx, Y - d + 0.025, cz); g.add(fl);
+    // (and up all four sides: dark stone in there made the water look murky)
+    const wallT = mosaic.clone(); wallT.needsUpdate = true; wallT.repeat.set(1, 1); const lining = new THREE.MeshStandardMaterial({ map: wallT, roughness: 0.6, side: THREE.DoubleSide }), hh = d - 0.06;
+    for (const [w2, x, z, ry] of [[wz, PL.x0 + 0.012, cz, Math.PI / 2], [wz, PL.x1 - 0.012, cz, Math.PI / 2], [wx, cx, PL.z0 + 0.012, 0], [wx, cx, PL.z1 - 0.012, 0]]) {
+      const pg = new THREE.PlaneGeometry(w2, hh); const uv = pg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w2 / 0.8, uv.getY(i) * hh / 0.8);   // (tiles the same size as the floor's)
+      const m2 = new THREE.Mesh(pg, lining); m2.position.set(x, Y - d + 0.03 + hh / 2, z); m2.rotation.y = ry; g.add(m2); }
+    const caus = canvasTex(256, 256, (c) => { c.clearRect(0, 0, 256, 256); c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 3; c.lineCap = 'round';
+      for (let k = 0; k < 70; k++) { let x = Math.random() * 256, y = Math.random() * 256; c.beginPath(); c.moveTo(x, y); for (let j = 0; j < 4; j++) { x += (Math.random() - 0.5) * 60; y += (Math.random() - 0.5) * 60; c.quadraticCurveTo(x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30, x, y); } c.stroke(); } });
+    caus.wrapS = caus.wrapT = THREE.RepeatWrapping; caus.repeat.set(wx / 1.6, wz / 1.6); const caus2 = caus.clone(); caus2.needsUpdate = true; caus2.repeat.set(wx / 2.1, wz / 2.1);
+    const cm = (t) => new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, color: 0xbff7ff });
+    for (const [t, dy] of [[caus, 0.035], [caus2, 0.04]]) { const q = new THREE.Mesh(new THREE.PlaneGeometry(wx, wz).rotateX(-Math.PI / 2), cm(t)); q.position.set(cx, Y - d + dy, cz); g.add(q); }
+    root.userData.caustics = [caus, caus2]; }
 
   // ---- the fire's sparks, and fireflies over the garden: points of light, coloured as they fade
   const sparkN = 36, sparkP = new Float32Array(sparkN * 3), sparkC = new Float32Array(sparkN * 3), sparkV = new Float32Array(sparkN * 3), sparkL = new Float32Array(sparkN);
@@ -506,6 +524,7 @@ export function villa(scene) {
   let fT = 0;
   function tick(dt, beat = 0, wx, wz, wfoot) {
     fT += dt; swayT.value = fT;
+    { const C = root.userData.caustics; if (C) { C[0].offset.set(fT * 0.035, fT * 0.02); C[1].offset.set(-fT * 0.025, fT * 0.03); } }   // (the light on the pool floor drifting)
     for (const L of lanterns) { L.hook.rotation.z = 0.08 * Math.sin(fT * 1.1 + L.ph) + 0.03 * Math.sin(fT * 2.7 + L.ph); L.hook.rotation.x = 0.06 * Math.sin(fT * 0.9 + L.ph * 1.3); }
     // sparks: born in the flames, rising on the heat, drifting, fading from yellow to red
     for (let i = 0; i < sparkN; i++) { const j = i * 3; sparkL[i] -= dt;
@@ -576,6 +595,7 @@ export function villa(scene) {
 
   // walking: which surface is under you (the house and balcony floor, a stair tread, or the tree deck), and where you
   // can't go. Both know how high your feet are now, since the stair winds over itself and the deck is over the stair
+  const SWIM_Y = Y - 1.52, inPoolL = (x, z) => x > PL.x0 + 0.05 && x < PL.x1 && z > PL.z0 && z < PL.z1;   // (swimming: the floor your 'feet' stand on is set so your eyes ride 13 cm above the water)
   const polar = (x, z) => [Math.hypot(x - TX, z - TZ), Math.atan2(z - TZ, x - TX)];
   const wrap = (d) => Math.atan2(Math.sin(d), Math.cos(d));
   const stairAt = (an, foot) => { let best = null; for (let k = -1; k <= 2; k++) { const ph = an - A0 + 2 * Math.PI * k; if (ph < 0 || ph > TURN) continue;
@@ -587,6 +607,7 @@ export function villa(scene) {
     if (r < R1 + 0.4) { const h = stairAt(an, foot); if (h !== null && Math.abs(h - foot) < 0.6) return h; }
     if (foot > Y + DH - 0.7 && r < RD + 0.3) return Y + DH;
     if (inRect(x, z, G.x0, G.x1 + 0.3, G.z0 - 0.2, G.z1) && !inRect(x, z, V.x1, B.x1, V.z1, LZ)) return GY;   // (the grass)
+    if (foot < Y + 0.5 && inPoolL(x, z)) return SWIM_Y;   // (in the pool: your eyes just above the water)
     return Y; };
   const solidL = (x, z, foot) => {
     const [r, an] = polar(x, z);
@@ -594,7 +615,7 @@ export function villa(scene) {
     if (foot < Y + 0.3) {                                                              // down on the floor
       if (r < R1 + 0.1) { const d = wrap(an - A0); return !(d > -0.9 && d < 0.9); }   // (only the foot of the stair, from either side; the rest is under it)
       if (r < R1 + 0.8 && Math.abs(wrap(an - A0)) < 0.9 && x >= V.x1 - 0.2 && x <= B.x1 - 0.35) return false;   // (the landing runs right up to the first step)
-      return !(inRect(x, z, B.x0 + 0.35, B.x1 - 0.35, B.z0 + 0.35, V.z1) || inRect(x, z, V.x1 - 0.2, B.x1 - 0.35, V.z1 - 1, LZ - 0.3) || inRect(x, z, G.x0 + 0.3, G.x1 + 0.3, V.z1 + 0.4, G.z1 - 0.3)); }
+      return !(inRect(x, z, B.x0 + 0.35, B.x1 - 0.35, B.z0 + 0.35, V.z1) || inRect(x, z, PL.x0 - 0.5, PL.x1 - 0.3, PL.z0 + 0.3, PL.z1 - 0.3) ||   /* (the pool: step off the balcony into it anywhere along its edge) */ inRect(x, z, V.x1 - 0.2, B.x1 - 0.35, V.z1 - 1, LZ - 0.3) || inRect(x, z, G.x0 + 0.3, G.x1 + 0.3, V.z1 + 0.4, G.z1 - 0.3)); }
     if (foot > Y + DH - 0.4) {                                                         // up on the deck
       if (r > RD - 0.35) return true;
       if (inRect(x, z, TX + 2.55, TX + 3.25, TZ - 1.2, TZ + 0.6) || inRect(x, z, TX - 1.2, TX + 0.6, TZ - 3.25, TZ - 2.55) || inRect(x, z, TX - 2.85, TX - 2.25, TZ + 1.6, TZ + 2.2)) return true;   // (the benches, the speaker)
@@ -615,15 +636,16 @@ export function villa(scene) {
   const toL = (x, z) => [OX - x, z - OZ];
   const floorAt = (x, z, foot = Y) => { const [lx, lz] = toL(x, z); return floorL(lx, lz, foot); };
   const solid = (x, z, foot = Y) => { const [lx, lz] = toL(x, z); return solidL(lx, lz, foot); };
+  const inPool = (x, z, foot = Y) => { const [lx, lz] = toL(x, z); return foot < Y - 0.5 && inPoolL(lx, lz); };
   const fix = (x, z, foot = Y) => { const [lx, lz] = toL(x, z), f = fixL(lx, lz, foot); return f ? [OX - f[0], f[1] + OZ] : null; };
   for (const c of colliders) { const x0 = c[0], x1 = c[1]; c[0] = OX - x1; c[1] = OX - x0; c[2] += OZ; c[3] += OZ; }
-  const walk = { x0: OX - Math.max(B.x1, TX + RD), x1: OX - G.x0, z0: B.z0 + OZ, z1: Math.max(TZ + RD, G.z1) + OZ };
+  const walk = { x0: OX - Math.max(B.x1, TX + RD, PL.x1), x1: OX - G.x0, z0: B.z0 + OZ, z1: Math.max(TZ + RD, G.z1) + OZ };
   // places to sit (or lie), each with the view it frames: [x, z, eye height, look direction, look pitch, what it is]
   const seatL = [
     [-84.7, 34.4, Y + 0.95, 0.35, -0.08, 'LIE BACK'], [-84.7, 39.6, Y + 0.95, -0.2, -0.08, 'LIE BACK'], [-88.1, 32.3, Y + 1.15, -0.3, -0.06, 'SIT'],
     [-90.2, 41.5, Y + 1.1, -Math.PI / 2 + 0.25, -0.05, 'SIT'], [tub.x, tub.z, Y + 1.38, -0.55, -0.08, 'SOAK'],
     [TX + 2.5, TZ - 0.3, Y + DH + 1.4, 0, -0.3, 'SIT'], [TX - 0.3, TZ - 2.5, Y + DH + 1.4, -Math.PI / 2 + 0.3, -0.3, 'SIT'],   // (perched up on the bench back, looking down over the rail at the break)
-    [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'], [PL.x0 + 1.3, 34.5, Y + 0.28, 0.05, -0.02, 'SWIM'],   // (in the pool, arms on the edge, the break right there over the water)
+    [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'],
     ...[0.5, 2.2, 3.9].map((an) => [fire.x + Math.cos(an) * 2.1, fire.z + Math.sin(an) * 2.1, GY + 1.0, an + Math.PI, -0.25, 'SIT BY THE FIRE'])];
   const seats = seatL.map(([x, z, eye, a, pitch, name]) => ({ x: OX - x, z: z + OZ, eye, yaw: Math.PI - a, pitch, name }));
   for (const [x, z, y] of speakersL) seats.push({ x: OX - x, z: z + OZ, eye: y + 1.1, radio: true, name: 'MUSIC' });
@@ -632,5 +654,5 @@ export function villa(scene) {
     const bm = new THREE.MeshStandardMaterial({ color: 0xb89a62, roughness: 0.6 }); const top = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12), bm); ch.add(top);
     for (let k = 0; k < 6; k++) { const an = k / 6 * Math.PI * 2, L = 0.28 + (k % 3) * 0.1, c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, L, 6), bm); c.position.set(Math.cos(an) * 0.12, -0.12 - L / 2, Math.sin(an) * 0.12); ch.add(c); }
     root.userData.chime = ch; }
-  return { group: root, rack, colliders, walk, floorAt, solid, fix, tick, seats, sounds, setSong, dog, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.2 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
+  return { group: root, rack, colliders, walk, floorAt, solid, fix, inPool, tick, seats, sounds, setSong, dog, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.2 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
 }

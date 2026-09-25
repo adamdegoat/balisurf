@@ -8,7 +8,7 @@ import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
 import { SurfAudio } from './audio.js?v=14';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=22';
-import { villa, VILLA } from './villa.js?v=59';
+import { villa, VILLA } from './villa.js?v=62';
 import { makeBirds } from './birds.js?v=1';
 import { crew } from './crew.js?v=5';
 import { wildlife } from './wildlife.js?v=8';
@@ -1412,7 +1412,10 @@ function villaTick(dt) {
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
-  let mx = W_.mx || kx, mz = W_.mz || kz; const fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), sp = 2.7 * dt;
+  // swimming in the pool: slower, head bobbing just above the water; a splash as you slide in, strokes as you swim
+  const swim = !!(V.inPool && V.inPool(W_.x, W_.z, W_.y - 1.65));
+  if (swim !== !!W_.swim) { W_.swim = swim; audio.splash(swim ? 0.35 : 0.12); }
+  let mx = W_.mx || kx, mz = W_.mz || kz; const fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), sp = (swim ? 1.25 : 2.7) * dt;
   if (drone.on) { droneTick(dt, mx, mz); mx = mz = 0; }   // (flying: the thumbs fly the drone; you stay standing where you launched it)
   // sitting: ease into the seat and its view; push the stick (or a key) and you stand back up where you were
   if (W_.sit && Math.hypot(mx, mz) > 0.3) vStand();
@@ -1448,7 +1451,8 @@ function villaTick(dt) {
     const hit = _vr.intersectObjects(V.rack, true)[0], t = hit ? hit.object.userData.type : null;
     if (t) { W_.gazeOff = 0; if (t !== vPickType) vPick(t); } else if (vPickType && (W_.gazeOff = (W_.gazeOff || 0) + 0.2) > 1.2 && Math.hypot(W_.x - V.rackAt.x, W_.z - V.rackAt.z) > 5) vPick(null); }
   const moving = Math.hypot(mx, mz) > 0.1; W_.bob = (W_.bob || 0) + (moving ? dt * 8 : 0);
-  W_.y += ((W_.sit ? W_.sit.eye - 1.65 : V.floorAt(W_.x, W_.z, foot)) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
+  if (swim && moving && (W_.strokeT = (W_.strokeT || 0) - dt) <= 0) { W_.strokeT = 1.1; audio.paddle(); }
+  W_.y += ((W_.sit ? W_.sit.eye - 1.65 : V.floorAt(W_.x, W_.z, foot)) + 1.65 + (swim ? Math.sin(T * 1.8) * 0.03 + (moving ? Math.sin(W_.bob * 0.55) * 0.02 : 0) : moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * (swim ? 5 : 10));
   camera.position.set(W_.x, W_.y, W_.z + SPOTS.medium.dz);
   _pe.set(W_.pitch, -W_.yaw - Math.PI / 2, 0); camera.quaternion.setFromEuler(_pe);
   if (drone.on) { camera.position.set(drone.x, drone.y + Math.sin(drone.t * 2.1) * 0.04, drone.z + SPOTS.medium.dz); _pe.set(W_.pitch, -W_.yaw - Math.PI / 2, drone.roll); camera.quaternion.setFromEuler(_pe); }   // (the drone's camera: your look, its position, a little bank into turns and the hover's bob)
@@ -1474,7 +1478,7 @@ function villaTick(dt) {
 const _vb = { fw: new THREE.Vector3(), rt: new THREE.Vector3(), sh: new THREE.Vector3(), T: new THREE.Vector3(), P: new THREE.Vector3(), h: new THREE.Vector3(), reach: 0, rT: new THREE.Vector3() };
 function villaBody(dt, moving) {
   const W_ = walker; if (!surfer || !W_) return;
-  const show = !W_.sit && !W_.zoom && !W_.watch && !drone.on && hfovHalf > 40; rig.visible = show; board.visible = false; if (!show) return;
+  const show = !W_.sit && !W_.zoom && !W_.watch && !drone.on && !W_.swim && hfovHalf > 40;   // (swimming, your body is under the water) rig.visible = show; board.visible = false; if (!show) return;
   if (!bones.upperarm_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   if (mixer) mixer.stopAllAction(); curClip = null;
   surfer.traverse((o) => { if (o.isSkinnedMesh && !o.userData.posed) { o.skeleton.pose(); } });
