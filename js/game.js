@@ -43,6 +43,31 @@ fit();
 // ---------- surfer on a board
 const rig = new THREE.Group(); scene.add(rig);           // board frame: +z along the board, +y out of the deck
 const board = makeBoard(); rig.add(board);
+// a jukung (Balinese outrigger fishing boat) anchored in the channel up-reef of the peak, bobbing on the swell, and a
+// few frigate birds wheeling high over the lineup
+const jukung = (() => {
+  const g = new THREE.Group(), m = (geo, c) => new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: c }));
+  const hull = m(new THREE.CylinderGeometry(0.42, 0.25, 7, 8, 1), 0xf2efe6); hull.rotation.z = Math.PI / 2; hull.scale.set(1, 1, 0.75); g.add(hull);
+  const stripe = m(new THREE.CylinderGeometry(0.44, 0.27, 6.4, 8, 1, true), 0x2f6fa8); stripe.rotation.z = Math.PI / 2; stripe.scale.set(1, 1, 0.77); stripe.position.y = 0.12; g.add(stripe);
+  for (const e of [-1, 1]) { const beak = m(new THREE.ConeGeometry(0.28, 1.2, 6), 0xd23b2a); beak.rotation.z = -e * Math.PI / 2; beak.position.set(e * 4, 0.25, 0); g.add(beak); }
+  for (const zs of [-1, 1]) {
+    const float = m(new THREE.CylinderGeometry(0.1, 0.1, 5.5, 5), 0x3a3026); float.rotation.z = Math.PI / 2; float.position.set(0, -0.15, zs * 2.6); g.add(float);
+    for (const xs of [-1.4, 1.4]) { const arm = m(new THREE.CylinderGeometry(0.05, 0.05, 2.7, 4), 0x5b4a36); arm.rotation.x = Math.PI / 2; arm.position.set(xs, 0.35, zs * 1.3); g.add(arm); }
+  }
+  const mast = m(new THREE.CylinderGeometry(0.04, 0.05, 3, 4), 0x5b4a36); mast.position.y = 1.7; g.add(mast);
+  g.position.set(-28, 0, -48); g.rotation.y = 0.35; g.scale.setScalar(1.2); scene.add(g); return g;   // anchored out the back, where the swells pass unbroken: you see it while you wait
+})();
+const birds = (() => {
+  const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0.5, -1.1, 0.15, -0.2, 0, 0, -0.3, 0, 0, 0.5, 0, 0, -0.3, 1.1, 0.15, -0.2]), 3));
+  const mat = new THREE.MeshBasicMaterial({ color: 0x1a1d22, side: THREE.DoubleSide }), list = [];
+  for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(geo, mat); b.userData = { r: 25 + Math.random() * 30, h: 35 + Math.random() * 25, a: Math.random() * 6.3, w: 0.12 + Math.random() * 0.08, cx: -20 + Math.random() * 60, cz: 20 + Math.random() * 40 }; scene.add(b); list.push(b); }
+  return list;
+})();
+function updateScenery(dt) {
+  if (jukung.visible = !!rider) { const y = heightAt(waves, jukung.position.x, jukung.position.z); jukung.position.y += (y - 0.05 - jukung.position.y) * Math.min(1, dt * 3); jukung.rotation.x = Math.sin(T * 0.9) * 0.04; jukung.rotation.z = Math.sin(T * 0.7 + 1) * 0.03; }
+  for (const b of birds) { const u = b.userData; u.a += u.w * dt; b.position.set(u.cx + Math.cos(u.a) * u.r, u.h + Math.sin(T * 0.3 + u.r) * 2, u.cz + Math.sin(u.a) * u.r); b.rotation.set(0, -u.a, Math.sin(T * 0.8 + u.r) * 0.25);
+    const flap = Math.sin(T * 7 + u.r) * (Math.sin(T * 0.4 + u.r) > 0.6 ? 0.5 : 0.05); b.scale.set(1.8, 1.8 + flap, 1.8); }
+}
 // the leash: from the tail of the board to your back ankle, hanging in a loose curve (a thin dark line: 7 mm cord)
 const LEASH_N = 14, leash = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(LEASH_N * 3), 3)),
   new THREE.LineBasicMaterial({ color: 0x1b1f24 }));
@@ -942,7 +967,7 @@ function tick(dt) {
     if (rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out('Drifted out of the lineup'); }
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); paddleArms(dt); dtArm = dt; surfStance(); }
-    updateLeash();
+    updateLeash(); updateScenery(dt);
     railSpray.update(dt);
     wake.update(dt);
     updateCamera(dt);
