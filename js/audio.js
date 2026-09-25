@@ -47,7 +47,7 @@ export class SurfAudio {
   set(p, v, t = 0.12) { if (this.ok) p.setTargetAtTime(v, this.ctx.currentTime, t); }
   // one-off burst of filtered noise: splashes, paddle strokes, thunder
   burst(gain, freq, dur, type = 'bandpass', delay = 0) {
-    if (!this.ok) return;
+    if (!this.ok || this.ctx.state !== 'running') return;   // (a paused context never finishes a sound: they'd pile up)
     const ctx = this.ctx, t0 = ctx.currentTime + delay;
     const src = ctx.createBufferSource(); src.buffer = this.noise; src.loop = true; src.playbackRate.value = type === 'lowpass' ? 0.5 : 1;   // looped so long sounds never run off the end
     const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = freq; fl.Q.value = 0.8;
@@ -99,6 +99,21 @@ export class SurfAudio {
   // the Surf Ranch machine: a deep whoosh as the chambers fire, with a metallic clank
   machine() { this.burst(0.5, 160, 2.2, 'lowpass'); this.burst(0.3, 420, 1.8); this.burst(0.12, 2600, 0.25, 'bandpass', 0.05); }
   // iOS only lets sound restart from a tap: call this from touch handlers
+  // a one-off tone: chimes, birdsong, distant hoots (a glide from f to 'to', optionally through a band filter)
+  tone(f, gain, dur, { type = 'sine', delay = 0, to = f, band = 0 } = {}) {
+    if (!this.ok || this.ctx.state !== 'running') return;
+    const ctx = this.ctx, t0 = ctx.currentTime + delay, o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (to !== f) o.frequency.exponentialRampToValueAtTime(to, t0 + dur * 0.7);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + Math.min(0.02, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    let fl = null; if (band) { fl = ctx.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = band; fl.Q.value = 2; o.connect(fl).connect(g); } else o.connect(g);
+    g.connect(this.master); o.start(t0); o.stop(t0 + dur + 0.05);
+    o.onended = () => { o.disconnect(); if (fl) fl.disconnect(); g.disconnect(); };
+  }
+  crackle(k) { for (let i = 0; i < 1 + (Math.random() * 3 | 0); i++) this.burst(0.09 * k * (0.4 + Math.random()), 2200 + Math.random() * 4000, 0.02 + Math.random() * 0.05, 'highpass', Math.random() * 0.15);
+    if (Math.random() < 0.3) this.burst(0.12 * k, 300, 0.4, 'lowpass'); }   // (snaps, and the low breathing of the fire)
+  chime(k) { const P = [523, 587, 659, 784, 880, 1047], f = P[Math.random() * P.length | 0]; this.tone(f, 0.06 * k, 2.8); this.tone(f * 2.76, 0.018 * k, 1.1); }   // bamboo/metal chime: fundamental and its bell overtone
+  bird(k) { const f = 2400 + Math.random() * 1400, n = 2 + (Math.random() * 3 | 0); for (let i = 0; i < n; i++) this.tone(f, 0.035 * k, 0.11, { delay: i * 0.16, to: f * (1.25 + Math.random() * 0.2) }); }
+  hoot(k) { for (let i = 0; i < 3; i++) { const f = 230 + Math.random() * 120; this.tone(f, 0.05 * k, 0.55 + Math.random() * 0.3, { type: 'sawtooth', delay: i * 0.25 + Math.random() * 0.2, to: f * 1.4, band: 900 }); } }   // someone in the lineup hooting a barrel
   wake() { if (this.ok && this.ctx.state !== 'running') this.ctx.resume(); }
   pause(on) { if (!this.ok) return; on ? this.ctx.suspend() : this.ctx.resume(); }
 }

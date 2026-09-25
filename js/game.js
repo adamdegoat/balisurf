@@ -5,10 +5,10 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=95';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
-import { SurfAudio } from './audio.js?v=8';
+import { SurfAudio } from './audio.js?v=9';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
-import { villa, VILLA } from './villa.js?v=19';
+import { villa, VILLA } from './villa.js?v=29';
 import { crew } from './crew.js?v=3';
 
 const Q = new URLSearchParams(location.search);
@@ -213,6 +213,7 @@ function setSpot(m) {
   if (!r) spotGroup(scene, key).visible = true;
   ranchW.group.visible = r;
   if (villaW) villaW.group.visible = m === 'villa'; if (crewW) crewW.group.visible = m === 'villa';
+  { const warm = m === 'villa'; hemi.color.set(warm ? 0xfff0dc : 0xcfe6ff); hemi.groundColor.set(warm ? 0x5a4030 : 0x3a4a48); sunLight.color.set(warm ? 0xffdcb0 : 0xfff0dd); }   // (the villa in warm evening light, reflected off the wood; the surf spots keep their clear daylight)
   ENV.uReefEnd.value = 190 + S.dz; ENV.uReefTint.value.setRGB(...S.reefTint);
   if (r) ENV.uPool.value.set(POOL.x0, POOL.x1, POOL.z0, POOL.z1); else ENV.uPool.value.set(-1e6, 1e6, -1e6, 1e6);
   ENV.uReef.value = r ? 0 : 1;
@@ -1169,6 +1170,10 @@ const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)'); l
 let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1, lastPump = false;
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
 const _wl = new THREE.Vector3();
+const vSitB = document.getElementById('vSit');
+function vSit() { const W_ = walker; if (!W_ || !W_.near) return; W_.sit = W_.near; W_.stand = [W_.x, W_.z]; W_.sitT = 1.2; W_.mx = W_.mz = 0; vSitB.textContent = 'STAND UP'; }
+function vStand() { const W_ = walker; if (!W_ || !W_.sit) return; [W_.x, W_.z] = W_.stand; W_.sit = null; W_.near = null; W_.seatT = 0.5; vSitB.classList.remove('on'); }
+{ const t = (e) => { e.preventDefault(); e.stopPropagation(); if (walker && walker.sit) vStand(); else vSit(); }; vSitB.addEventListener('click', t); vSitB.addEventListener('touchstart', t, { passive: false }); }
 let villaW = null, crewW = null, walker = null, vMoveT = null, vLookT = null, vPickType = null;
 const vStick = document.getElementById('vStick'), vPanel = document.getElementById('vPanel');
 function startVilla() {
@@ -1176,9 +1181,10 @@ function startVilla() {
   mode = 'villa'; setWeather('villa'); audio.start();
   if (!villaW) { villaW = villa(scene); villaW.group.position.z = SPOTS.medium.dz; crewW = crew(scene); }
   setSpot('villa');
+  if (!startVilla.compiled) { startVilla.compiled = true; crewW.group.visible = true; renderer.compile(scene, camera); }   // (build every villa shader now, not in a stall the first time each thing comes into view)
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
   if (surfer) endWipe(); rider = null; rig.visible = false;
-  document.getElementById('vZoom').classList.remove('on'); document.getElementById('vZoom').textContent = 'ZOOM'; document.getElementById('vWatch').classList.remove('on'); document.getElementById('vWatch').textContent = 'WATCH A RIDE';
+  document.getElementById('vZoom').classList.remove('on'); document.getElementById('vZoom').textContent = 'ZOOM'; document.getElementById('vWatch').classList.remove('on'); document.getElementById('vWatch').textContent = 'WATCH A RIDE'; vSitB.classList.remove('on');
   walker = { x: villaW.spawn.x, z: villaW.spawn.z, yaw: villaW.spawn.yaw, pitch: -0.08, y: VILLA.Y + 1.65, mx: 0, mz: 0 };
   ui.start.style.display = 'none'; document.body.classList.add('playing', 'villa'); ui.cond.textContent = 'Your villa';
   document.getElementById('vTip').style.opacity = 1; setTimeout(() => { document.getElementById('vTip').style.opacity = 0; }, 7000);
@@ -1232,8 +1238,13 @@ function villaTick(dt) {
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const mx = W_.mx || kx, mz = W_.mz || kz, fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), sp = 2.7 * dt;
-  let nx = W_.x + (fx * mz - fz * mx) * sp, nz = W_.z + (fz * mz + fx * mx) * sp;
+  // sitting: ease into the seat and its view; push the stick (or a key) and you stand back up where you were
+  if (W_.sit && Math.hypot(mx, mz) > 0.3) vStand();
+  if (W_.sit) { const S = W_.sit, k = Math.min(1, dt * 3); W_.x += (S.x - W_.x) * k; W_.z += (S.z - W_.z) * k;
+    if (W_.sitT > 0) { W_.sitT -= dt; W_.yaw += Math.atan2(Math.sin(S.yaw - W_.yaw), Math.cos(S.yaw - W_.yaw)) * k; W_.pitch += (S.pitch - W_.pitch) * k; } }
+  let nx = W_.sit ? W_.x : W_.x + (fx * mz - fz * mx) * sp, nz = W_.sit ? W_.z : W_.z + (fz * mz + fx * mx) * sp;
   const r = 0.3, A = V.walk, foot = W_.y - 1.65;
+  if (!W_.sit) {
   nx = Math.min(A.x1, Math.max(A.x0, nx)); nz = Math.min(A.z1, Math.max(A.z0, nz));
   for (const c of V.colliders) {
     if (nx > c[0] - r && nx < c[1] + r && nz > c[2] - r && nz < c[3] + r) {
@@ -1241,15 +1252,27 @@ function villaTick(dt) {
       if (px < pz) nx = nx - (c[0] - r) < c[1] + r - nx ? c[0] - r : c[1] + r; else nz = nz - (c[2] - r) < c[3] + r - nz ? c[2] - r : c[3] + r;
     }
   }
+  if (V.fix) { const f = V.fix(nx, nz, foot); if (f) [nx, nz] = f; }
   if (V.solid && V.solid(nx, nz, foot)) { if (!V.solid(nx, W_.z, foot)) nz = W_.z; else if (!V.solid(W_.x, nz, foot)) nx = W_.x; else { nx = W_.x; nz = W_.z; } }   // (the stair, the deck, the tree)
+  }
   W_.x = nx; W_.z = nz;
   // look at a board in the rack and its card comes up by itself (no need to tap); look away and it goes
+  // a seat within reach (at your level): offer it
+  W_.seatT = (W_.seatT || 0) - dt;
+  if (W_.seatT <= 0 && !W_.sit) { W_.seatT = 0.2; let best = null, bd = 2.1; for (const S of V.seats) { const d = Math.hypot(S.x - W_.x, S.z - W_.z); if (d < bd && Math.abs(S.eye - 1.1 - foot) < 1.3) { bd = d; best = S; } }
+    if (best !== W_.near) { W_.near = best; vSitB.classList.toggle('on', !!best); if (best) vSitB.textContent = best.name; } }
+  // the sounds of the place: the fire, the wind chimes, birds, and the lineup hooting a good barrel
+  { const d3 = (p) => Math.hypot(p[0] - W_.x, p[1] - W_.z, p[2] - (W_.y - 1.2));
+    const df = d3(V.sounds.fire); if (df < 14 && (W_.fireT = (W_.fireT || 0) - dt) <= 0) { W_.fireT = 0.06 + Math.random() * 0.22; audio.crackle(Math.pow(1 - df / 14, 2)); }
+    const dc = d3(V.sounds.chime); if (dc < 20 && (W_.chimeT = (W_.chimeT || 0) - dt) <= 0) { W_.chimeT = Math.random() < 0.6 ? 0.25 + Math.random() * 0.5 : 2 + Math.random() * 4; audio.chime(Math.pow(1 - dc / 20, 1.5)); }
+    if ((W_.birdT = (W_.birdT === undefined ? 3 : W_.birdT) - dt) <= 0) { W_.birdT = 5 + Math.random() * 9; audio.bird(0.5 + Math.random() * 0.5); }
+    for (const q of crewW.surfers) { if (q.st === 'RIDE' && q.tubeT > 2.4 && !q.hooted) { q.hooted = true; const d = Math.hypot(q.p.x - W_.x, q.p.z - (W_.z + SPOTS.medium.dz)); audio.hoot(Math.max(0.2, Math.min(1, 70 / d))); } if (!(q.tubeT > 0.1)) q.hooted = false; } }
   W_.gazeT = (W_.gazeT || 0) - dt;
   if (W_.gazeT <= 0) { W_.gazeT = 0.2; _vp.set(0, -0.1); _vr.setFromCamera(_vp, camera); _vr.far = 4.5;
     const hit = _vr.intersectObjects(V.rack, true)[0], t = hit ? hit.object.userData.type : null;
     if (t) { W_.gazeOff = 0; if (t !== vPickType) vPick(t); } else if (vPickType && (W_.gazeOff = (W_.gazeOff || 0) + 0.2) > 1.2 && Math.hypot(W_.x - V.rackAt.x, W_.z - V.rackAt.z) > 5) vPick(null); }
   const moving = Math.hypot(mx, mz) > 0.1; W_.bob = (W_.bob || 0) + (moving ? dt * 8 : 0);
-  W_.y += (V.floorAt(W_.x, W_.z, foot) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
+  W_.y += ((W_.sit ? W_.sit.eye - 1.65 : V.floorAt(W_.x, W_.z, foot)) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
   camera.position.set(W_.x, W_.y, W_.z + SPOTS.medium.dz);
   _pe.set(W_.pitch, -W_.yaw - Math.PI / 2, 0); camera.quaternion.setFromEuler(_pe);
   // watching: the camera follows one surfer's ride (the one deepest in the barrel, else the longest ride going), zoomed

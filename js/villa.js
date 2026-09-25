@@ -31,8 +31,8 @@ export function villa(scene) {
   const block = (x0, x1, z0, z1) => colliders.push([Math.min(x0, x1), Math.max(x0, x1), Math.min(z0, z1), Math.max(z0, z1)]);
 
   // warm honey planks, darker posts and beams, linen, rattan
-  const PLANK = [0.62, 0.43, 0.26], PLANK_L = [0.7, 0.5, 0.31], PLANK_D = [0.46, 0.3, 0.17], POST = [0.3, 0.19, 0.11], FLOOR = [0.5, 0.33, 0.19], FLOOR_L = [0.57, 0.38, 0.22],
-    LINEN = [0.92, 0.89, 0.83], RATTAN = [0.72, 0.56, 0.34], TEAL = [0.2, 0.44, 0.44], LEAF = [0.13, 0.33, 0.1];
+  const PLANK = [0.58, 0.35, 0.19], PLANK_L = [0.66, 0.42, 0.23], PLANK_D = [0.42, 0.24, 0.12], POST = [0.27, 0.15, 0.08], FLOOR = [0.34, 0.19, 0.09], FLOOR_L = [0.4, 0.23, 0.11],   // (merbau and old teak)
+    LINEN = [0.94, 0.86, 0.73], RATTAN = [0.72, 0.56, 0.34], TEAL = [0.2, 0.44, 0.44], LEAF = [0.13, 0.33, 0.1];
   const H = 3.2, RIDGE = 5.4, xm = (V.x0 + V.x1) / 2, zm = (V.z0 + V.z1) / 2;
   const xL = -95;                                  // the wall between the board room (west) and the living room (east)
   const B = { x0: V.x0, x1: V.x1 + 3.4, z0: V.z0 - 3.4, z1: V.z1 };   // the balcony wraps the two sea sides (south and east)
@@ -70,7 +70,7 @@ export function villa(scene) {
   }
 
   // ---- the house: stone footing, floorboards, plank walls between dark posts
-  box(V.x1 - V.x0 + 0.4, 1.2, V.z1 - V.z0 + 0.4, [0.45, 0.42, 0.37], xm, Y - 0.7, zm, 0.12);
+  box(V.x1 - V.x0 + 0.4, 1.2, V.z1 - V.z0 + 0.4, [0.6, 0.51, 0.4], xm, Y - 0.7, zm, 0.12);   // (warm paras stone)
   for (let x = V.x0 + 0.15; x < V.x1; x += 0.3) box(0.29, 0.1, V.z1 - V.z0, (Math.round(x * 3.33) % 2) ? FLOOR : FLOOR_L, x, Y - 0.05, zm, 0.04);
   const planksX = (x, z0, z1, y0 = 0, y1 = H) => { for (let y = y0 + 0.1; y < y1; y += 0.22) box(0.12, 0.235, z1 - z0, (Math.round(y * 4.5) % 3) ? PLANK : PLANK_L, x, Y + y, (z0 + z1) / 2, 0.05); if (y0 < 1) block(x - 0.12, x + 0.12, z0, z1); };
   const planksZ = (z, x0, x1, y0 = 0, y1 = H) => { for (let y = y0 + 0.1; y < y1; y += 0.22) box(x1 - x0, 0.235, 0.12, (Math.round(y * 4.5) % 3) ? PLANK : PLANK_L, (x0 + x1) / 2, Y + y, z, 0.05); if (y0 < 1) block(x0, x1, z - 0.12, z + 0.12); };
@@ -128,7 +128,7 @@ export function villa(scene) {
   // daybed, a shelf of books and shells, surf prints, plants, rattan pendant lamps
   const sx = -90.2, sz = 41.8;
   box(4.6, 0.42, 1.0, PLANK_D, sx, Y + 0.21, sz); box(4.5, 0.22, 0.92, LINEN, sx, Y + 0.52, sz); box(4.5, 0.6, 0.25, LINEN, sx, Y + 0.72, sz + 0.4);
-  for (const [x, cc] of [[-91.9, [0.78, 0.46, 0.26]], [-90.3, TEAL], [-88.6, [0.86, 0.74, 0.44]]]) box(0.55, 0.45, 0.18, cc, x, Y + 0.8, sz + 0.2);
+  for (const [x, cc] of [[-91.9, [0.62, 0.2, 0.12]], [-90.3, [0.16, 0.2, 0.36]], [-88.6, [0.78, 0.5, 0.2]]]) box(0.55, 0.45, 0.18, cc, x, Y + 0.8, sz + 0.2);
   block(sx - 2.35, sx + 2.35, sz - 0.55, V.z1);
   box(3.4, 0.02, 2.4, [0.74, 0.64, 0.48], sx, Y + 0.01, sz - 2.3, 0.2);
   box(1.8, 0.1, 0.9, PLANK_D, sx, Y + 0.42, sz - 2.2); for (const [ox, oz] of [[-0.75, -0.35], [0.75, -0.35], [-0.75, 0.35], [0.75, 0.35]]) box(0.08, 0.38, 0.08, POST, sx + ox, Y + 0.19, sz - 2.2 + oz);
@@ -151,14 +151,13 @@ export function villa(scene) {
   const plant = (x, z, s) => { cyl(0.28 * s, 0.2 * s, 0.5 * s, [0.66, 0.38, 0.25], x, Y + 0.25 * s, z);
     for (let k = 0; k < 10; k++) { const m = new THREE.Mesh(tint(leafGeo.clone(), LEAF, 0.3), mat); m.position.set(x, Y + (0.6 + k * 0.1) * s, z); m.rotation.set(0, k * 2.4, 0); m.rotateX(-0.6 - (k % 3) * 0.2); m.scale.setScalar(s); g.add(m); }
     block(x - 0.35 * s, x + 0.35 * s, z - 0.35 * s, z + 0.35 * s); };
-  plant(-86.7, 43.3, 1.2); plant(-96, 43.2, 1.0); plant(-94.4, 30.9, 0.9);
+  plant(-86.7, 43.3, 1.4); plant(-96, 43.2, 1.1); plant(-94.4, 30.9, 1.0); plant(-86.7, 30.8, 1.3);
   const leafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide });
   const glow = new THREE.MeshBasicMaterial({ color: 0xffd9a4 }), shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, emissive: 0x7a4818, emissiveIntensity: 0.7 });   // (woven shades glow with the bulb inside)
   for (const [x, z] of [[-91.5, 39], [-88.8, 39], [-97.5, 37]]) {
     const shade = new THREE.Mesh(tint(new THREE.SphereGeometry(0.35, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.6), RATTAN), shadeMat); shade.position.set(x, Y + 2.7, z); shade.rotation.x = Math.PI; g.add(shade);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), glow); bulb.position.set(x, Y + 2.62, z); g.add(bulb);
     cyl(0.01, 0.01, 2, [0.15, 0.15, 0.15], x, Y + 3.7, z, 4);
-    const L = new THREE.PointLight(0xffc98f, 5, 8, 1.6); L.position.set(x, Y + 2.5, z); g.add(L);
   }
 
   // a rattan egg chair hanging from the ring beam by the corner glass, and a cluster of pendants under the peak
@@ -169,10 +168,44 @@ export function villa(scene) {
   for (let k = 0; k < 7; k++) { const an = k * 0.9, r = k ? 0.55 : 0, x = xm + Math.cos(an) * r, z = zm + Math.sin(an) * r, y = Y + 3.4 + (k % 3) * 0.45;
     const sh2 = new THREE.Mesh(tint(new THREE.SphereGeometry(0.22, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.6), RATTAN), shadeMat); sh2.position.set(x, y, z); sh2.rotation.x = Math.PI; g.add(sh2);
     const bl = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), glow); bl.position.set(x, y - 0.06, z); g.add(bl); cyl(0.008, 0.008, yP - 1 - y, [0.15, 0.15, 0.15], x, (yP - 1 + y) / 2, z, 4); }
-  { const PL = new THREE.PointLight(0xffc98f, 6, 12, 1.4); PL.position.set(xm, Y + 3.3, zm); g.add(PL); }
+  { const PL = new THREE.PointLight(0xffc98f, 7, 15, 1.3); PL.position.set(xm, Y + 3.3, zm); g.add(PL); }   // (the one real light: every extra light costs a phone on every pixel)
+
+  // Sumba and Bali in the room: a hinggi ikat cloth hung on the wall by the doorway (rust and indigo, horses and
+  // diamonds), a pair of carved, gilded Balinese doors on the back wall, woven pandan rug, canang sari offerings
+  const canvasTex = (w, h, draw) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d'), w, h); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+  const ikat = canvasTex(256, 512, (c, w, h) => {
+    c.fillStyle = '#6e2616'; c.fillRect(0, 0, w, h);
+    const band = (y, bh, col) => { c.fillStyle = col; c.fillRect(0, y, w, bh); };
+    band(18, 10, '#e9d8b4'); band(h - 60, 10, '#e9d8b4'); band(40, 26, '#1f2a4a'); band(h - 94, 26, '#1f2a4a');
+    c.strokeStyle = '#e9d8b4'; c.lineWidth = 5;
+    for (let r = 0; r < 5; r++) for (let k = 0; k < 3; k++) { const cx = 42 + k * 86, cy = 110 + r * 64; c.beginPath(); c.moveTo(cx, cy - 26); c.lineTo(cx + 30, cy); c.lineTo(cx, cy + 26); c.lineTo(cx - 30, cy); c.closePath(); c.stroke();
+      c.fillStyle = r % 2 ? '#1f2a4a' : '#c8872e'; c.fillRect(cx - 7, cy - 7, 14, 14); }
+    c.fillStyle = '#e9d8b4'; for (const y of [78, 422]) for (let k = 0; k < 4; k++) { const x = 30 + k * 60; c.fillRect(x, y, 34, 8); c.fillRect(x + 4, y + 8, 4, 12); c.fillRect(x + 26, y + 8, 4, 12); c.fillRect(x + 30, y - 10, 6, 12); }   // (little horses)
+    for (let x = 4; x < w; x += 9) { c.fillStyle = '#5a1e12'; c.fillRect(x, h - 40, 4, 40); }   // fringe
+    for (let i = 0; i < 1800; i++) { c.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`; c.fillRect(Math.random() * w, Math.random() * h, 3, 1); } });   // (the blur of hand-tied thread)
+  { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.4), new THREE.MeshStandardMaterial({ map: ikat, roughness: 1 })); m.position.set(xL + 0.08, Y + 1.7, 32.4); m.rotation.y = Math.PI / 2; g.add(m);
+    box(0.06, 0.06, 1.5, POST, xL + 0.1, Y + 2.95, 32.4); }
+  const door = canvasTex(256, 512, (c, w, h) => {
+    const gd = c.createLinearGradient(0, 0, w, 0); gd.addColorStop(0, '#5a2a14'); gd.addColorStop(0.5, '#6e3519'); gd.addColorStop(1, '#5a2a14'); c.fillStyle = gd; c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#c99a3a'; c.lineWidth = 6; c.strokeRect(14, 14, w - 28, h - 28); c.beginPath(); c.moveTo(w / 2, 14); c.lineTo(w / 2, h - 14); c.stroke();
+    for (const side of [0, 1]) { const x0 = side ? w / 2 + 12 : 26, pw = w / 2 - 38;
+      for (const [y0, ph] of [[30, 150], [200, 90], [310, 170]]) { c.lineWidth = 3; c.strokeStyle = '#3a1a0a'; c.strokeRect(x0, y0, pw, ph);
+        c.strokeStyle = '#d4a848'; c.lineWidth = 2.5; for (let k = 0; k < 7; k++) { const cx = x0 + pw / 2, cy = y0 + ph / 2; c.beginPath(); c.ellipse(cx, cy, pw * (0.12 + k * 0.05), ph * (0.1 + k * 0.05), 0, k * 0.7, k * 0.7 + 3.6); c.stroke(); }   // (gilded scroll carving)
+        c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(x0, y0 + ph - 5, pw, 5); } }
+    c.fillStyle = '#d4a848'; c.beginPath(); c.arc(w / 2 - 16, h / 2, 7, 0, 7); c.arc(w / 2 + 16, h / 2, 7, 0, 7); c.fill(); });
+  { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.5), new THREE.MeshStandardMaterial({ map: door, roughness: 0.7 })); m.position.set(-94.1, Y + 1.26, V.z1 - 0.08); m.rotation.y = Math.PI; g.add(m);
+    box(1.7, 0.18, 0.14, POST, -94.1, Y + 2.6, V.z1 - 0.1); box(0.14, 2.6, 0.14, POST, -94.95, Y + 1.3, V.z1 - 0.1); box(0.14, 2.6, 0.14, POST, -93.25, Y + 1.3, V.z1 - 0.1); }
+  const pandan = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#b89a62'; c.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 8) for (let x = 0; x < w; x += 8) { c.fillStyle = ((x + y) / 8) % 2 ? '#a88852' : '#c8aa70'; c.fillRect(x, y, 8, 8); }
+    c.strokeStyle = '#6e2616'; c.lineWidth = 10; c.strokeRect(14, 14, w - 28, h - 28); c.strokeStyle = '#1f2a4a'; c.lineWidth = 4; c.strokeRect(30, 30, w - 60, h - 60); });
+  { const m = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.4), new THREE.MeshStandardMaterial({ map: pandan, roughness: 1 })); m.rotation.x = -Math.PI / 2; m.position.set(-90.2, Y + 0.03, 39.5); g.add(m); }
+  // canang sari: little palm-leaf trays of flowers, set out each morning (by the doors, on the shelf, at the stair)
+  const canang = (x, y, z) => { box(0.16, 0.03, 0.16, [0.55, 0.7, 0.3], x, y + 0.015, z);
+    for (const [dx, dz, cc] of [[-0.04, -0.04, [0.95, 0.9, 0.85]], [0.04, -0.04, [0.9, 0.2, 0.15]], [-0.04, 0.04, [0.98, 0.75, 0.1]], [0.04, 0.04, [0.6, 0.2, 0.6]]]) box(0.05, 0.03, 0.05, cc, x + dx, y + 0.045, z + dz); };
+  canang(-91.2, Y, 30.35); canang(-85.6, Y, 36.1); canang(xL + 0.3, Y + 1.53, 42.6); canang(-83.3, Y, 46.4);
 
   // ---- the board room: whitewashed wall with a teak rack and your four boards, a wax bench, a wetsuit on a hook
-  for (let y = 0.1; y < H; y += 0.22) box(0.04, 0.235, V.z1 - V.z0 - 0.3, [0.9, 0.87, 0.8], V.x0 + 0.08, Y + y, zm, 0.03);
+  for (let y = 0.1; y < H; y += 0.22) box(0.04, 0.235, V.z1 - V.z0 - 0.3, (Math.round(y * 4.5) % 2) ? [0.8, 0.64, 0.42] : [0.74, 0.58, 0.37], V.x0 + 0.08, Y + y, zm, 0.05);   // (woven bamboo panelling behind the rack)
   box(0.2, 0.1, 11, PLANK_D, V.x0 + 0.2, Y + 0.3, 37); box(0.2, 0.1, 11, PLANK_D, V.x0 + 0.2, Y + 2.2, 37);
   const holder = new THREE.Group(); holder.position.set(V.x0, Y, 37); holder.rotation.y = Math.PI; g.add(holder);   // (mirrored: boards stand against the west wall, decks to the room)
   const rack = [];
@@ -208,7 +241,19 @@ export function villa(scene) {
   deck(V.x1, B.x1, V.z1, LZ);
   for (const z of [34.4, 39.6]) { box(1.6, 0.3, 0.8, PLANK_D, -84.8, Y + 0.15, z); box(1.1, 0.12, 0.75, LINEN, -84.6, Y + 0.36, z); const bk = box(0.65, 0.1, 0.75, LINEN, -85.4, Y + 0.58, z); bk.rotation.z = -0.7; block(-85.6, -84.0, z - 0.45, z + 0.45); }   // loungers facing the waves
   box(0.5, 0.4, 0.5, PLANK_L, -85.2, Y + 0.2, 37); block(-85.5, -84.9, 36.7, 37.3);
-  box(3, 0.45, 0.45, PLANK_L, -97, Y + 0.23, B.z0 + 0.5); block(-98.5, -95.5, B.z0, B.z0 + 0.8);   // bench along the south rail
+  // a round teak soaking tub on the south balcony, full to the brim, looking straight out at the waves
+  const tub = { x: -97.3, z: 28.3 }, TY = Y + 0.5;
+  { const staves = new THREE.CylinderGeometry(0.85, 0.8, 0.72, 28, 1, true), sp = staves.attributes.position, sc2 = new Float32Array(sp.count * 3);
+    for (let i = 0; i < sp.count; i++) { const an = Math.atan2(sp.getZ(i), sp.getX(i)), k = (Math.floor((an + Math.PI) / (Math.PI * 2) * 28) % 2 ? 0.92 : 1.05) * (0.95 + Math.random() * 0.1); sc2[i * 3] = PLANK_L[0] * k; sc2[i * 3 + 1] = PLANK_L[1] * k; sc2[i * 3 + 2] = PLANK_L[2] * k; }
+    staves.setAttribute('color', new THREE.BufferAttribute(sc2, 3)); staves.computeVertexNormals();
+    const tb = new THREE.Mesh(staves, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide })); tb.position.set(tub.x, TY + 0.36, tub.z); g.add(tb);
+    for (const y of [0.12, 0.6]) { const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.845, 0.018, 5, 32), new THREE.MeshStandardMaterial({ color: 0x3a3430, metalness: 0.6, roughness: 0.4 })); hoop.rotation.x = Math.PI / 2; hoop.position.set(tub.x, TY + y, tub.z); g.add(hoop); }
+    const rim = new THREE.Mesh(tint(new THREE.TorusGeometry(0.83, 0.04, 5, 32), PLANK_D), mat); rim.rotation.x = Math.PI / 2; rim.position.set(tub.x, TY + 0.72, tub.z); g.add(rim);
+    const water = new THREE.Mesh(new THREE.CircleGeometry(0.8, 28), new THREE.MeshStandardMaterial({ color: 0x5fb8c0, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.85 })); water.rotation.x = -Math.PI / 2; water.position.set(tub.x, TY + 0.64, tub.z); g.add(water);
+    root.userData.tubWater = water;
+    box(1.9, 0.5, 1.9, PLANK_D, tub.x, Y + 0.25, tub.z); for (let k = 0; k < 6; k++) box(0.3, 0.02, 1.9, k % 2 ? FLOOR : FLOOR_L, tub.x - 0.8 + k * 0.32, Y + 0.51, tub.z);   // up on a teak platform, so from the water you see over the rail
+    box(0.5, 0.25, 1.0, PLANK_L, tub.x + 1.2, Y + 0.13, tub.z); box(0.35, 0.08, 0.35, [0.95, 0.94, 0.9], tub.x + 0.75, TY + 0.04, tub.z + 0.75);   // a step, and a folded towel
+    block(tub.x - 0.95, tub.x + 1.45, tub.z - 0.95, tub.z + 0.95); }
 
 
   // ---- the banyan: a huge old tree at the end of the balcony, a spiral stair of teak treads around its trunk, and a
@@ -253,8 +298,7 @@ export function villa(scene) {
     railR(RD - 0.06, 0, Math.PI * 2, 32); railR(R1 - 0.02, AE + 0.3, AE + Math.PI * 2 - 0.55, 20);
     for (let k = 0; k < 10; k++) { const an = k * Math.PI / 5 + 0.1, x = TX + Math.cos(an) * (RD - 0.06), z = TZ + Math.sin(an) * (RD - 0.06);   // lanterns hung on the rail
       const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), glow); bulb.position.set(x, Y + DH + 0.85, z); g.add(bulb); }
-    const DL = new THREE.PointLight(0xffc98f, 4, 10, 1.6); DL.position.set(TX + 2, Y + DH + 1.5, TZ - 1); g.add(DL);
-    box(1.6, 0.4, 0.5, PLANK_L, TX + 2.8, Y + DH + 0.2, TZ - 0.6); box(1.6, 0.4, 0.5, PLANK_L, TX - 0.2, Y + DH + 0.2, TZ - 2.9);   // two benches facing the waves
+    box(0.5, 0.4, 1.6, PLANK_L, TX + 2.9, Y + DH + 0.2, TZ - 0.3); box(1.6, 0.4, 0.5, PLANK_L, TX - 0.3, Y + DH + 0.2, TZ - 2.9);   // two benches along the rail, facing the waves
   }
 
   // ---- the garden behind the house, on the grass of the point: a fire pit with log seats, a hammock slung between
@@ -298,7 +342,6 @@ export function villa(scene) {
     g.add(tm); }
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.8, 7, 1, true), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85, depthWrite: false })); flame.position.set(fire.x, GY + 0.55, fire.z); g.add(flame);
   const flame2 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.55, 6, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9, depthWrite: false })); flame2.position.set(fire.x, GY + 0.45, fire.z); g.add(flame2);
-  const fireL = new THREE.PointLight(0xff9a40, 6, 9, 1.5); fireL.position.set(fire.x, GY + 1.0, fire.z); g.add(fireL);
 
   // birds: frigatebirds wheeling over the point on the evening wind
   const birdGeo = new THREE.BufferGeometry(); birdGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.35, 0, 0, -0.25, -1.1, 0.25, 0.05,  0, 0, -0.25, 0, 0, 0.35, 1.1, 0.25, 0.05], 3)); birdGeo.computeVertexNormals();
@@ -308,11 +351,12 @@ export function villa(scene) {
   let fT = 0;
   function tick(dt) {
     fT += dt;
-    const fl = 1 + 0.18 * Math.sin(fT * 13) + 0.1 * Math.sin(fT * 23 + 1); flame.scale.set(1, fl, 1); flame2.scale.set(1, 2 - fl, 1); fireL.intensity = 5 + 2.5 * (fl - 1) * 4;
+    const fl = 1 + 0.18 * Math.sin(fT * 13) + 0.1 * Math.sin(fT * 23 + 1); flame.scale.set(1, fl, 1); flame2.scale.set(1, 2 - fl, 1);
     BD.forEach((b, i) => { b.a += b.w * dt; const flap = Math.sin(fT * 2.2 + b.f) > 0.6 ? Math.sin(fT * 9 + b.f) : 0.25;
       bp.set(OX + 93 + Math.cos(b.a) * b.r, b.h + Math.sin(fT * 0.3 + i) * 3, 37 + OZ + 60 + Math.sin(b.a) * b.r);   // (in the coast frame's world: root sits at the spot's dz)
       be.set(0, -b.a - (b.w > 0 ? 0 : Math.PI), (b.w > 0 ? -1 : 1) * 0.35); bq.setFromEuler(be); birds.setMatrixAt(i, bm.compose(bp.sub(root.position), bq, bs.set(1.6, 1.6 * flap, 1.6))); });
     birds.instanceMatrix.needsUpdate = true;
+    const ch = root.userData.chime; if (ch) { ch.rotation.z = 0.06 * Math.sin(fT * 1.7) + 0.03 * Math.sin(fT * 4.1); ch.rotation.x = 0.05 * Math.sin(fT * 1.3 + 1); }
   }
 
   // join the static timber into one mesh (a phone draws it in one go instead of hundreds)
@@ -331,7 +375,8 @@ export function villa(scene) {
   const inRect = (x, z, x0, x1, z0, z1) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
   const floorL = (x, z, foot) => {
     const [r, an] = polar(x, z);
-    if (r < R1 + 0.1) { const h = stairAt(an, foot); if (h !== null && Math.abs(h - foot) < 0.6) return h; }
+    if (foot > Y + DH - 0.7 && r >= R1 - 0.1 && r < RD + 0.3) return Y + DH;   // (on the deck, the deck: never the stair below its edge)
+    if (r < R1 + 0.4) { const h = stairAt(an, foot); if (h !== null && Math.abs(h - foot) < 0.6) return h; }
     if (foot > Y + DH - 0.7 && r < RD + 0.3) return Y + DH;
     if (inRect(x, z, G.x0, G.x1 + 0.3, G.z0 - 0.2, G.z1) && !inRect(x, z, V.x1, B.x1, V.z1, LZ)) return GY;   // (the grass)
     return Y; };
@@ -339,20 +384,44 @@ export function villa(scene) {
     const [r, an] = polar(x, z);
     if (r < R0 + 0.2) return true;                                                     // the trunk
     if (foot < Y + 0.3) {                                                              // down on the floor
-      if (r < R1 + 0.1) { const d = wrap(an - A0); return !(d > -0.35 && d < 0.7); }   // (only the foot of the stair; the rest is under it)
+      if (r < R1 + 0.1) { const d = wrap(an - A0); return !(d > -0.9 && d < 0.9); }   // (only the foot of the stair, from either side; the rest is under it)
+      if (r < R1 + 0.8 && Math.abs(wrap(an - A0)) < 0.9 && x >= V.x1 - 0.2 && x <= B.x1 - 0.35) return false;   // (the landing runs right up to the first step)
       return !(inRect(x, z, B.x0 + 0.35, B.x1 - 0.35, B.z0 + 0.35, V.z1) || inRect(x, z, V.x1 - 0.2, B.x1 - 0.35, V.z1 - 1, LZ - 0.3) || inRect(x, z, G.x0 + 0.3, G.x1 + 0.3, V.z1 + 0.4, G.z1 - 0.3)); }
     if (foot > Y + DH - 0.4) {                                                         // up on the deck
       if (r > RD - 0.35) return true;
+      if (inRect(x, z, TX + 2.55, TX + 3.25, TZ - 1.2, TZ + 0.6) || inRect(x, z, TX - 1.2, TX + 0.6, TZ - 3.25, TZ - 2.55)) return true;   // (the benches)
       if (r < R1 - 0.05) { const d = wrap(an - AE_); return !(d > -0.7 && d < 0.15); }  // (the stairwell, except where the stair arrives)
       return false; }
-    return r > R1 - 0.15;                                                              // on the stair: stay on the treads
+    return r > R1 + 0.15;                                                              // on the stair: stay on the treads (fixL eases you in off the edge)
   };
   const AE_ = A0 + TURN;
+  // the round edges (trunk, stair, deck rim, stairwell) push you back along the radius, so you glide round them
+  // instead of catching on them
+  const fixL = (x, z, foot) => {   // (only smooth radial limits here: the angular ones are walls in solidL, never a jump)
+    const dx = x - TX, dz = z - TZ, r = Math.hypot(dx, dz) || 1e-6; let rr = Math.max(r, R0 + 0.25);
+    if (foot > Y + DH - 0.4) rr = Math.min(rr, RD - 0.36);
+    else if (foot > Y + 0.9) rr = Math.min(rr, R1 - 0.16);                               // (on the stair: the rail holds you)
+    else if (foot > Y + 0.3) rr = Math.min(rr, Math.max(R1 - 0.16, r - 0.1));    // (eased in, stepping up off the wide foot of the stair)
+    return rr === r ? null : [TX + dx / r * rr, TZ + dz / r * rr]; };
   // (the game walks you around in the coast frame; the point is mirrored east-west into place, see OX)
   const toL = (x, z) => [OX - x, z - OZ];
   const floorAt = (x, z, foot = Y) => { const [lx, lz] = toL(x, z); return floorL(lx, lz, foot); };
   const solid = (x, z, foot = Y) => { const [lx, lz] = toL(x, z); return solidL(lx, lz, foot); };
+  const fix = (x, z, foot = Y) => { const [lx, lz] = toL(x, z), f = fixL(lx, lz, foot); return f ? [OX - f[0], f[1] + OZ] : null; };
   for (const c of colliders) { const x0 = c[0], x1 = c[1]; c[0] = OX - x1; c[1] = OX - x0; c[2] += OZ; c[3] += OZ; }
   const walk = { x0: OX - Math.max(B.x1, TX + RD), x1: OX - G.x0, z0: B.z0 + OZ, z1: Math.max(TZ + RD, G.z1) + OZ };
-  return { group: root, rack, colliders, walk, floorAt, solid, tick, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.75 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
+  // places to sit (or lie), each with the view it frames: [x, z, eye height, look direction, look pitch, what it is]
+  const seatL = [
+    [-84.7, 34.4, Y + 0.95, 0.35, -0.08, 'LIE BACK'], [-84.7, 39.6, Y + 0.95, -0.2, -0.08, 'LIE BACK'], [-88.1, 32.3, Y + 1.15, -0.75, -0.06, 'SIT'],
+    [-90.2, 41.5, Y + 1.1, -Math.PI / 2 + 0.25, -0.05, 'SIT'], [tub.x, tub.z, Y + 1.38, -0.55, -0.08, 'SOAK'],
+    [TX + 2.75, TZ - 0.3, Y + DH + 1.1, 0, -0.15, 'SIT'], [TX - 0.3, TZ - 2.75, Y + DH + 1.1, -Math.PI / 2 + 0.3, -0.15, 'SIT'],
+    [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'],
+    ...[0.5, 2.2, 3.9].map((an) => [fire.x + Math.cos(an) * 2.1, fire.z + Math.sin(an) * 2.1, GY + 1.0, an + Math.PI, -0.25, 'SIT BY THE FIRE'])];
+  const seats = seatL.map(([x, z, eye, a, pitch, name]) => ({ x: OX - x, z: z + OZ, eye, yaw: Math.PI - a, pitch, name }));
+  const sounds = { fire: [OX - fire.x, fire.z + OZ, GY], chime: [OX + 85, 28.8 + OZ, Y + 2.2], tub: [OX - tub.x, tub.z + OZ, Y] };
+  { const ch = new THREE.Group(); ch.position.set(-85, Y + 2.62, 28.8); g.add(ch);   // bamboo wind chimes under the eave, swaying
+    const bm = new THREE.MeshStandardMaterial({ color: 0xb89a62, roughness: 0.6 }); const top = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12), bm); ch.add(top);
+    for (let k = 0; k < 6; k++) { const an = k / 6 * Math.PI * 2, L = 0.28 + (k % 3) * 0.1, c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, L, 6), bm); c.position.set(Math.cos(an) * 0.12, -0.12 - L / 2, Math.sin(an) * 0.12); ch.add(c); }
+    root.userData.chime = ch; }
+  return { group: root, rack, colliders, walk, floorAt, solid, fix, tick, seats, sounds, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.75 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
 }
