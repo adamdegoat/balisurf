@@ -556,11 +556,13 @@ function updateRig(dt, t) {
     // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
     pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
     // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
-    const deep = Math.min(0.85, (rider.inBarrel ? 0.62 : 0.4 + 0.1 * Math.min(1, rider.v / 10)) + 0.28 * pumpC + 0.3 * gLoad + 0.25 * (rider.stalling || 0));
+    const deep = Math.min(0.7, (rider.inBarrel ? 0.45 : 0.14 + 0.06 * Math.min(1, rider.v / 10)) + 0.2 * pumpC + 0.25 * gLoad + 0.22 * Math.min(1, Math.abs(rider.lean) / RIDE.leanMax) + 0.2 * (rider.stalling || 0));   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
-    clips.crouch.weight = deep; clips.stand.weight = 1 - deep;
+    // rising out of the pop-up's deep squat over half a second (not snapping up: that jerks your eyes up 16 cm in a frame)
+    const up_ = Math.min(1, rider.stateT / 0.6), rise = up_ * up_ * (3 - 2 * up_);
+    clips.crouch.weight = 0.8 + (deep - 0.8) * rise; clips.stand.weight = 1 - clips.crouch.weight;
     setStance();
-    surfer.position.set(0, 0.0 - 0.04 * deep, -0.1);                  // hips drop a little as the feet spread
+    surfer.position.set(0, -0.04 * clips.crouch.weight, -0.1);       // hips drop a little as the feet spread
   } else if (st === 'WIPE') {
     setStance(); surfer.position.set(0, 0, -0.1);
     wipeout(dt);
@@ -862,7 +864,7 @@ function surfStance() {
   _in.crossVectors(bodyFwd, bodyUp).normalize().multiplyScalar(Math.sign(leanN) || 1);   // toward the inside of the carve (forward x up = your right; +lean turns right)
   for (const [s, sgn] of [['l', side], ['r', -side]]) {
     // legs: feet about shoulder-and-a-half apart, front foot toward the nose
-    swingBone(bones['thigh_' + s], bones['foot_' + s], sgn, (0.36 + 0.06 * deep) * w);
+    swingBone(bones['thigh_' + s], bones['foot_' + s], sgn, (0.2 + 0.05 * deep) * w);   // (feet ~0.65 m apart: a little wider than the shoulders, not a straddle)
   }
   // upper body: shoulders twist into the turn and the chest bends toward the inside; a slow balance sway on top
   const twist = (leanN * 0.45 + Math.sin(bodyT * 1.1) * 0.05) * w;
@@ -902,12 +904,12 @@ function surfStance() {
     const front = s === frontArm, sway = Math.sin(bodyT * 1.7 + (front ? 0 : 1.3)) * 0.03;
     const P = _ap;
     if (front) {
-      at(P, chest ? 0.5 : 0.46, (chest ? 0.5 : 0.48) - sway - pumpUp, chest ? 0.36 : -0.36);   // out over the rail, beside the board                       // trim
+      at(P, chest ? 0.62 : 0.58, 0.42 - sway - pumpUp, chest ? 0.32 : -0.32);   // out over the rail, beside the board                       // trim
       if (bt) P.lerp(chest ? at(_aq, 0.6, 0.26, 0.26) : at(_aq, 0.45, 0.7, 0.34), bt);                               // bottom turn
       if (tt) P.lerp(at(_aq, 0.55, 0.5, -0.32), tt);                                                                  // top turn / cutback: leads round, points down the face
       if (deep) P.lerp(chest ? at(_aq, 0.48, 0.55, 0.48) : at(_aq, 0.38, 0.7, -0.4), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
     } else {
-      at(P, -0.22, 0.62 - sway, -0.25);                                                                                // trim: by the back hip
+      at(P, -0.08, 0.78 - sway, -0.3);   // relaxed and low, just ahead of the back hip toward the rail (the shoulder is ~0.35 below the eyes)                                                                                // trim: by the back hip
       if (bt) P.lerp(chest ? at(_aq, -0.08, 0.92, 0.35) : at(_aq, -0.2, 0.62, -0.25), bt);
       if (tt) P.lerp(at(_aq, 0.3, 0.75, -0.15), tt);                                                                  // comes across low
       if (deep) P.lerp(chest ? at(_aq, -0.15, 0.7, 0.2) : at(_aq, -0.3, 0.6, 0.4), deep);                             // barrel (backside: trailing arm along the face)
@@ -915,7 +917,7 @@ function surfStance() {
     // a hand never reaches across your body (a whole arm across the view reads as broken): if its pose asks for the
     // other side, it goes to its own side instead; in a stall the drag is done by the hand on the wave side
     bones['upperarm_' + s].getWorldPosition(_ik4);
-    if (stallK) { if ((chest ? !front : front)) P.lerp(at(_aq, 0.55, 0.62, 0.46), stallK); else P.lerp(at(_aq, -0.15, 0.6, -0.3), stallK); }   // frontside the back hand drags, backside the front hand; ahead enough to see it trail through the face
+    if (stallK) { if ((chest ? !front : front)) P.lerp(at(_aq, 0.55, 0.62, 0.46), stallK); else P.lerp(front ? at(_aq, 0.45, 0.55, -0.2) : at(_aq, -0.1, 0.75, -0.3), stallK); }   // the other hand stays relaxed (never folded back behind its own shoulder)   // frontside the back hand drags, backside the front hand; ahead enough to see it trail through the face
     // pop-up: flat on the deck under your shoulders, beside your ribs
     // pop-up: hands flat on the deck either side of the stringer, just ahead of your chest (placed on the board itself)
     if (popK > 0) { const sideSign = Math.sign(_cv.subVectors(bones['upperarm_' + s].getWorldPosition(_ik4), bones.spine_03.getWorldPosition(_ik1)).dot(_ik2.set(1, 0, 0).applyQuaternion(rig.quaternion))) || 1;
@@ -931,10 +933,13 @@ function surfStance() {
     if (cl) { cl.getWorldPosition(_ik1); aimBone(cl, ua, _ik3.subVectors(P, _ik1).normalize(), 0.8 * w); }
     // your right hand stays on the right of what you see and your left hand on the left (a hand crossing to the other
     // side of the view reads as the wrong hand with its elbow twisted in), and each elbow bends out to its own side
+    // (only the front arm: the back arm hangs behind you, out of view, and forcing it across would cramp it into the chest)
     const own = s === 'r' ? 1 : -1, lat = _cv.subVectors(P, eye).dot(R);
-    if (lat * own < 0.1) P.addScaledVector(R, own * 0.1 - lat);
-    const ua_ = bones['upperarm_' + s]; void ua_;
-    reachArm(ua, la, hd, P, _aq.copy(R).multiplyScalar(own * 0.8).addScaledVector(WORLD_UP, -0.6).addScaledVector(F, -0.15), st === 'POP' ? 0.95 : 0.92 * w);
+    if (front && lat * own < 0.1) P.addScaledVector(R, own * 0.1 - lat);
+    // the back elbow points away from the body (out from the chest along the shoulder line) and down
+    if (front) _aq.copy(R).multiplyScalar(own * 0.8).addScaledVector(WORLD_UP, -0.6).addScaledVector(F, -0.15);
+    else { bones.spine_03.getWorldPosition(_ik1); _aq.subVectors(_ik4, _ik1).setY(0).normalize().multiplyScalar(0.8).addScaledVector(WORLD_UP, -0.6); }
+    reachArm(ua, la, hd, P, _aq, st === 'POP' ? 0.95 : 0.92 * w);
   }
 }
 let waveSide = -1; const _eyeA = new THREE.Vector3(); const armSm = { l: { p: new THREE.Vector3(), ok: false }, r: { p: new THREE.Vector3(), ok: false } }, _hq = new THREE.Quaternion();

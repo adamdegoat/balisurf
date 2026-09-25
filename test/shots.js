@@ -31,6 +31,7 @@ export function outside(side = 1, dist = 2.6, up = 0.7) {
   const g = G(), c = g.camera, r = g.rig.position, th = g.rider.th;
   if (!saved) saved = { p: c.position.clone(), q: c.quaternion.clone() };
   c.position.set(r.x - Math.sin(th) * dist * side + Math.cos(th) * 0.4, r.y + up, r.z + Math.cos(th) * dist * side + Math.sin(th) * 0.4);
-  c.lookAt(r.x, r.y + 0.45, r.z); g.CUT.value = 0; c.layers.enable(1);   // (the body is drawn on layer 1) g.surfer.traverse((o) => { if (o.name === 'head') o.scale.setScalar(1); });
+  c.lookAt(r.x, r.y + 0.45, r.z); g.CUT.value = 0; c.layers.enable(1);   // (the body is drawn on layer 1)
+  g.surfer.traverse((o) => { if (o.name === 'head') o.scale.setScalar(1); });
 }
 export function inside() { const g = G(); g.camera.layers.disable(1); if (saved) { g.camera.position.copy(saved.p); g.camera.quaternion.copy(saved.q); } g.CUT.value = 0.21; g.surfer.traverse((o) => { if (o.name === 'head') o.scale.setScalar(0.001); }); }
