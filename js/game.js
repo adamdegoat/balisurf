@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=80';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=81';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=92';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
@@ -59,7 +59,11 @@ const jukung = (() => {
   g.position.set(-70, 0, -120); g.rotation.y = 0.35; g.scale.setScalar(1.2); scene.add(g); return g;   // anchored out the back, where the swells pass unbroken: you see it while you wait
 })();
 const birds = (() => {
-  const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0.5, -1.1, 0.15, -0.2, 0, 0, -0.3, 0, 0, 0.5, 0, 0, -0.3, 1.1, 0.15, -0.2]), 3));
+  // a frigate bird: long narrow wings bent at the wrist (the classic 'W' seen from below), forked tail
+  const V = [0, 0, 0.55,  -0.5, 0.12, 0.05,  0, 0, -0.1,    -0.5, 0.12, 0.05,  -1.25, -0.05, -0.25,  -0.35, 0.05, -0.12,
+             0, 0, 0.55,   0.5, 0.12, 0.05,  0, 0, -0.1,     0.5, 0.12, 0.05,   1.25, -0.05, -0.25,   0.35, 0.05, -0.12,
+             0, 0, -0.1,   -0.12, 0, -0.55,  0, 0, -0.35,     0, 0, -0.1,        0.12, 0, -0.55,       0, 0, -0.35];
+  const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(V), 3));
   const mat = new THREE.MeshBasicMaterial({ color: 0x1a1d22, side: THREE.DoubleSide }), list = [];
   for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(geo, mat); b.userData = { r: 25 + Math.random() * 30, h: 35 + Math.random() * 25, a: Math.random() * 6.3, w: 0.12 + Math.random() * 0.08, cx: -20 + Math.random() * 60, cz: 20 + Math.random() * 40 }; scene.add(b); list.push(b); }
   return list;

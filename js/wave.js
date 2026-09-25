@@ -180,7 +180,7 @@ export class Wave {
     const N = 240; this.mistN = N;
     this.mp = new Float32Array(N * 3); this.mv = new Float32Array(N * 3); this.ml = new Float32Array(N).fill(-1); this.ma = new Float32Array(N);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.mp, 3));
-    this.mist = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf2efe9, size: 0.75 * this.cond.H, map: sprite('mist', 64, [[0, 'rgba(255,255,255,.9)'], [0.5, 'rgba(255,255,255,.35)'], [1, 'rgba(255,255,255,0)']]), transparent: true, opacity: 0.24, depthWrite: false }));
+    this.mist = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf2efe9, size: Math.min(4.5, 0.75 * this.cond.H), map: sprite('mist', 64, [[0, 'rgba(255,255,255,.9)'], [0.5, 'rgba(255,255,255,.35)'], [1, 'rgba(255,255,255,0)']]), transparent: true, opacity: 0.24, depthWrite: false }));
     this.mist.frustumCulled = false; scene.add(this.mist);
   }
   updateMist(dt) {
@@ -346,7 +346,7 @@ export const WEATHER = {
   // good weather on the three normal levels (his call): morning, midday, afternoon sun; the storm is Extreme only
   easy:    { sun: [0.35, 0.62, -0.7], zen: 0x2e6db4, hor: 0xbfe0ee, sunCol: 0xfff4dc, fog: 0xc8e2ec, deep: 0x0b5a73, turq: 0x19b3a4, cloud: 0.18, chop: 0.8, fogFar: 320, rain: 0, sunVis: 1 },
   medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2862a6, hor: 0xc4dfe9, sunCol: 0xfff7e6, fog: 0xcde3ea, deep: 0x094c66, turq: 0x15a99f, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
-  hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2d5c99, hor: 0xd6dcd2, sunCol: 0xffe6bf, fog: 0xd3dad3, deep: 0x083f55, turq: 0x149a90, cloud: 0.3, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
+  hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2458a0, hor: 0xbcd6e4, sunCol: 0xffe6bf, fog: 0xc6dbe4, deep: 0x083f55, turq: 0x149a90, cloud: 0.2, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
   extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
   random:  { sun: [0.3, 0.7, -0.6],  zen: 0x2b66aa, hor: 0xc2dde8, sunCol: 0xfff3dc, fog: 0xcbe1e9, deep: 0x0a4e69, turq: 0x16a6a0, cloud: 0.32, chop: 1.1, fogFar: 310, rain: 0, sunVis: 1 },
 };
