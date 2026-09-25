@@ -2,15 +2,15 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=111';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=112';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=115';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
-import { SurfAudio } from './audio.js?v=15';
+import { SurfAudio } from './audio.js?v=16';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=22';
-import { villa, VILLA } from './villa.js?v=65';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=23';
+import { villa, VILLA } from './villa.js?v=66';
 import { makeBirds } from './birds.js?v=1';
-import { friends } from './friends.js?v=3';
+import { friends } from './friends.js?v=4';
 import { crew } from './crew.js?v=5';
 import { wildlife } from './wildlife.js?v=8';
 
@@ -460,7 +460,7 @@ function warmShaders() {
   const shown = []; scene.traverse((o) => { if (!o.visible) { o.visible = true; shown.push(o); } });
   try { renderer.compile(scene, camera); } finally { for (const o of shown) o.visible = false; }
 }
-if (Q.get('mode')) start(Q.get('mode'));
+if (Q.get('mode')) setTimeout(() => start(Q.get('mode')), 0);   // (a link straight to a spot: once the whole game has loaded, not halfway through)
 
 // ---------- camera: a chase camera over your shoulder, looking where you're going; tight and low in the barrel
 const lookDir = new THREE.Vector3(), _cv = new THREE.Vector3(), _lk = new THREE.Vector3(), _want = new THREE.Vector3(), _look = new THREE.Vector3();
@@ -1279,7 +1279,7 @@ function musicTick() {
   if (!playing) return audio.musicLevel(0.45);
   if (mode === 'villa' || isRanch()) audio.gameLevel(1);
   if (mode === 'villa' && walker && villaW) { if (!radioOn) { document.getElementById('vSong').classList.remove('on'); return audio.musicLevel(0); } let d = 1e9; for (const R of villaW.sounds.speakers) d = Math.min(d, Math.hypot(R[0] - walker.x, R[1] - walker.z, R[2] - (walker.y - 1.2)));   // (the nearest speaker)
-    document.getElementById('vSong').classList.toggle('on', (d < 7 && !walker.watch) || document.getElementById('vSong').classList.contains('open'));   // (kept up while you're using its buttons)
+    document.getElementById('vSong').classList.toggle('on', !drone.on && ((d < 7 && !walker.watch) || document.getElementById('vSong').classList.contains('open')));   // (kept up while you're using its buttons)
     const k = Math.max(0, 1 - d / 22);
     return audio.musicLevel(0.04 + 0.5 * k * k, 1800 + 12000 * k * k); }
   if (isRanch()) return audio.musicLevel(0.38, 14000);
@@ -1353,6 +1353,9 @@ const droneB = document.getElementById('vDrone'), droneAlt = document.getElement
 function droneSet(on) {
   if (!walker || on === drone.on) return; const W_ = walker;
   if (on) {
+    { const lx = 88 - W_.x, lz = W_.z - 31, inside = lx > VILLA.x0 && lx < VILLA.x1 && lz > VILLA.z0 && lz < VILLA.z1, up = W_.y - 1.65 > VILLA.Y + 1.5;   // (indoors it would lift straight through the roof; up the tree, through the canopy)
+      if (inside || up) { const n = document.getElementById('vNote'); n.textContent = 'Take the drone out to the balcony or the garden to launch it'; n.classList.add('on'); clearTimeout(n.t); n.t = setTimeout(() => n.classList.remove('on'), 3500); return; } }
+    document.getElementById('vSong').classList.remove('open');
     if (W_.sit) vStand(); if (W_.watch) document.getElementById('vWatch').click(); vSitB.classList.remove('on'); W_.near = null;
     Object.assign(drone, { on: true, x: W_.x + Math.cos(W_.yaw) * 0.8, y: W_.y + 0.3, z: W_.z + Math.sin(W_.yaw) * 0.8, vx: 0, vy: 0, vz: 0, up: 0, roll: 0, t: 0, save: [W_.yaw, W_.pitch] });
     W_.pitch = -0.15; const tip = document.getElementById('vTip'); tip.textContent = 'Left thumb flies, right thumb turns the camera. Hold UP or DOWN to climb and sink.'; tip.style.opacity = 1; clearTimeout(tip.t); tip.t = setTimeout(() => { tip.style.opacity = 0; }, 6000);
@@ -1418,9 +1421,10 @@ vm.addEventListener('mousedown', (e) => lookStart('m', e.clientX, e.clientY));  
 addEventListener('mousemove', (e) => lookMove('m', e.clientX, e.clientY));
 addEventListener('mouseup', (e) => lookEnd('m', e.clientX, e.clientY));
 function villaTick(dt) {
+  const beat = radioOn ? audio.musicBeat() : 0;   // (once a frame: it keeps a running peak)
   updateWaves(dt); crewW.update(dt, waves, T); wildW.update(dt, waves); birdsW.update(dt);
   if (!friendsW && surfer) friendsW = friends(scene, surfer, villaW.friendSpots.map((f) => ({ ...f, z: f.z + SPOTS.medium.dz, board: f.board && [f.board[0], f.board[1], f.board[2] + SPOTS.medium.dz] })));   // (your friends: as soon as the body model is in)
-  if (friendsW) friendsW.update(dt, T, radioOn ? audio.musicBeat() : 0, { x: walker.x, y: walker.y, z: walker.z + SPOTS.medium.dz }, camera); if (villaW.tick) villaW.tick(dt, radioOn ? audio.musicBeat() : 0, walker.x, walker.z, walker.y - 1.65);
+  if (friendsW) friendsW.update(dt, T, beat, { x: walker.x, y: walker.y, z: walker.z + SPOTS.medium.dz }, camera); if (villaW.tick) villaW.tick(dt, beat, walker.x, walker.z, walker.y - 1.65);
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
@@ -1490,7 +1494,7 @@ function villaTick(dt) {
 const _vb = { fw: new THREE.Vector3(), rt: new THREE.Vector3(), sh: new THREE.Vector3(), T: new THREE.Vector3(), P: new THREE.Vector3(), h: new THREE.Vector3(), reach: 0, rT: new THREE.Vector3() };
 function villaBody(dt, moving) {
   const W_ = walker; if (!surfer || !W_) return;
-  const show = !W_.sit && !W_.zoom && !W_.watch && !drone.on && !W_.swim && hfovHalf > 40;   // (swimming, your body is under the water) rig.visible = show; board.visible = false; if (!show) return;
+  const show = !W_.sit && !W_.zoom && !W_.watch && !drone.on && !W_.swim && hfovHalf > 40; rig.visible = show; board.visible = false; if (!show) return;   // (swimming, your body is under the water)
   if (!bones.upperarm_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   if (mixer) mixer.stopAllAction(); curClip = null;
   surfer.traverse((o) => { if (o.isSkinnedMesh && !o.userData.posed) { o.skeleton.pose(); } });

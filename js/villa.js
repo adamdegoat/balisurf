@@ -7,7 +7,7 @@
 // house carries a spiral stair up to a deck in its canopy, the highest seat on the point.
 import * as THREE from 'three';
 import { makeBoard } from './board.js?v=14';
-import { landMaterial, waterMaterial } from './wave.js?v=111';
+import { landMaterial, waterMaterial } from './wave.js?v=112';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const VILLA = { x0: -100, x1: -86, z0: 30, z1: 44, Y: 26 };   // the house and its floor height (in the point's own frame, below)
@@ -559,7 +559,7 @@ export function villa(scene) {
       for (let k = 0; k < 3; k++) { const an = k * 2.1; beam(x + Math.cos(an) * 0.12, Y + 0.72, z + Math.sin(an) * 0.12, x + Math.cos(an) * 0.2, Y, z + Math.sin(an) * 0.2, 0.018); }
       cyl(0.16, 0.16, 0.02, [0.5, 0.4, 0.2], x, Y + 0.28, z, 10); block(x - 0.2, x + 0.2, z - 0.2, z + 0.2); } }
   // a couple of boards leaning on the house by the balcony doors, ready to go
-  lean('fish', V.x1 + 0.12, 42.4, Math.PI / 2, 0.22).position.y += Y - GY0 - 0.2; lean('gun', V.x1 + 0.12, 43.2, Math.PI / 2, 0.18).position.y += Y - GY0 - 0.2;
+  lean('fish', V.x1 + 0.12, 42.4, Math.PI / 2, 0.22).position.y += Y - GY0 - 0.2; lean('gun', V.x1 + 0.12, 43.2, Math.PI / 2, 0.18).position.y += Y - GY0 - 0.2; block(V.x1, V.x1 + 0.55, 42.05, 43.55);   // (you walk round them, not through)
   // where your friends are: Kai on the log by the fire, Wayan at the wax station, Nando on the tree deck rail
   const NANDO = { x: TX + Math.cos(-0.8) * 3.02, z: TZ + Math.sin(-0.8) * 3.02 };
   const logK = { x: fire.x + Math.cos(3.9) * 2.1, z: fire.z + Math.sin(3.9) * 2.1 };

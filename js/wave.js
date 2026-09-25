@@ -454,7 +454,7 @@ export function waterMaterial({ wave = false } = {}) {
         if (wallK > .001) {
           vec2 fq = vec2(vW.x * 2.6, (vW.y + vW.z) * 1.1 - uTime * 1.4);
           float f1 = fbm(fq), f2 = fbm(fq * 2.1 + 3.7);
-          vec3 T = normalize(cross(N, vec3(1., 0., 0.)));
+          vec3 T = normalize(cross(N, vec3(1., 0., 0.)) + vec3(0., 1e-4, 0.));
           N = normalize(N + (vec3(1., 0., 0.) * (f1 - .5) * .35 + T * (f2 - .5) * .5) * wallK);
         }` : ''}
         float fres = .03 + .97 * pow(1. - max(dot(N, V), 0.), 5.);

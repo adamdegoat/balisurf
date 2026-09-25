@@ -131,13 +131,14 @@ export class SurfAudio {
     this.mGain = this.ctx.createGain(); this.mGain.gain.value = 0;
     this.ctx.createMediaElementSource(el).connect(this.mLP).connect(this.mGain).connect(this.lim);
     this.mAn = this.ctx.createAnalyser(); this.mAn.fftSize = 256; this.mAn.smoothingTimeConstant = 0.5; this.mLP.connect(this.mAn); this.mBins = new Uint8Array(this.mAn.frequencyBinCount);   // (listens for the bass, for the speaker cones)
-    el.addEventListener('ended', () => this.musicNext()); el.addEventListener('error', () => setTimeout(() => this.musicNext(), 1000));
+    el.addEventListener('ended', () => this.musicNext()); el.addEventListener('error', () => setTimeout(() => this.musicNext(true), 1000));   // (a song that won't load isn't kept in the back history)
     this.musicNext(); this.musicKick();
   }
-  musicNext() {
+  musicNext(bad = false) {
+    if (!this.mel) return;
     if (!this.order.length) { const o = this.tracks.slice(); for (let i = o.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [o[i], o[j]] = [o[j], o[i]]; }
       if (o[0] === this.now && o.length > 1) o.push(o.shift()); this.order = o; }   // (never the same song twice in a row)
-    if (this.now) (this.hist ||= []).push(this.now); if (this.hist && this.hist.length > 20) this.hist.shift();
+    if (this.now && !bad) (this.hist ||= []).push(this.now); if (this.hist && this.hist.length > 20) this.hist.shift();
     this.now = this.order.shift(); this.mel.src = this.now; if (this.mWant > 0) this.mel.play().catch(() => {}); if (this.onTrack) this.onTrack(this.now);
   }
   // back: a few seconds into a song it starts it again; right at the start it goes to the one before (like any player)

@@ -43,6 +43,7 @@ export function friends(scene, src, spots) {
   const list = [];
   spots.forEach((S, i) => {
     const body = cloneSkinned(src), root = new THREE.Group(); root.add(body); group.add(root);
+    body.position.set(0, 0, 0); body.quaternion.identity(); body.scale.set(1, 1, 1);   // (the clone carries wherever your own body was last posed on the board)
     const L = LOOK[i % LOOK.length];
     body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.frustumCulled = false; o.material = o.material.clone(); o.material.side = THREE.FrontSide;
       const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
