@@ -92,9 +92,7 @@
   #start h1 { margin: 0; font: 800 clamp(40px, 7vw, 72px)/.9 var(--disp); letter-spacing: -.01em; color: var(--sand); text-shadow: 0 2px 18px rgba(0,0,0,.25); }
   #start .intro { margin: 8px 0 18px; color: rgba(246,236,220,.8); max-width: 34em; font-size: 14px; line-height: 1.4; }
   #start button { font: inherit; color: var(--sand); cursor: pointer; touch-action: manipulation; text-align: left; }
-  #start .row { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; padding-bottom: 2px; }
-  #start .row::-webkit-scrollbar { display: none; }
-  #start .row button { flex: 1 0 128px !important; scroll-snap-align: start; }   /* (seven spots: on a phone the row swipes sideways) */
+  #start .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }   /* (seven spots in two rows of four: all on screen at once) */
   #start .row button.rt .wg { transform: scaleX(-1); }   /* (the rights' wave glyph breaks the other way) */
   #start .row button { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; padding: 10px 12px 11px; border-radius: 14px; border: 1px solid var(--line);
     background: linear-gradient(180deg, rgba(40,28,18,.62), rgba(24,17,11,.72)); box-shadow: inset 0 1px 0 rgba(255,236,200,.12); transition: transform .18s ease, border-color .18s, background .18s; }
@@ -124,6 +122,8 @@
     #start .nm { font-size: 18px; } #start .row small { font-size: 10.5px; margin-top: 2px; } #start .row small i { font-size: 12px; } #start .best { margin-top: 3px; font-size: 12px; }
     #start .boardrow { margin-top: 8px; } #start .villarow { margin-top: 7px; } #goVilla { padding: 5px 16px 5px 11px; } #goVilla span { font-size: 17px; } #goVilla small { font-size: 11px; }
     #load { margin-top: 4px; } #homeTip { display: none; }
+    #start .row { gap: 6px; } #start .row small { font-size: 0 !important; margin-top: 1px; } #start .row small i { font-size: 12px; margin: 0; }   /* (on a phone: name, level and best only, the rest shows on bigger screens) */
+    #start .wg { height: 13px; margin-bottom: 2px; } #start .best { margin-top: 2px; font-size: 11.5px; } #start .row button { padding: 6px 9px 7px; }
   }
   #soundTip { position: fixed; right: max(16px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); margin: 0 !important; font-size: 12px; color: #ffcf8a !important; display: flex; align-items: center; gap: 6px; animation: tipPulse 2.4s ease-in-out infinite; }
   #soundTip[hidden] { display: none; } @keyframes tipPulse { 50% { opacity: .45; } }
@@ -277,9 +277,9 @@
   <p class="intro">Pick a spot. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: slide left and right to carve, like a steering wheel. On the left, hold PUMP for speed and STALL to brake and get barrelled.</p>
   <div class="row">
     <button data-mode="easy"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C8.2 28 9.4 24.7 11.4 21.9 C13.6 21.4 16.0 22.8 15.8 24.7 C14.3 23.6 12.9 25.0 13.6 28.0 Z" fill="currentColor"/></svg><span class="nm">Pantai Kuda</span><small><i>Beginners</i>3.5 m, slow, friendly barrels</small></button>
-    <button data-mode="medium"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C8.2 28 9.4 23.7 11.5 20.2 C13.7 19.6 16.1 21.4 15.8 23.7 C14.4 22.4 12.9 24.1 13.7 28.0 Z" fill="currentColor"/></svg><span class="nm">Tanjung Uma</span><small><i>Intermediate</i>4.5 m clean barrels under the cliffs</small></button><button data-mode="kanan" class="rt"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C8.2 28 9.4 23.7 11.5 20.2 C13.7 19.6 16.1 21.4 15.8 23.7 C14.4 22.4 12.9 24.1 13.7 28.0 Z" fill="currentColor"/></svg><span class="nm">Watu Kanan</span><small><i>Intermediate, breaks right</i>4.2 m hollow right off red cliffs</small></button>
-    <button data-mode="hard"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C9.6 28 11.3 22.3 14.0 17.6 C16.9 16.8 20.1 19.2 19.8 22.3 C17.9 20.5 15.9 22.8 16.9 28.0 Z" fill="currentColor"/></svg><span class="nm">Batu Hitam</span><small><i>Advanced</i>6 m, fast and heavy</small></button><button data-mode="hiu" class="rt"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C9.6 28 11.3 22.3 14.0 17.6 C16.9 16.8 20.1 19.2 19.8 22.3 C17.9 20.5 15.9 22.8 16.9 28.0 Z" fill="currentColor"/></svg><span class="nm">Karang Hiu</span><small><i>Advanced, breaks right</i>5.6 m fast right over shallow coral</small></button>
-    <button data-mode="extreme"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C18.1 28 22.1 13.7 29.0 2.0 C36.2 -0.1 44.3 5.9 43.5 13.7 C38.7 9.3 33.8 15.0 36.2 28.0 Z" fill="currentColor"/></svg><span class="nm">Gunung Laut</span><small><i>Experts only</i>15 m in a storm</small></button>
+    <button data-mode="medium"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C8.2 28 9.4 23.7 11.5 20.2 C13.7 19.6 16.1 21.4 15.8 23.7 C14.4 22.4 12.9 24.1 13.7 28.0 Z" fill="currentColor"/></svg><span class="nm">Tanjung Uma</span><small><i>Intermediate</i>4.5 m clean barrels under the cliffs</small></button>
+    <button data-mode="hard"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C9.6 28 11.3 22.3 14.0 17.6 C16.9 16.8 20.1 19.2 19.8 22.3 C17.9 20.5 15.9 22.8 16.9 28.0 Z" fill="currentColor"/></svg><span class="nm">Batu Hitam</span><small><i>Advanced</i>6 m, fast and heavy</small></button>
+    <button data-mode="extreme"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C18.1 28 22.1 13.7 29.0 2.0 C36.2 -0.1 44.3 5.9 43.5 13.7 C38.7 9.3 33.8 15.0 36.2 28.0 Z" fill="currentColor"/></svg><span class="nm">Gunung Laut</span><small><i>Experts only</i>15 m in a storm</small></button><button data-mode="kanan" class="rt"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C8.2 28 9.4 23.7 11.5 20.2 C13.7 19.6 16.1 21.4 15.8 23.7 C14.4 22.4 12.9 24.1 13.7 28.0 Z" fill="currentColor"/></svg><span class="nm">Watu Kanan</span><small><i>Intermediate, breaks right</i>4.2 m hollow right off red cliffs</small></button><button data-mode="hiu" class="rt"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C9.6 28 11.3 22.3 14.0 17.6 C16.9 16.8 20.1 19.2 19.8 22.3 C17.9 20.5 15.9 22.8 16.9 28.0 Z" fill="currentColor"/></svg><span class="nm">Karang Hiu</span><small><i>Advanced, breaks right</i>5.6 m fast right over shallow coral</small></button>
     <button data-mode="ranch"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h60M0 18v10M60 18v10" stroke="currentColor" stroke-width="1" opacity=".45"/><path d="M4.0 28 C8.2 28 9.4 23.7 11.5 20.2 C13.7 19.6 16.1 21.4 15.8 23.7 C14.4 22.4 12.9 24.1 13.7 28.0 Z" fill="currentColor"/></svg><span class="nm">Surf Ranch</span><small><i>Wave pool</i>Order the wave you want</small></button>
   </div>
   <div class="boardrow"><span class="blabel">Board</span><b id="boardName" hidden></b><div class="boards" id="boards"></div></div>
@@ -288,11 +288,11 @@
   <p id="soundTip"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6 6 0 0 1 0 9"/></svg> Tap anywhere for music</p>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-2057</small>
+<small id="build">build 260925-2100</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=538"></script>
+<script type="module" src="js/game.js?v=539"></script>
 </body>
 </html>
