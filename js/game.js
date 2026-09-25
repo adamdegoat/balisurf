@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=93';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=110';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=111';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 import { ranch, POOL } from './ranch.js?v=4';
@@ -430,7 +430,7 @@ const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 // A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
 // and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
 const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.5, drop: 0.08 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
-const _pq2 = new THREE.Quaternion(); let tubeLook = 0, roofOff = 0;
+const _pq2 = new THREE.Quaternion(); let tubeLook = 0, roofOff = 0, curtOff = 0, wallOff = 0;
 const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
 function povCamera(dt) {
   if (!bones.head && surfer) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -438,10 +438,14 @@ function povCamera(dt) {
   // the eye point: just in front of the head, where the eyes are
   if (bones.head) bones.head.getWorldPosition(_eye); else _eye.copy(pose.pos).y += standing ? 1.4 : 0.35;
   const moving = rider.v > (standing ? 2 : 0.6);
-  const travel = moving ? Math.atan2(rider.vz, rider.vx) : rider.th;
+  // standing, you look down the line: where you're going along the wave (your motion with most of the wave's own run at
+  // the beach taken out), not where you're drifting over the sea bed, which on a big wave is mostly toward the beach and
+  // in the barrel pointed your eyes at the lip's curtain instead of down the tube to the exit
+  const waveRun = standing && rider.wave && rider.state === 'RIDE' ? 0.55 * rider.wave.cond.speed * Math.min(1, rider.stateT / 1.2) : 0;   // (eased in after the drop: no swing as you stand up)
+  const travel = moving ? Math.atan2(rider.vz - waveRun, rider.vx) : rider.th;
   // look mostly where you're travelling, partly where the board points (you see the nose swing in a turn/drift)
   const dh = Math.atan2(Math.sin(rider.th - travel), Math.cos(rider.th - travel));
-  let yawT = travel + dh * (standing ? 0.7 : 0.8);
+  let yawT = travel + dh * (standing ? 0.4 : 0.8);   // (a little toward where the board points: you see the nose swing in a turn)
   // in the barrel look down the tube toward the exit (along the line), not out through the open side at the beach
   tubeLook += ((rider.inBarrel && standing ? 1 : 0) - tubeLook) * Math.min(1, dt * 1.5);
   // (no automatic turn in the barrel: the view swinging on its own as you went in felt like losing control; your view
@@ -506,6 +510,24 @@ function povCamera(dt) {
     const need = Math.max(0, camera.position.y - Math.max(cy - 0.4, rig.position.y + 0.6));
     roofOff += (need - roofOff) * Math.min(1, dt * 12); camera.position.y -= roofOff;   // (eased: snapping under the roof in one frame read as a glitch)
   } else roofOff *= Math.max(0, 1 - dt * 12);
+  // ...and never out past the lip hanging down in front of you at the mouth of the tube (you'd see the wave from outside)
+  if (standing && rider.wave && rider.wave.prof) {
+    const w = rider.wave, f = w.fade || 1, s = camera.position.x - w.peelX, zl = camera.position.z - w.zW - w.bend(s);
+    const cz = w.prof.curtainZ(s, camera.position.y / f), inside = rider.zl < w.prof.curtainZ(rider.s, rider.y / f);   // (you're under the lip, not out in front of it)
+    const need = cz === Infinity || !inside ? 0 : Math.max(0, zl - (cz - 0.5));
+    curtOff += (need - curtOff) * Math.min(1, dt * 14);
+  } else curtOff *= Math.max(0, 1 - dt * 8);
+  camera.position.z -= curtOff;
+  // ...and never into the wall of the wave behind you: leaning into a steep face (in the tube it's near vertical), your
+  // eye could sink into the water and you'd see the wave from inside it. Keep it a hand's width out from the face
+  if (standing && rider.wave && rider.wave.prof && !rider.air) {
+    const w = rider.wave, f = w.fade || 1, s = camera.position.x - w.peelX, zl = camera.position.z - w.zW - w.bend(s), y = camera.position.y / f;
+    const sl = w.prof.slice(s), topY = sl.F[sl.F.length - 1][1];
+    const fz = y < topY && y > 0.05 ? w.prof.frontZAt(s, y) : -Infinity;   // where the face is at your eye's height
+    const need = Math.max(0, fz + 0.35 - zl);
+    wallOff += (need - wallOff) * Math.min(1, dt * 14);
+  } else wallOff *= Math.max(0, 1 - dt * 8);
+  camera.position.z += wallOff;
   // the eyes are always above your own board (never ask the water height here: under a lip or in the barrel the
   // 'surface' overhead is the lip, and pushing above it would lift you out of the tube)
   const minY = rig.position.y + (st === 'RIDE' ? 0.5 : 0.22); if (camera.position.y < minY) camera.position.y = minY;

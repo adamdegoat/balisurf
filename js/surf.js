@@ -89,6 +89,16 @@ export class Profile {
     for (let i = 1; i < U.length; i++) if (zl <= U[i][0]) { const t = (zl - U[i - 1][0]) / Math.max(1e-6, U[i][0] - U[i - 1][0]); return U[i - 1][1] + (U[i][1] - U[i - 1][1]) * t; }
     return Infinity;
   }
+  // how far toward the beach the falling lip hangs at height y (the curtain in front of you in the barrel): the inside of
+  // the tube is between the face and this. Infinity where no lip hangs at that height
+  curtainZ(s, y) {
+    const c = this.slice(s), U = c.U;
+    if (c.curl <= 0.3 || U.length < 3) return Infinity;
+    let k = 0; for (let i = 1; i < U.length; i++) if (U[i][1] > U[k][1]) k = i;   // the top of the roof; the curtain falls from here to the lip's tip
+    if (y >= U[k][1] || y <= U[U.length - 1][1]) return Infinity;
+    for (let i = k + 1; i < U.length; i++) if (U[i][1] <= y) { const t = (U[i - 1][1] - y) / Math.max(1e-6, U[i - 1][1] - U[i][1]); return U[i - 1][0] + (U[i][0] - U[i - 1][0]) * t; }
+    return Infinity;
+  }
   // how far toward the beach the face reaches at height y (anything shoreward of this is open air in front of the wave)
   frontZAt(s, y) {
     const F = this.slice(s).F;
