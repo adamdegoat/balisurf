@@ -43,28 +43,52 @@ export function villa(scene) {
   // ---- the rocky point: a long finger of limestone running out from the cliffs, scrub on top, sheer sides into the sea
   {
     const cliffTop = (xl) => { const x = OX - xl; return (58 + 12 * Math.sin(x * 0.021) + 6 * Math.sin(x * 0.067 + 1.3)) * Math.min(1, Math.max(0, (-x - 70) / 35)); };   // (the coast's own cliff height, before its fade)
-    const cx = (z) => { const k = Math.min(1, Math.max(0, (z - 70) / 150)); return -93 + 4 * Math.sin((z - 37) * 0.03) - 60 * k * k * (3 - 2 * k); }, hw = (z) => 13.5 + 12 * Math.min(1, Math.max(0, (z - 60) / 120)), tipZ = 37;   // (the ridge curves back west into the cliffs)
+    const cx = (z) => { const k = Math.min(1, Math.max(0, (z - 70) / 150)); return -93 + 4 * Math.sin((z - 37) * 0.03) - 60 * k * k * (3 - 2 * k); }, hw = (z) => 13.6 + 11 * Math.min(1, Math.max(0, (z - 60) / 120)),   /* (wide enough at the tip that the cliff edge sits right under the balcony) */ tipZ = 37;   // (the ridge curves back west into the cliffs)
     const top = (x, z) => { const k = Math.min(1, Math.max(0, (z - 55) / 120)), s = k * k * (3 - 2 * k), far = cliffTop(x) + 1;
       return (Y - 0.25) * (1 - s) + Math.max(3, far) * s + (z > 55 ? Math.sin(x * 0.3) * Math.cos(z * 0.2) * 0.6 : 0); };
+    // the top of the point: grass and scrub out to the cliff edge (beyond the edge it drops out of sight, inside the wall)
+    const EDGE = 0.8, noiseW = (z, a) => { const nk = z < 58 ? 0.3 : 1; return 1 + nk * (0.14 * Math.sin(z * 0.09 + 2) + 0.08 * Math.sin(z * 0.23 + 1) + 0.05 * Math.sin(z * 0.71) + 0.07 * Math.sin(a * 5) + 0.04 * Math.sin(a * 13)); };
     const geo = new THREE.PlaneGeometry(130, 200, 130, 160); geo.rotateX(-Math.PI / 2);
     const p = geo.attributes.position, c = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i) - 115, z = p.getZ(i) + 105, a = Math.atan2(z - tipZ, x - cx(z));
-      const w = hw(z) * (1 + 0.14 * Math.sin(z * 0.09 + 2) + 0.08 * Math.sin(z * 0.23 + 1) + 0.05 * Math.sin(z * 0.71) + 0.07 * Math.sin(a * 5) + 0.04 * Math.sin(a * 13)), dx = Math.abs(x - cx(z)) / w, dz = Math.max(0, tipZ - z) / w;
-      const d = Math.hypot(dx, dz), t = top(x, z);
-      let y, col, X = x, Z = z;
-      if (d < 0.78) { y = t; col = d < 0.7 ? [0.16, 0.27, 0.11] : [0.4, 0.37, 0.28]; }
-      else { const f = Math.min(1, (d - 0.78) / 0.22); y = t - (t + 1.5) * Math.pow(f, 0.6);
-        // a rugged face: rock strata stepping in and out with height, buttresses and gullies along it
-        const out = 1.4 * Math.sin(y * 0.55 + z * 0.13) + 0.7 * Math.sin(y * 1.6 - z * 0.4 + x * 0.3) + 1.1 * Math.sin(z * 0.37 + a * 3) * (y / Math.max(t, 1));
-        const nx = x - cx(z), nz = Math.min(0, z - tipZ), nl = Math.hypot(nx, nz) || 1; const fo = Math.min(1, f * 4) * Math.min(1, Math.max(0, (y + 0.5) / 3)); X = x + nx / nl * out * fo; Z = z + nz / nl * out * fo;   // (settling to a clean waterline)
-        const band = 0.8 + 0.2 * Math.sin(y * 2.1 + Math.sin(z * 0.2)), streak = 0.88 + 0.12 * Math.sin(x * 1.7 + z * 0.9), wet = y < 1.5 ? 0.45 : 1, moss = Math.sin(y * 0.55 + z * 0.13) > 0.8 && y > 4 ? 1 : 0;
-        const k2 = band * streak * wet; col = moss ? [0.22 * k2, 0.3 * k2, 0.15 * k2] : [0.76 * k2, 0.69 * k2, 0.55 * k2]; }
-      if (d > 1) y = -1.5;
+      const x = p.getX(i) - 115, z = p.getZ(i) + 105, a = Math.atan2(z - tipZ, x - cx(z)), w = hw(z) * noiseW(z, a);
+      const d = Math.hypot(Math.abs(x - cx(z)) / w, Math.max(0, tipZ - z) / w), t = top(x, z);
+      let X = x, Z = z, y = t; const col = d < 0.7 ? [0.16, 0.27, 0.11] : [0.36, 0.34, 0.24];
+      if (d > EDGE) { const kk = (EDGE - 0.04) / d, oz = z < tipZ ? tipZ : z; X = cx(z) + (x - cx(z)) * kk; Z = oz + (z - oz) * kk; y = t - 12; }   // (past the edge: tucked in behind the cliff wall, out of sight)
       p.setXYZ(i, X, y, Z); const k = 0.9 + Math.random() * 0.2; c[i * 3] = col[0] * k; c[i * 3 + 1] = col[1] * k; c[i * 3 + 2] = col[2] * k;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); geo.computeVertexNormals();
     g.add(new THREE.Mesh(geo, landMaterial()));
+    // the cliff: a wall of rock all round the edge, built row by row from the lip down into the sea: layers of limestone
+    // stepping in and out as ledges and overhangs, scrub caught on the ledges, dark and wet at the waterline, and a
+    // rubble apron spreading into the sea at its foot
+    {
+      const pts = [];   // the edge, all the way round: up the east side, round the tip, back down the west side
+      const edgeAt = (z, side) => { let x = cx(z) + side * EDGE * hw(z); for (let it = 0; it < 2; it++) { const a = Math.atan2(z - tipZ, x - cx(z)); x = cx(z) + side * EDGE * hw(z) * noiseW(z, a); } return x; };
+      for (let z = 200; z > tipZ; z -= 1.1) pts.push([edgeAt(z, 1), z]);
+      for (let k = 0; k <= 40; k++) { const th = -k / 40 * Math.PI, r = EDGE * hw(tipZ) * noiseW(tipZ - 1, th); pts.push([cx(tipZ) + Math.cos(th) * r, tipZ + Math.sin(th) * r]); }
+      for (let z = tipZ + 1.1; z <= 200; z += 1.1) pts.push([edgeAt(z, -1), z]);
+      const R = 26, n = pts.length, pos = new Float32Array(n * (R + 1) * 3), col = new Float32Array(n * (R + 1) * 3), idx = [];
+      for (let i = 0; i < n; i++) {
+        const [x, z] = pts[i], [xa, za] = pts[Math.max(0, i - 1)], [xb, zb] = pts[Math.min(n - 1, i + 1)];
+        let nx = -(zb - za), nz = xb - xa; const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl;   // (outward, away from the point's spine)
+        const t = top(x, z), seed = Math.sin(i * 12.9898) * 43758.5453 % 1;
+        for (let j = 0; j <= R; j++) {
+          const v = j / R, y = (t - 0.05) * (1 - v) + -2.5 * v;
+          const ledge = 0.55 * Math.sin(y * 0.85 + i * 0.05) + 0.3 * Math.sin(y * 2.1 - i * 0.12) + 0.25 * Math.sin(i * 0.21 + y * 0.35), talus = 4 * Math.pow(v, 2.4);
+          const o = j === 0 ? 0 : 0.95 + ledge + talus + 0.15 * Math.abs(seed);   // (always a little proud of the edge, stepping out in ledges)
+          const q = (i * (R + 1) + j) * 3; pos[q] = x + nx * o; pos[q + 1] = y; pos[q + 2] = z + nz * o;
+          const band = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(y * 1.9 + Math.sin(i * 0.05) * 2)), jit = 0.88 + Math.random() * 0.24, wet = y < 1.2 ? 0.5 : 1;
+          const scrub = y > 3 && Math.sin(y * 0.85 + i * 0.07) > 0.62 && Math.random() < 0.7, crack = Math.sin(i * 0.9 + y * 0.2) > 0.93;
+          const cc = scrub ? [0.19, 0.28, 0.12] : crack ? [0.3, 0.27, 0.22] : v > 0.9 ? [0.4, 0.37, 0.32] : [0.58, 0.51, 0.4];
+          for (let e = 0; e < 3; e++) col[q + e] = cc[e] * band * jit * wet;
+        }
+      }
+      for (let i = 0; i < n - 1; i++) for (let j = 0; j < R; j++) { const a0 = i * (R + 1) + j, b0 = a0 + R + 1; idx.push(a0, a0 + 1, b0, b0, a0 + 1, b0 + 1); }
+      const wall = new THREE.BufferGeometry(); wall.setAttribute('position', new THREE.BufferAttribute(pos, 3)); wall.setAttribute('color', new THREE.BufferAttribute(col, 3)); wall.setIndex(idx);
+      const flat = wall.toNonIndexed(); flat.computeVertexNormals();   // (faceted, like broken rock)
+      g.add(new THREE.Mesh(flat, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide })));
+    }
     // boulders at the foot, where the sea breaks on the rock
     for (let k = 0; k < 16; k++) { const z = 22 + k * 7 + Math.random() * 4, side = k % 2 ? 1 : -1, r = 1.2 + Math.random() * 2;
       const rock = new THREE.Mesh(tint(new THREE.DodecahedronGeometry(r, 0), [0.42, 0.39, 0.33], 0.2), landMaterial()); rock.position.set(cx(z) + side * hw(z) * 1.02, 0, z); rock.rotation.set(k, k * 2, 0); g.add(rock); }
@@ -270,7 +294,11 @@ export function villa(scene) {
   const deck = (x0, x1, z0, z1) => { for (let x = x0 + 0.15; x < x1; x += 0.3) box(0.29, 0.1, z1 - z0, (Math.round(x * 3.33) % 2) ? FLOOR : FLOOR_L, x, Y - 0.05, (z0 + z1) / 2, 0.04);
     box(x1 - x0, 0.35, z1 - z0, PLANK_D, (x0 + x1) / 2, Y - 0.28, (z0 + z1) / 2); };
   deck(B.x0, B.x1, B.z0, V.z0); deck(V.x1, B.x1, V.z0, B.z1);
-  for (const [x, z] of [[B.x0 + 0.3, B.z0 + 0.3], [-93, B.z0 + 0.3], [-86, B.z0 + 0.3], [B.x1 - 0.3, B.z0 + 0.3], [B.x1 - 0.3, 37], [B.x1 - 0.3, B.z1 - 0.3]]) box(0.22, 5, 0.22, POST, x, Y - 2.8, z);   // stilts down onto the rock
+  // the balcony hangs off the cliff on raking timber brackets anchored back into the rock under the house (a sheer cliff
+  // has no ground below for posts to stand on), with a beam along its outer edge
+  for (const [x, z] of [[B.x0 + 0.4, B.z0 + 0.3], [-95.5, B.z0 + 0.3], [-90.5, B.z0 + 0.3], [-85.8, B.z0 + 0.3], [B.x1 - 0.3, B.z0 + 0.4], [B.x1 - 0.3, 33.5], [B.x1 - 0.3, 38.5], [B.x1 - 0.3, 43], [B.x1 - 0.3, LZ - 0.3]]) {
+    const dx = xm - x, dz = zm - z, d = Math.hypot(dx, dz); beam(x, Y - 0.42, z, x + dx / d * 3.2, Y - 4.2, z + dz / d * 3.2, 0.11); }
+  box(B.x1 - B.x0, 0.22, 0.2, POST, (B.x0 + B.x1) / 2, Y - 0.52, B.z0 + 0.15); box(0.2, 0.22, LZ - B.z0, POST, B.x1 - 0.15, Y - 0.52, (B.z0 + LZ) / 2);
   const railZ = (z, x0, x1) => { box(x1 - x0, 0.09, 0.16, POST, (x0 + x1) / 2, Y + 1.05, z); for (let x = x0; x <= x1 + 0.01; x += 0.22) box(0.045, 1.0, 0.045, PLANK_D, x, Y + 0.5, z); };
   const railX = (x, z0, z1) => { box(0.16, 0.09, z1 - z0, POST, x, Y + 1.05, (z0 + z1) / 2); for (let z = z0; z <= z1 + 0.01; z += 0.22) box(0.045, 1.0, 0.045, PLANK_D, x, Y + 0.5, z); };
   railZ(B.z0, B.x0, B.x1); railX(B.x1, B.z0, LZ); railX(B.x0, B.z0, V.z0); railZ(LZ, V.x1, TX - 0.9);   // (open to the garden on the west, and at the north end: the stair up the tree)

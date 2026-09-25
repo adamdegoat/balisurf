@@ -395,8 +395,11 @@ export class Rider {
         this.snapArm = 0; this.ride.snaps++; this.move('SNAP', crit);
       }
       if (this.trick) { this.trick.t += h; if (this.trick.t > 1.4) this.trick = null; }
-      if (w.peelX > w.xEnd) { this.ride.end = 1; return this.out('Made it to the end of the reef'); }
-      if (this.z > w.zBeach) { this.ride.end = 1; return this.out('Rode it all the way in'); }
+      // the end of the wave: it backs off and the barrel breathes out (the spit), shooting whoever's inside out onto the shoulder
+      if (this.spitOut > 0) { this.spitOut -= h; if (this.inBarrel && this.v < 1.9 * C.speed) { const k = 1 + 1.4 * h; this.vx *= k; this.vz *= k; } }
+      // the wave has backed off to a shoulder (the end of the reef, or the sand): the ride winds down, full credit
+      if ((w.endK === undefined ? 1 : w.endK) < 0.4) { this.ride.end = 1; return this.out(w.endBy === 'beach' ? 'Rode it all the way in' : 'Rode it to the end of the reef'); }
+      if (w.endK === undefined && (w.peelX > w.xEnd || this.z > w.zBeach)) { this.ride.end = 1; return this.out('Rode it to the end'); }   // (a wave with no ending set up: the old hard stop)
     }
     this.lostSpeed(h);
   }

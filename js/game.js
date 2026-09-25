@@ -3,14 +3,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=95';
-import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
+import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=115';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=12';
 import { SurfAudio } from './audio.js?v=13';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
-import { villa, VILLA } from './villa.js?v=35';
-import { crew } from './crew.js?v=4';
-import { wildlife } from './wildlife.js?v=6';
+import { villa, VILLA } from './villa.js?v=40';
+import { crew } from './crew.js?v=5';
+import { wildlife } from './wildlife.js?v=7';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -276,8 +276,13 @@ function updateWaves(dt) {
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
     w.peelRate = rate;   // the physics uses the peel speed right now (not the average), so the wave's push matches what you see
     w.place(w.px, C.speed * t);
-    w.fade = (w.size || 1) * Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40)) * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));
-    if (isRanch()) w.fade = Math.min(1, Math.max(0.02, (w.zW - POOL.z0) / 22)) * Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40));   // the pool wave rises out of the machine wall   // far out it's a small swell; past the end of the reef it backs off
+    // the natural end of a wave: over the last stretch of reef it runs into deeper water, and near the sand it hits
+    // the shallows; either way it backs off and shrinks away (the barrel softening and closing) instead of stopping dead
+    const reefK = Math.min(1, Math.max(0, (REEF.xEnd - w.peelX) / 38)), beachK = Math.min(1, Math.max(0, (REEF.zBeach - w.zW) / 45));
+    w.endK = Math.min(reefK, beachK); w.endBy = beachK < reefK ? 'beach' : 'reef';
+    if (w.endK < 0.88 && !w.spat) { w.spat = true; if (w.spitT !== undefined) w.spitT = 0.3; if (rider && rider.wave === w && rider.inBarrel) rider.spitOut = 1.8; }   // (the spit: see the rider's judge)
+    w.fade = (w.size || 1) * w.endK * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));
+    if (isRanch()) w.fade = Math.min(1, Math.max(0.02, (w.zW - POOL.z0) / 22)) * w.endK;   // the pool wave rises out of the machine wall   // far out it's a small swell; past the end of the reef it backs off
     w.update(dt);
     if (w.zW > REEF.zBeach + 40 || w.peelX > REEF.xEnd + 45) { w.dispose(scene); waves.splice(i, 1); }
   }
