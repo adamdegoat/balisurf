@@ -443,16 +443,20 @@ export function waterMaterial({ wave = false } = {}) {
         N = normalize(N + vec3(n1 - .5, 0., n2 - .5) * .28 * uChop);
         // fine wind ripples close to you (the big ripple pattern alone leaves the water glassy up close)
         float nearK = smoothstep(30., 3., length(cameraPosition - vW)) * step(.6, abs(N.y));
-        vec2 rq = vW.xz * 3.2 + vec2(uTime * .5, uTime * .35);
-        N = normalize(N + vec3(fbm(rq) - .5, 0., fbm(rq * 1.7 + 4.3) - .5) * .32 * nearK * (.7 + .3 * min(uChop, 1.)));   // (capped: in the storm it made bright squiggles)
+        if (nearK > .001) {   // (worked out only where it shows: most of the screen is further off than 30 m)
+          vec2 rq = vW.xz * 3.2 + vec2(uTime * .5, uTime * .35);
+          N = normalize(N + vec3(fbm(rq) - .5, 0., fbm(rq * 1.7 + 4.3) - .5) * .32 * nearK * (.7 + .3 * min(uChop, 1.)));   // (capped: in the storm it made bright squiggles)
+        }
         ${wave ? `
         // fine texture on the face: water being drawn up the wall leaves streaky ripples that stream upward;
         // strongest on steep faces, fading with distance (it would only shimmer far away)
         float wallK = smoothstep(.85, .3, abs(N.y)) * smoothstep(18., 4., length(cameraPosition - vW));
-        vec2 fq = vec2(vW.x * 2.6, (vW.y + vW.z) * 1.1 - uTime * 1.4);
-        float f1 = fbm(fq), f2 = fbm(fq * 2.1 + 3.7);
-        vec3 T = normalize(cross(N, vec3(1., 0., 0.)));
-        N = normalize(N + (vec3(1., 0., 0.) * (f1 - .5) * .35 + T * (f2 - .5) * .5) * wallK);` : ''}
+        if (wallK > .001) {
+          vec2 fq = vec2(vW.x * 2.6, (vW.y + vW.z) * 1.1 - uTime * 1.4);
+          float f1 = fbm(fq), f2 = fbm(fq * 2.1 + 3.7);
+          vec3 T = normalize(cross(N, vec3(1., 0., 0.)));
+          N = normalize(N + (vec3(1., 0., 0.) * (f1 - .5) * .35 + T * (f2 - .5) * .5) * wallK);
+        }` : ''}
         float fres = .03 + .97 * pow(1. - max(dot(N, V), 0.), 5.);
         vec3 R = reflect(-V, N); R.y = abs(R.y);
         vec3 refl = skyR(R);
@@ -481,8 +485,11 @@ export function waterMaterial({ wave = false } = {}) {
         vec3 col = mix(body, refl, fres);
         // sun glint
         // (broken into glitter by the small ripples, as on real water; a smooth glint reads as a white smudge up close)
-        float glit = smoothstep(.6, .74, fbm(vW.xz * 16. + vec2(uTime * 1.6, -uTime * 1.1))) * smoothstep(.3, .6, fbm(vW.xz * 3.1 - uTime * .3));   // fine sparkles, not blobs
-        col += uSunCol * min(.55, pow(max(dot(R, uSun), 0.), 220.) * 3. * (.04 + glit)) * uSunVis;   // (capped: unbounded it merged into white blobs)
+        float spec = pow(max(dot(R, uSun), 0.), 220.) * uSunVis;
+        if (spec > .0005) {   // (only in the sun's own reflection: everywhere else it adds nothing)
+          float glit = smoothstep(.6, .74, fbm(vW.xz * 16. + vec2(uTime * 1.6, -uTime * 1.1))) * smoothstep(.3, .6, fbm(vW.xz * 3.1 - uTime * .3));   // fine sparkles, not blobs
+          col += uSunCol * min(.55, spec * 3. * (.04 + glit));   // (capped: unbounded it merged into white blobs)
+        }
         // sun sparkle: tiny points of sunlight winking on the water. Each 40 cm cell holds one little ripple facet tilted its
         // own way (and rocking); it flashes only when it would really mirror the sun into your eye, so the sparkle gathers
         // toward the sun and none shows looking away from it. Kept a pixel or two wide, faded where it'd go sub-pixel
@@ -496,7 +503,9 @@ export function waterMaterial({ wave = false } = {}) {
         col += uSunCol * spark * 0.9 * uSunVis * (1. - uCloud);   // (more of them, softer: a few hard white points read as dust, a field of soft ones as glitter)
         }
         ${wave ? `
-        // foam: churned white where the lip throws and the whitewater rolls
+        // foam: churned white where the lip throws and the whitewater rolls (none of it is worked out on clean water:
+        // with less than this much foam the mask below can't come out above zero)
+        if (vFT.x > .04) {
         // foam features scale with the wave: a 15 m wave boils in big lumps, not a fine repeating pattern
         float fk = pow(2. / max(uH, 2.), .65);
         float foamN = fbm(vec2(vW.x, vW.y + vW.z) * 1.4 * fk + vec2(0., uTime * 1.3 * fk));
@@ -505,20 +514,14 @@ export function waterMaterial({ wave = false } = {}) {
         // water showing through (a uniform white blanket read as a carpet)
         float patches = fbm(vW.xz * .28 * fk + vec2(uTime * .04, -uTime * .07)) + (foamN - .5) * .35;
         foamMask *= mix(1., (.1 + .9 * smoothstep(.46, .66, patches)) * (1. - .55 * smoothstep(.3, 1., vAge)), vAge);   // old foam: thinner, fainter patches the longer ago it broke
-        // thin lace of old foam drifting on the face
-        // lacework: thin wandering foam lines (contours of a noise field), not blobs
-        float ln = fbm(vec2(vW.x * 1.3 + vW.z * .4, vW.y * 1.1 + vW.z * .7) * 1.8 * fk + vec2(0., uTime * .04));
-        // lines stay about a pixel or two wide at any distance, and soften right up close so they don't read as scribbles
-        float lw = min(fwidth(ln) * 2.2 + .006, .03);   // (soft, faint streaks: thin bright lines read as scribbles)
-        float lace = (1. - smoothstep(.0, lw, abs(ln - .5))) * smoothstep(.35, .6, fbm(vec2(vW.x, vW.y + vW.z) * .7));
-        lace *= .45 + .55 * smoothstep(2., 10., length(cameraPosition - vW));
-        // (the drifting foam-line lace is off: from the rider's eye it read as white scribbles on the face)
+        // (a drifting foam-line lace was tried and taken out: from the rider's eye it read as white scribbles on the face)
         // whitewater is lumpy boiling foam, not a white slab: churning lumps with grey shadows between them, lit by the sky
         vec2 fp = vec2(vW.x * 1.7 + vW.z * .5, vW.y * 2.2 + vW.z * 1.3) * fk + vec2(uTime * .35, -uTime * 1.1) * fk;
         float lump = fbm(fp) * .65 + fbm(fp * 2.7 + 5.3) * .35;
         float shade = .55 + .45 * smoothstep(.25, .75, lump);
         vec3 foamCol = vec3(.93, .92, .9) * shade * (.72 + .28 * max(dot(N, uSun), 0.)) + mix(uHor, uZen, .5) * .12 * (1. - shade * .5);
         col = mix(col, foamCol, foamMask * (.82 + .18 * lump));   // thin spots show the water through
+        }
         ` : ''}
         // distance haze toward the horizon
         float d = length(cameraPosition - vW);
@@ -558,6 +561,7 @@ export function skyDome(scene) {
       }`,
   });
   const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), m);
+  sky.renderOrder = 2;   // (last of all: it only fills what nothing else covers)
   scene.add(sky);
   sky.onBeforeRender = () => { m.uniforms.uTime.value = performance.now() / 1000; };
   return sky;
@@ -567,6 +571,7 @@ export function ocean(scene) {
   const g = new THREE.PlaneGeometry(1400, 1400, 1, 1); g.rotateX(-Math.PI / 2);
   const m = waterMaterial();
   const mesh = new THREE.Mesh(g, m); mesh.position.y = -0.02; scene.add(mesh);
+  mesh.renderOrder = 1;   // (drawn after the waves and the land: wherever they cover it, its costly water shading is skipped, not painted over)
   return mesh;
 }
 
@@ -703,7 +708,7 @@ function buildCoast(scene, O, mat) {
   { const p = trunkG.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) + 0.9 * y * y); } trunkG.computeVertexNormals(); }   // palms curve toward the sea
   // one frond: a leaf blade arcing out and drooping, wide in the middle, tapering to a point, with a zig-zag edge of leaflets
   const frondParts = [];
-  { const SEG = 10, pos = [], idx = [];
+  { const SEG = 6, pos = [], idx = [];   // (6 steps along each frond: palms are 50 m off at the closest, and 170 of them at 10 steps was the most geometry on screen)
     for (let j = 0; j <= SEG; j++) {
       const t = j / SEG, x = t * 4.2, y = 0.9 * t - 2.2 * t * t, w = Math.sin(Math.PI * Math.min(1, t * 1.15)) * (0.75 + 0.25 * (j % 2));
       pos.push(x, y, -w, x, y + 0.15 * (1 - t), 0, x, y, w);

@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=108';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=110';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=115';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
 import { SurfAudio } from './audio.js?v=14';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=19';
-import { villa, VILLA } from './villa.js?v=56';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=21';
+import { villa, VILLA } from './villa.js?v=58';
 import { makeBirds } from './birds.js?v=1';
 import { crew } from './crew.js?v=5';
 import { wildlife } from './wildlife.js?v=8';
