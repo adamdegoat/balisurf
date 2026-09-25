@@ -36,7 +36,7 @@ const K = {
   shoulder: [[1.3,0],[.8,.02],[.4,.12],[.15,.33],[0,.55],[-.06,.68],[-.1,.73],[-.12,.75],[-.15,.755],[-.25,.74],[-1.1,.4],[-2.5,0]],
   peak:     [[1.1,0],[.6,.03],[.25,.15],[.06,.42],[0,.72],[.06,.92],[.16,.99],[.24,.97],[.16,1.03],[-.05,1.02],[-.95,.55],[-2.3,0]],
   barrel:   [[1.9,0],[1.45,.02],[.4,.1],[-.02,.38],[-.14,.7],[.18,1.02],[.85,.93],[1.32,.12],[1.0,1.02],[.14,1.1],[-.9,.62],[-2.4,0]],   // a wide, round tube: the lip throws well out in front
-  white:    [[1.8,0],[1.3,.03],[.9,.12],[.6,.24],[.35,.34],[.2,.4],[.1,.42],[0,.43],[-.1,.43],[-.3,.4],[-1.2,.2],[-2.6,0]],
+  white:    [[1.8,0],[1.3,.04],[.9,.17],[.6,.34],[.35,.47],[.2,.54],[.1,.57],[0,.58],[-.1,.57],[-.3,.52],[-1.2,.24],[-2.6,0]],   // the collapsed tube: a big rolling pile of foam (it settles lower further back, see amp)
 };
 // per control point: how much it glows (thin water) and where spray/foam sits when curling
 const THIN = [0, 0, .05, .2, .45, .75, .95, 1, .8, .45, .1, 0];
@@ -109,7 +109,9 @@ export class Wave {
   span() { const Lx = this.cond.len || 1, H = this.cond.H, Wd = this.cond.width || 1;
     return this._span ||= { sLo: -BEHIND * Lx, sHi: AHEAD * Lx, zLo: -4.6 * H * Wd - 2,   /* the whole drawn back of the wave */ zHi: 2.4 * H * Wd + 6 }; }
   // how tall the wave stands at distance s from the break: tallest at the peak, fading down the line (scaled by swell length)
-  amp(s) { const L = this.cond.len || 1; return s > 0 ? 1 - 0.55 * smooth(8 * L, 70 * L, s) : 1 - 0.15 * smooth(0, 40 * L, -s); }
+  amp(s) { const L = this.cond.len || 1, H = this.cond.H; if (s > 0) return 1 - 0.55 * smooth(8 * L, 70 * L, s);
+    // behind the break: the whitewater settles as it rolls on, and runs out to nothing at the far end (no cut-off edge)
+    return (1 - 0.15 * smooth(0, 40 * L, -s)) * (1 - 0.45 * smooth(7 * H, 16 * H, -s)) * smooth(BEHIND * L, 0.72 * BEHIND * L, -s); }
   // which blend of keyframes a slice at distance s ahead of the break has, plus how broken it is
   // (cached by 10 cm: the particles ask for it hundreds of times a second, and building the blend each time made garbage
   // that stuttered phones)
@@ -128,7 +130,7 @@ export class Wave {
     else if (s >= 0) P = lerpK(K.peak, K.shoulder, smooth(0, 15 * L, s));
     else if (s >= -1.1 * H) { curl = smooth(0, 1.1 * H, -s); P = lerpK(K.peak, barrel, curl); }
     else if (s >= -4.5 * H) { curl = 1; P = barrel; }                      // a long open tube behind the throw
-    else { curl = 1; broken = smooth(4.5 * H, 8 * H, -s); P = lerpK(barrel, K.white, broken); }
+    else { curl = 1; broken = smooth(4.5 * H, 6.5 * H, -s); P = lerpK(barrel, K.white, broken); }   // (the tube caves in fast: a long glassy half-collapse read as a cut-off pipe)
     return { P, curl: curl * hollow, broken };
   }
 
@@ -151,7 +153,8 @@ export class Wave {
       const push = (0.45 + 0.3 * smooth(0, 30 * L, s)) * Fat * (1 - 0.8 * curl) * Math.pow(1 - smooth(0, 0.85, y), 1.3) * below;
       const back = i >= 9 ? 1.6 : i === 8 ? 1 + 0.6 * t : 1;
       out[k++] = (z * back + push) * H * Wd; out[k++] = Math.max(0, y) * H * amp;
-      out[k++] = Math.min(1, broken * 0.9 + spray * curl * 0.5);
+      const cave = s < 0 ? smooth(3.3 * H, 4.8 * H, -s) : 0;   // where the tube caves in: the lip smashing down turns the whole end of it white
+      out[k++] = Math.min(1, broken * 1.15 + spray * curl * 0.5 + cave * 0.9) * smooth(-0.04, 0.22, y);   // (white where it's piled up; none out on the flat water, where it ended in a hard line at the mesh's edge)
       out[k++] = thin * (1 - broken * 0.7);
     }
     out[0] += 9 * H; out[1] = 0; out[2] = 0; out[3] = 0;   // skirt: the first sample runs far out over the flat water so the mesh edge sits well away from the rider
@@ -407,7 +410,7 @@ export function waterMaterial({ wave = false } = {}) {
       varying vec3 vW; varying vec3 vN; varying vec2 vFT; varying float vAge;
       void main(){
         vec3 pp = position;
-        vAge = ${wave ? 'clamp((-position.x / max(uH, .5) - 2.) / 7., 0., 1.)' : '0.'};   // how long ago this bit broke (0 at the curl, 1 far behind)
+        vAge = ${wave ? 'clamp((-position.x / max(uH, .5) - 6.) / 10., 0., 1.)' : '0.'};   // how long ago this bit broke (0 at the curl, 1 far behind)
         ${wave ? 'pp.y += aBrk * uH * (sin(pp.x * 1.7 + pp.z * 2.3 + uTime * 3.) * .09 + sin(pp.x * .63 - uTime * 2.1 + pp.z * .9) * .12 + sin(pp.x * 4.1 + pp.z * 3.3 - uTime * 5.) * .045 + sin(pp.x * 2.9 - pp.z * 5.2 + uTime * 4.2) * .04); pp.z += aBrk * uH * sin(pp.x * 1.3 + uTime * 2.6) * .08;   // a churning, lumpy bore, not a smooth plateau' : ''}
         vec4 w = modelMatrix * vec4(pp,1.);
         vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal);
@@ -632,18 +635,52 @@ export function coast(scene, opt = {}) {
 function makeLandMat() {
   return new THREE.ShaderMaterial({
     uniforms: ENV,
-    vertexShader: `attribute vec3 color; varying vec3 vC; varying vec3 vW; varying vec3 vN;
+    vertexShader: `attribute vec3 color; uniform float uTime; varying vec3 vC; varying vec3 vW; varying vec3 vN;
       void main(){ vC = color; vec4 w = modelMatrix * vec4(position, 1.);
         #ifdef USE_INSTANCING
           w = modelMatrix * instanceMatrix * vec4(position, 1.); vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+          #if defined(FRONDS) || defined(CANOPY)
+            // the land breeze: each tree sways on its own beat (set by where it stands), in slow gusts, blowing out to sea (-z)
+            vec3 org = (modelMatrix * instanceMatrix * vec4(0., 0., 0., 1.)).xyz;
+            float ph = uTime * .8 + org.x * .09 + org.z * .05, gust = .55 + .45 * sin(uTime * .21 + org.x * .012);
+          #endif
+          #ifdef FRONDS
+            float tip = length(position.xz) / 4.2; tip *= tip;   // (a frond bends from where it leaves the crown: the tip moves most)
+            w.z -= tip * (sin(ph) * .32 + .22) * gust; w.x += tip * sin(ph * 1.3 + 1.) * .14 * gust;
+            w.y += tip * sin(uTime * 3.1 + org.x + position.x * 1.7 + position.z * 1.3) * .13;   // (and each one flutters)
+          #endif
+          #ifdef CANOPY
+            float top = clamp(position.y + .4, 0., 1.6) / 1.6, sz = length(instanceMatrix[0].xyz);   // (the tops of the crowns move, the trunks don't)
+            w.z -= top * sz * .09 * (sin(ph) + .5) * gust; w.x += top * sz * .045 * sin(ph * 1.7 + 2.);
+          #endif
         #else
           vN = normalize(mat3(modelMatrix) * normal);
         #endif
         vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform vec3 uSun, uSunCol, uHor, uZen, uFog; uniform float uSunVis, uFlash; varying vec3 vC; varying vec3 vW; varying vec3 vN;
+    fragmentShader: `uniform vec3 uSun, uSunCol, uHor, uZen, uFog; uniform float uSunVis, uFlash, uTime; varying vec3 vC; varying vec3 vW; varying vec3 vN;
       void main(){
         float l = .45 + .55 * max(dot(normalize(vN), uSun), 0.) * uSunVis;
         vec3 c = vC * (l * mix(vec3(1.), uSunCol, .5) + uZen * .25) + uFlash * .4;
+        #ifdef SHORE
+          // the shore break: every few seconds a sheet of broken water runs up the sand with a line of foam on its edge,
+          // then drains back leaving the sand dark and shiny; the sets arrive a little later along the beach
+          float cyc = uTime / 8.5 + sin(vW.x * .011) * .4 + vW.x * .0012, p = fract(cyc);
+          float amp = .45 + .3 * fract(sin(floor(cyc) * 12.9898) * 43758.5453);   // (some run up further than others)
+          float run = p < .22 ? sin(p / .22 * 1.5708) : 1. - smoothstep(.22, 1., p);   // (rushes up, drains back slowly)
+          float edge = run * amp, y = vW.y + .03 * sin(vW.x * .7 + vW.z * .3);
+          vec2 lq = vec2(vW.x * .8, vW.z * .8 - uTime * .2); vec2 li = floor(lq), lf = fract(lq); lf = lf * lf * (3. - 2. * lf);
+          #define SH(v) fract(sin(dot(v, vec2(127.1, 311.7))) * 43758.5453)
+          float lace = mix(mix(SH(li), SH(li + vec2(1, 0)), lf.x), mix(SH(li + vec2(0, 1)), SH(li + vec2(1, 1)), lf.x), lf.y);
+          float wet = smoothstep(amp + .25, amp - .05, y);
+          c *= 1. - .5 * wet;                                                     // wet sand: darker where the water reaches
+          float under = smoothstep(edge + .01, edge - .03, y);
+          c = mix(c, vec3(.1, .26, .28) * (.55 + .45 * uSunVis) + uZen * .08, under * (.15 + .4 * smoothstep(edge - .04, edge - .4, y)));   // a thin sheet of sea over it, deeper further down
+          vec3 V = normalize(cameraPosition - vW); c += uSunCol * pow(max(dot(reflect(-V, vec3(0., 1., 0.)), uSun), 0.), 60.) * (under * .8 + .2 * wet) * uSunVis;   // (wet shine)
+          float line = smoothstep(.045, 0., abs(y - edge - .01)) * (p < .22 ? 1. : .35 + .65 * (1. - p));   // the foam edge
+          float trail = under * smoothstep(edge - .16, edge - .01, y) * (p < .22 ? .8 : .4 * (1. - p));    // lace just behind it
+          float foam = max(line * smoothstep(.2, .55, lace), trail * smoothstep(.5, .8, lace));
+          c = mix(c, vec3(.93, .95, .94) * (.55 + .45 * l), clamp(foam, 0., .92));
+        #endif
         float d = length(cameraPosition - vW);
         c = mix(c, mix(mix(uFog, uHor, .5), uZen, .25), .15 + .62 * smoothstep(120., 900., d));   // aerial haze: distant land turns blue-grey
         gl_FragColor = vec4(c, 1.);
@@ -671,7 +708,8 @@ function buildCoast(scene, O, mat) {
       c[i * 3] = (O.sandWet[0] + O.sandDry[0] * dry) * k; c[i * 3 + 1] = (O.sandWet[1] + O.sandDry[1] * dry) * k; c[i * 3 + 2] = (O.sandWet[2] + O.sandDry[2] * dry) * k;
     }
     sd.setAttribute('color', new THREE.BufferAttribute(c, 3)); sd.computeVertexNormals(); }
-  group.add(at(new THREE.Mesh(sd, mat), 0, 0, 205));
+  const sandMat = mat.clone(); sandMat.uniforms = ENV; sandMat.defines = { SHORE: 1 };   // (the shore break is drawn on the sand)
+  group.add(at(new THREE.Mesh(sd, sandMat), 0, 0, 205));
   // land behind, gently rolling
   const land = new THREE.PlaneGeometry(1800, 500, 90, 20); land.rotateX(-Math.PI / 2);
   { const p = land.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, 2 + 4 * Math.sin(x * 0.013) * Math.cos(z * 0.02) + (z + 250) * 0.03); } land.computeVertexNormals(); }
@@ -691,7 +729,7 @@ function buildCoast(scene, O, mat) {
       c[i * 3] = 0.09 * k; c[i * 3 + 1] = 0.2 * k; c[i * 3 + 2] = 0.08 * k;
     }
     blob.setAttribute('color', new THREE.BufferAttribute(c, 3)); blob.computeVertexNormals(); }
-  const NJ = Math.round(620 * O.jungle), jungle = new THREE.InstancedMesh(blob, mat, NJ); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+  const NJ = Math.round(620 * O.jungle), jungle = new THREE.InstancedMesh(blob, Object.assign(mat.clone(), { uniforms: ENV, defines: { CANOPY: 1 } }), NJ); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
   const NT = 90, jTrunk = new THREE.InstancedMesh(colorize(new THREE.CylinderGeometry(0.25, 0.45, 1, 6).translate(0, 0.5, 0), [0.22, 0.18, 0.14], 0.2), mat, NT);
   let n = 0, nt = 0;
   const crown = (x, y, z, r) => { if (n >= NJ) return; q.setFromEuler(new THREE.Euler(0, Math.random() * 6.3, 0));
@@ -722,7 +760,7 @@ function buildCoast(scene, O, mat) {
     const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); fg.setIndex(idx); fg.computeVertexNormals();
     for (let k = 0; k < 9; k++) frondParts.push(fg.clone().rotateZ((k % 3 - 1) * 0.18).rotateY(k * Math.PI * 2 / 9 + (k % 2) * 0.2));
   }
-  const leafMat = mat.clone(); leafMat.uniforms = ENV; leafMat.side = THREE.DoubleSide;   // (share the live weather uniforms: a clone would freeze them)   // fronds are thin blades, seen from above and below
+  const leafMat = mat.clone(); leafMat.uniforms = ENV; leafMat.side = THREE.DoubleSide; leafMat.defines = { FRONDS: 1 };   // (share the live weather uniforms: a clone would freeze them)   // fronds are thin blades, seen from above and below
   const crownG = colorize(mergeGeos(frondParts), [0.15, 0.3, 0.1], 0.25);
   const trunks = new THREE.InstancedMesh(trunkG, mat, N), crowns = new THREE.InstancedMesh(crownG, leafMat, N);
   for (let i = 0; i < N; i++) {

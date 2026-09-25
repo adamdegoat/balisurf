@@ -26,3 +26,13 @@ export async function villaAt(i, { seat, x, z, eye, yaw, pitch = -0.05, settle =
   const t0 = performance.now(); while (performance.now() - t0 < settle) { put(); await new Promise((r) => requestAnimationFrame(r)); }
   put(); const r = await cap(i, 1.6); w.sit = null; g.paused = false; return r;
 }
+// the wave seen from outside: a camera placed relative to its break (dx along the reef, dz toward the beach, h up),
+// looking at a point (ax, ay, az) in the same frame
+export async function waveView(i, mode, { dx = -12, dz = 30, h = 8, ax = -25, ay = 1, az = 0, t = 3 } = {}) {
+  const g = G(); await moment(mode, 'sit', 7); g.paused = true;
+  let w = null; for (let k = 0; k < 60 * 30 && !(w = g.waves.find((q) => q.peelX > 20 && q.peelX < 120)); k++) g.step(1 / 60, 1 / 60, false);
+  for (let k = 0; k < 60 * t; k++) g.step(1 / 60, 1 / 60, false);
+  w = g.waves.find((q) => q.peelX > 0) || g.waves[0];
+  const c = g.camera; c.position.set(w.peelX + dx, h, w.zW + dz); c.lookAt(w.peelX + ax, ay, w.zW + az); c.updateMatrixWorld();
+  return (await cap(i)) + ` peel ${w.peelX.toFixed(0)} H ${w.cond.H}`;
+}

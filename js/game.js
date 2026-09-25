@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=115';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=120';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=118';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
 import { SurfAudio } from './audio.js?v=16';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=26';
-import { villa, VILLA } from './villa.js?v=69';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=31';
+import { villa, VILLA } from './villa.js?v=74';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=4';
 import { crew } from './crew.js?v=8';
@@ -329,6 +329,7 @@ function spawnRider() {
   if (surfer) endWipe(); rig.visible = true; board.visible = true; for (const b of birds) b.visible = !isRanch();
   pumpC = 0; pumpA = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
   rider = rider || new Rider();
+  track.clear();
   rider.backside = physStance() === 'regular';   // (on a left regular is backside; at a mirrored right, goofy)
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
   rider.reset(2 + Math.random() * 4, -7 - Math.random() * 3, -Math.PI / 2);
@@ -813,7 +814,7 @@ const railSpray = (() => {
   gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   cx.fillStyle = gr; cx.fillRect(0, 0, 32, 32);
   const tex = new THREE.CanvasTexture(cv);
-  const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf6f1ea, size: 0.055, map: tex, transparent: true, opacity: 0.75, depthWrite: false }));
+  const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf6f1ea, size: 0.075, map: tex, transparent: true, opacity: 0.85, depthWrite: false }));
   pts.frustumCulled = false; scene.add(pts);
   let next = 0, acc = 0, fanAcc = 0;
   const emit = (p, v, n, spread) => {
@@ -831,7 +832,7 @@ const railSpray = (() => {
       // how much water the rail is throwing: carving load, skidding, and a little at speed
       if (rider && rider.standing) {
         const load = Math.min(1.3, Math.abs(rider.turn) * rider.v / 14 + rider.skid * 1.2 + (rider.state === 'POP' ? 0.5 : 0) + Math.max(0, rider.v - 6) * 0.03);
-        acc += load * 900 * dt;
+        acc += load * 1150 * dt;
         if (acc >= 1) {
           const n = Math.floor(acc); acc -= n;
           // from the tail, thrown out of the face and back
@@ -911,6 +912,55 @@ const wake = (() => {
         if ((i + frame) % 2 === 0) pos[i * 3 + 1] = heightAt(waves, pos[i * 3], pos[i * 3 + 2]) + 0.03;
       }
       g.attributes.position.needsUpdate = true; g.attributes.aA.needsUpdate = true; g.attributes.aS.needsUpdate = true;
+    },
+  };
+})();
+
+// ---------- your track: the churned white line your board leaves on the water. Laid at the fins every 30 cm as a ribbon
+// that lies on the surface, spreads and breaks up as it ages, drifts in with the wave, and fades over five seconds (a
+// cut or a slide leaves a wider scar). One mesh of a few hundred points: nothing for a phone
+const TRACK_N = 220;
+const track = (() => {
+  const P = Array.from({ length: TRACK_N }, () => ({ x: 0, y: -99, z: 0, t: -99, w: 0, dx: 1, dz: 0 }));
+  const pos = new Float32Array(TRACK_N * 2 * 3), uv = new Float32Array(TRACK_N * 2 * 2), al = new Float32Array(TRACK_N * 2), idx = [];
+  for (let i = 0; i < TRACK_N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setAttribute('aA', new THREE.BufferAttribute(al, 1)); g.setIndex(idx);
+  const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    vertexShader: 'attribute float aA; varying float vA; varying vec2 vUv; void main(){ vA = aA; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+    fragmentShader: `varying float vA; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+      void main(){ float across = abs(vUv.y - .5) * 2.;                               // 0 on the line, 1 at its edges
+        float lace = n(vec2(vUv.x * 1.3, vUv.y * 5.)) * .6 + n(vec2(vUv.x * 4.1, vUv.y * 11.)) * .4;
+        float a = vA * smoothstep(1., .25, across) * smoothstep(.28 + (1. - vA) * .35, .62, lace);   // breaking up into lace as it ages
+        if (a < .01) discard; gl_FragColor = vec4(vec3(.95, .96, .95), a * .85); }` });
+  const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; scene.add(mesh);
+  let head = -1, last = null, dist = 0, T0 = 0, frame = 0;
+  return {
+    clear() { for (const q of P) q.t = -99; head = -1; last = null; },
+    update(dt) {
+      T0 += dt; frame++;
+      const on = rider && rider.standing && (rider.state === 'RIDE' || rider.state === 'POP') && rider.y > -1;
+      if (on) {
+        const fx = rig.position.x - pose.fwd.x * 0.75, fz = rig.position.z - pose.fwd.z * 0.75;
+        if (!last) { last = { x: fx, z: fz }; dist = 1; }
+        dist += Math.hypot(fx - last.x, fz - last.z);
+        if (dist >= 0.3) { dist = 0; head = (head + 1) % TRACK_N; const q = P[head], L = Math.hypot(fx - last.x, fz - last.z) || 1;
+          Object.assign(q, { x: fx, z: fz, y: heightAt(waves, fx, fz) + 0.04, t: T0, w: 0.36 + Math.min(0.55, Math.abs(rider.turn) * 0.2 + rider.skid * 0.6 + (rider.slide || 0) * 0.5), dx: (fx - last.x) / L, dz: (fz - last.z) / L });
+          last.x = fx; last.z = fz; }
+      } else last = null;
+      // build the ribbon from the newest point back (a gap where a ride ended: two rides never join up)
+      for (let k = 0; k < TRACK_N; k++) {
+        const i = (head - k + TRACK_N) % TRACK_N, q = P[i], age = T0 - q.t, o = k * 2;
+        let a = q.t < 0 ? 0 : Math.max(0, 1 - age / 5);
+        if (a > 0) { q.z += 1.1 * dt; if ((i + frame) % 3 === 0) q.y = heightAt(waves, q.x, q.z) + 0.04; }
+        const nq = P[(i - 1 + TRACK_N) % TRACK_N]; if (k < TRACK_N - 1 && (nq.t < 0 || Math.abs(q.t - nq.t) > 0.6)) a = 0;   // (the next point back belongs to another ride)
+        if (k === 0) a *= 0.2;
+        const w = q.w * (1 + age * 0.5), sx = -q.dz * w, sz = q.dx * w;
+        pos[o * 3] = q.x + sx; pos[o * 3 + 1] = q.y; pos[o * 3 + 2] = q.z + sz; pos[o * 3 + 3] = q.x - sx; pos[o * 3 + 4] = q.y; pos[o * 3 + 5] = q.z - sz;
+        uv[o * 2] = q.t * 3; uv[o * 2 + 1] = 0; uv[o * 2 + 2] = q.t * 3; uv[o * 2 + 3] = 1; al[o] = al[o + 1] = a;
+      }
+      g.attributes.position.needsUpdate = true; g.attributes.uv.needsUpdate = true; g.attributes.aA.needsUpdate = true;
     },
   };
 })();
@@ -1279,14 +1329,14 @@ let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = nu
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
 const _wl = new THREE.Vector3();
 const vSitB = document.getElementById('vSit');
-// music: ten reggae tracks, shuffled. From the villa radio (quieter and duller the further you are from it), under the
+// music: ten reggae tracks and ten chill surf tracks, shuffled. From the villa radio (quieter and duller the further you are from it), under the
 // menu, loud at the Surf Ranch like a pool speaker; never on the reef
 const SONGS = { 'we-dub-a-long-way': ['We Dub A Long Way', 'Brotheration Records'], 'reggae-dub-1': ['Reggae Dub One', 'Pietix'], 'dreaming-of-reggae': ['Dreaming of Reggae', 'Figaro Reggae Music'],
   'roots-reggae': ['Roots Reggae', 'MrBAS Music Labs'], 'roots-guitare-tamtam': ['Roots Guitare Tamtam', 'Acoostika Beat'], 'feel-the-vibe': ['Feel the Vibe in Here', 'Figaro Reggae Music'],
   'barefoot-in-the-breeze': ['Barefoot in the Breeze', 'OpenMindAudio'], 'island-vibes': ['Reggae Island Vibes', 'Alex Morgan'], 'everyday-is-a-holiday': ['Everyday Is a Holiday', 'Brotheration Records'],
-  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'], 'relaxing-island-reggae': ['Relaxing Island Reggae', 'Brotheration Records'], 'locust-chill-rasta': ['Locust', 'Brotheration Records'],
-  'sinim-riddim': ['Sinim Riddim', 'Brotheration Records'], 'dub-you-dub': ['Dub You Dub', 'Rupert Asher'], 'africa-departure-dub': ['Africa Departure Dub', 'Brotheration Records'], 'su-su-riddim': ['Su-Su Riddim', 'Brotheration Records'],
-  'happy-feet': ['Happy Feet', 'Brotheration Records'], 'happy-upbeat-marley': ['Happy Upbeat Marley Reggae', 'Brotheration Records'], 'love-is-gonna-stay': ['Love Is Gonna Stay', 'Rupert Asher'], 'we-come-a-long-way': ['We Come A Long Way', 'Vernon Maytone'] };
+  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'], 'cloud-surf': ['Cloud Surf', 'OctoSound'], 'clouds-surfing': ['Clouds Surfing', 'PremiumMusicOdyssey'],
+  'guitar-duel-in-paradise': ['Guitar Duel in Paradise', 'Guitar Obsession'], 'morning-garden': ['Morning Garden', 'Folk Acoustic'], 'soft-waves': ['Soft Waves', 'Andrewbali'], 'summer-surf': ['Summer Surf', 'AudioCoffee'],
+  'sunset-surfboard-dreams': ['Sunset Surfboard Dreams', 'BackgroundMusicMaster'], 'surf-breeze': ['Surf Breeze', 'snoozybeats'], 'the-last-call': ['The Last Call', 'PremiumMusicOdyssey'], 'wellenreiter': ['Wellenreiter', 'conner'] };
 const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] || ['Island radio', ''];
 // the Now playing box: tap it and back / next buttons open under the song (they fold away again after a few seconds)
 { const box = document.getElementById('vSong'); let shut = null; const later = () => { clearTimeout(shut); shut = setTimeout(() => box.classList.remove('open'), 6000); };
@@ -1296,7 +1346,7 @@ const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] 
     b.addEventListener('click', go); b.addEventListener('touchstart', go, { passive: false }); } }
 audio.onTrack = (src) => { const [t, a] = songOf(src); if (villaW) villaW.setSong(t, a); document.getElementById('vSongT').textContent = t; document.getElementById('vSongA').textContent = a ? 'by ' + a : ''; };
 const MUSIC = ['we-dub-a-long-way', 'reggae-dub-1', 'dreaming-of-reggae', 'roots-reggae', 'roots-guitare-tamtam', 'feel-the-vibe', 'barefoot-in-the-breeze', 'island-vibes', 'everyday-is-a-holiday', 'stand-firm-like-a-tree',
-  'relaxing-island-reggae', 'locust-chill-rasta', 'sinim-riddim', 'dub-you-dub', 'africa-departure-dub', 'su-su-riddim', 'happy-feet', 'happy-upbeat-marley', 'love-is-gonna-stay', 'we-come-a-long-way'].map((n) => 'music/' + n + '.mp3');
+  'cloud-surf', 'clouds-surfing', 'guitar-duel-in-paradise', 'morning-garden', 'soft-waves', 'summer-surf', 'sunset-surfboard-dreams', 'surf-breeze', 'the-last-call', 'wellenreiter'].map((n) => 'music/' + n + '.mp3');
 let radioOn = true;   // (the villa's speakers, all together)
 let earOn = false; try { earOn = localStorage.getItem('sumbasurf.ear') === '1'; } catch (e) {}   // an earpiece while you surf: your call, remembered
 { const eb = document.getElementById('ear'), show = () => { eb.classList.toggle('on', earOn); eb.querySelector('span').textContent = earOn ? 'EARPIECE ON' : 'EARPIECE'; };
@@ -1572,7 +1622,7 @@ function tick(dt) {
     if (mixer) { mixer.update(dt); paddleArms(dt); dtArm = dt; surfStance(); }
     updateLeash(); updateScenery(dt); updateLocals(dt);
     railSpray.update(dt);
-    wake.update(dt);
+    wake.update(dt); track.update(dt);
     updateCamera(dt);
     updateHUD(dt); lensTick(dt);
     // sound follows what's happening: the breaking wave is loud near the curl
@@ -1608,7 +1658,7 @@ function tick(dt) {
     // behind the start screen: a slow drift along a peeling wave
     if (!tick.demo) { tick.demo = new Wave(scene, CONDITIONS.medium); tick.demo.peelX = -30; }
     tick.demo.update(dt);
-    railSpray.update(dt); wake.update(dt);   // (let any spray left from the last ride fall and fade)
+    railSpray.update(dt); wake.update(dt); track.update(dt);   // (let any spray left from the last ride fall and fade)
     rig.visible = false; leash.visible = false; jukung.visible = false; for (const L of locals) L.grp.visible = false; for (const b of birds) b.visible = false;   // the menu shows only the sea
     // ...seen from inside the barrel: tucked in under the lip, looking out down the line through the opening
     const w = tick.demo, H = w.cond.H, px = w.peelX, sw = Math.sin(T * 0.6);
