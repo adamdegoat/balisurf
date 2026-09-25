@@ -13,14 +13,22 @@ async function chatId(env) {
   return id;
 }
 export async function onRequestPost({ request, env }) {
-  if (!env.TG_TOKEN) return new Response(null, { status: 204 });
-  const chat = await chatId(env); if (!chat) return new Response(null, { status: 204 });
-  let b = {}; try { b = await request.json(); } catch (e) {}
+  const none = new Response(null, { status: 204 });
+  if (!env.TG_TOKEN) return none;
+  // only the game's own page can ping, and each connection at most once every 10 minutes (so nobody can flood the chat)
+  const from = request.headers.get('origin') || ''; if (!/^https:\/\/([a-z0-9-]+\.)?sumbasurf\.pages\.dev$/.test(from)) return none;
+  const ip = request.headers.get('cf-connecting-ip') || '';
+  if (env.KV && ip) { if (await env.KV.get('ip:' + ip)) return none; await env.KV.put('ip:' + ip, '1', { expirationTtl: 600 }); }
+  let b = {}; try { b = (await request.json()) || {}; } catch (e) {}
+  if (typeof b !== 'object') b = {};
+  try {
+  const chat = await chatId(env); if (!chat) return none;
   const where = SPOTS.includes(b.where) ? b.where : 'the menu';   // (only known names get through: nobody can send you their own text)
   let country = request.cf && request.cf.country || '';
   try { country = new Intl.DisplayNames(['en'], { type: 'region' }).of(country) || country; } catch (e) {}
   const ua = request.headers.get('user-agent') || '', dev = /iPad|Tablet/i.test(ua) ? 'tablet' : /iPhone|Android|Mobile/i.test(ua) ? 'phone' : 'computer';
   const text = `${b.who === 'claude' ? 'Claude testing: ' : ''}${b.kind === 'back' ? 'A player is back' : 'New player'} at ${where}${country ? ` (${country}, ${dev})` : ` (${dev})`}`;
   await fetch(`https://api.telegram.org/bot${env.TG_TOKEN}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) });
-  return new Response(null, { status: 204 });
+  } catch (e) {}   // (Telegram down: the game never notices)
+  return none;
 }

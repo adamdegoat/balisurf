@@ -152,7 +152,7 @@ export function friends(scene, src, spots) {
       const { B, S, root } = F; F.cool -= dt;
       if (F.posed && F.talkT <= 0 && Math.hypot(you.x - F.head.x, you.z - F.head.z) > 26) continue;   // (far off: keep the last pose, skip the work)
       F.posed = true;
-      for (const m of F.skins) m.skeleton.pose(); root.updateMatrixWorld(true);
+      F.skins[0].skeleton.pose(); root.updateMatrixWorld(true);   // (every mesh of a friend shares the one set of bones: posing it once does them all)
       // you nearby, on their level? then they look round at you, and say something
       B.head.getWorldPosition(F.head);
       const dx = you.x - F.head.x, dz = you.z - F.head.z, dist = Math.hypot(dx, dz), near = dist < 3.6 && Math.abs(you.y - F.head.y) < 1.6;
@@ -220,8 +220,8 @@ export function friends(scene, src, spots) {
         reach(B.upperarm_l, B.lowerarm_l, B.hand_l, TA.copy(cb.position).addScaledVector(rt, -0.1), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, -0.6));
         if (talk) reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(chest).addScaledVector(fw, 0.38).addScaledVector(rt, 0.2).addScaledVector(up, -0.05 + 0.07 * Math.sin(t * 4.5)), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, 0.7));
         else reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(hip).addScaledVector(rt, 0.24).addScaledVector(up, 0.08).addScaledVector(fw, -0.02), pole.copy(fw).multiplyScalar(-1).addScaledVector(rt, 0.5));
+        F.props.whistle.position.copy(chest).addScaledVector(fw, 0.13).addScaledVector(up, -0.02);   // (on its cord at his chest: before W is reused for the head)
         B.head.getWorldPosition(W); const cap = F.props.cap; cap.position.copy(W).addScaledVector(up, 0.1); cap.lookAt(TA.copy(cap.position).add(look));
-        F.props.whistle.position.copy(chest).addScaledVector(fw, 0.13).addScaledVector(up, -0.02);
       } else if (S.pose === 'sofa') {
         // on the sofa with the map open on his lap; looks up and points out to sea when he talks
         root.position.y = S.y + S.seat + 0.02 - (hip.y - root.position.y); root.updateMatrixWorld(true);
@@ -263,6 +263,6 @@ export function friends(scene, src, spots) {
         bub.style.opacity = on ? '' : '0'; bub.style.transform = `translate(${(V.x * 0.5 + 0.5) * innerWidth}px, ${(-V.y * 0.5 + 0.5) * innerHeight}px) translate(-50%, -100%)`; }
     }
   }
-  const hide = () => { bub.classList.remove('on'); talking = null; };
-  return { group, list, update, hide, say: (id, text) => { const F = list.find((f) => f.id === id); if (F) say(F, text); } };
+  const hide = () => { bub.classList.remove('on'); if (talking) talking.talkT = 0; talking = null; };   // (and the talker stops mid-gesture too)
+  return { group, list, update, hide, say: (id, text) => { const F = list.find((f) => f.id === id); if (F && !(talking && talking !== F && talking.talkT > 0)) say(F, text); } };   // (a shout never cuts someone off mid-line)
 }

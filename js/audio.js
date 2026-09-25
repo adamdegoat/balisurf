@@ -58,8 +58,9 @@ export class SurfAudio {
   // called every frame with what's going on
   update(o) {
     if (!this.ok) return;
-    this.set(this.sea.g.gain, 0.22 + 0.1 * o.H);
-    this.set(this.roar.g.gain, Math.min(0.9, (0.08 + 0.55 * o.near) * (0.6 + 0.2 * o.H)));
+    const sm = o.seaMul ?? 1;   // (the villa: the sea softer from up the cliff, and softer still through the walls)
+    this.set(this.sea.g.gain, (0.22 + 0.1 * o.H) * sm);
+    this.set(this.roar.g.gain, Math.min(0.9, (0.08 + 0.55 * o.near) * (0.6 + 0.2 * o.H)) * sm);
     this.set(this.roar.fl.frequency, 200 + 160 * o.near);
     this.set(this.tube.g.gain, o.barrel ? 0.9 : 0, 0.25);
     const lean = Math.abs(o.lean || 0), slide = Math.min(1, o.slide || 0), sp = Math.min(1, o.v / 10);

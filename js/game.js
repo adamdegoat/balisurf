@@ -5,12 +5,12 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=128';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=118';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
-import { SurfAudio } from './audio.js?v=16';
+import { SurfAudio } from './audio.js?v=17';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=39';
 import { villa, VILLA } from './villa.js?v=90';
 import { makeBirds } from './birds.js?v=1';
-import { friends } from './friends.js?v=14';
+import { friends } from './friends.js?v=15';
 import { crew } from './crew.js?v=8';
 import { wildlife } from './wildlife.js?v=11';
 
@@ -982,7 +982,7 @@ const track = (() => {
         if (a > 0) { q.z += 1.1 * dt; if ((i + frame) % 3 === 0) q.y = heightAt(waves, q.x, q.z) + 0.04; }
         const nq = P[(i - 1 + TRACK_N) % TRACK_N]; if (k < TRACK_N - 1 && (nq.t < 0 || Math.abs(q.t - nq.t) > 0.6)) a = 0;   // (the next point back belongs to another ride)
         if (k === 0) a *= 0.2;
-        const w = q.w * (1 + age * 0.5), sx = -q.dz * w, sz = q.dx * w;
+        const w = a > 0 ? q.w * (1 + Math.min(age, 5) * 0.5) : 0, sx = -q.dz * w, sz = q.dx * w;   // (faded out: no width, so nothing is drawn there at all)
         pos[o * 3] = q.x + sx; pos[o * 3 + 1] = q.y; pos[o * 3 + 2] = q.z + sz; pos[o * 3 + 3] = q.x - sx; pos[o * 3 + 4] = q.y; pos[o * 3 + 5] = q.z - sz;
         uv[o * 2] = q.t * 3; uv[o * 2 + 1] = 0; uv[o * 2 + 2] = q.t * 3; uv[o * 2 + 3] = 1; al[o] = al[o + 1] = a;
       }
@@ -1355,15 +1355,14 @@ let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = nu
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
 const _wl = new THREE.Vector3();
 const vSitB = document.getElementById('vSit');
-// music: 21 reggae tracks (every OpenMindAudio reggae song among them), shuffled. From the villa radio (quieter and duller the further you are from it), under the
+// music: all 13 of OpenMindAudio's reggae songs, shuffled. From the villa radio (quieter and duller the further you are from it), under the
 // menu, loud at the Surf Ranch like a pool speaker; never on the reef
-const SONGS = { 'we-dub-a-long-way': ['We Dub A Long Way', 'Brotheration Records'], 'reggae-dub-1': ['Reggae Dub One', 'Pietix'], 'dreaming-of-reggae': ['Dreaming of Reggae', 'Figaro Reggae Music'],
-  'roots-reggae': ['Roots Reggae', 'MrBAS Music Labs'], 'roots-guitare-tamtam': ['Roots Guitare Tamtam', 'Acoostika Beat'], 'feel-the-vibe': ['Feel the Vibe in Here', 'Figaro Reggae Music'],
-  'barefoot-in-the-breeze': ['Barefoot in the Breeze', 'OpenMindAudio'], 'island-vibes': ['Reggae Island Vibes', 'Alex Morgan'], 'everyday-is-a-holiday': ['Everyday Is a Holiday', 'Brotheration Records'],
-  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'], 'streets-still-singing': ['Streets Still Singing', 'OpenMindAudio'], 'drop-of-peace': ['Drop of Peace', 'OpenMindAudio'],
-  'generational-stew': ['Generational Stew', 'OpenMindAudio'], 'shelter-in-the-storm': ['Shelter in the Storm', 'OpenMindAudio'], 'yardman-sing-along': ['Yardman Sing Along', 'OpenMindAudio'], 'rise-again': ['Rise Again', 'OpenMindAudio'],
-  'moonbeam-rendezvous': ['Moonbeam Rendezvous', 'OpenMindAudio'], 'dawn-still-knows-your-name': ['Dawn Still Knows Your Name', 'OpenMindAudio'], 'breathe-and-hold-on': ['Breathe and Hold On', 'OpenMindAudio'],
-  'after-the-rain-we-feast': ['After the Rain We Feast', 'OpenMindAudio'], 'slow-kisses-warm-nights': ['Slow Kisses, Warm Nights', 'OpenMindAudio'] };
+const SONGS = {
+  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'], 'barefoot-in-the-breeze': ['Barefoot in the Breeze', 'OpenMindAudio'], 'streets-still-singing': ['Streets Still Singing', 'OpenMindAudio'],
+  'drop-of-peace': ['Drop of Peace', 'OpenMindAudio'], 'generational-stew': ['Generational Stew', 'OpenMindAudio'], 'shelter-in-the-storm': ['Shelter in the Storm', 'OpenMindAudio'],
+  'yardman-sing-along': ['Yardman Sing Along', 'OpenMindAudio'], 'rise-again': ['Rise Again', 'OpenMindAudio'], 'moonbeam-rendezvous': ['Moonbeam Rendezvous', 'OpenMindAudio'],
+  'dawn-still-knows-your-name': ['Dawn Still Knows Your Name', 'OpenMindAudio'], 'breathe-and-hold-on': ['Breathe and Hold On', 'OpenMindAudio'], 'after-the-rain-we-feast': ['After the Rain We Feast', 'OpenMindAudio'],
+  'slow-kisses-warm-nights': ['Slow Kisses, Warm Nights', 'OpenMindAudio'] };
 const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] || ['Island radio', ''];
 // the Now playing box: tap it and back / next buttons open under the song (they fold away again after a few seconds)
 { const box = document.getElementById('vSong'); let shut = null; const later = () => { clearTimeout(shut); shut = setTimeout(() => box.classList.remove('open'), 6000); };
@@ -1372,9 +1371,7 @@ const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] 
   for (const [id, f] of [['mPrev', () => audio.musicPrev()], ['mNext', () => audio.musicNext()]]) { const b = document.getElementById(id), go = (e) => { e.preventDefault(); e.stopPropagation(); f(); audio.musicKick(); later(); };
     b.addEventListener('click', go); b.addEventListener('touchstart', go, { passive: false }); } }
 audio.onTrack = (src) => { const [t, a] = songOf(src); if (villaW) villaW.setSong(t, a); document.getElementById('vSongT').textContent = t; document.getElementById('vSongA').textContent = a ? 'by ' + a : ''; };
-const MUSIC = ['we-dub-a-long-way', 'reggae-dub-1', 'dreaming-of-reggae', 'roots-reggae', 'roots-guitare-tamtam', 'feel-the-vibe', 'barefoot-in-the-breeze', 'island-vibes', 'everyday-is-a-holiday', 'stand-firm-like-a-tree',
-  'streets-still-singing', 'drop-of-peace', 'generational-stew', 'shelter-in-the-storm', 'yardman-sing-along', 'rise-again', 'moonbeam-rendezvous', 'dawn-still-knows-your-name', 'breathe-and-hold-on',
-  'after-the-rain-we-feast', 'slow-kisses-warm-nights'].map((n) => 'music/' + n + '.mp3');
+const MUSIC = ['stand-firm-like-a-tree', 'barefoot-in-the-breeze', 'streets-still-singing', 'drop-of-peace', 'generational-stew', 'shelter-in-the-storm', 'yardman-sing-along', 'rise-again', 'moonbeam-rendezvous', 'dawn-still-knows-your-name', 'breathe-and-hold-on', 'after-the-rain-we-feast', 'slow-kisses-warm-nights'].map((n) => 'music/' + n + '.mp3');
 let radioOn = true;   // (the villa's speakers, all together)
 let earOn = false; try { earOn = localStorage.getItem('sumbasurf.ear') === '1'; } catch (e) {}   // an earpiece while you surf: your call, remembered
 { const eb = document.getElementById('ear'), show = () => { eb.classList.toggle('on', earOn); eb.querySelector('span').textContent = earOn ? 'EARPIECE ON' : 'EARPIECE'; };
@@ -1387,8 +1384,8 @@ function musicTick() {
   if (mode === 'villa' || isRanch()) audio.gameLevel(1);
   if (mode === 'villa' && walker && villaW) { if (!radioOn) { document.getElementById('vSong').classList.remove('on'); return audio.musicLevel(0); } let d = 1e9; for (const R of villaW.sounds.speakers) d = Math.min(d, Math.hypot(R[0] - walker.x, R[1] - walker.z, R[2] - (walker.y - 1.2)));   // (the nearest speaker)
     document.getElementById('vSong').classList.toggle('on', !drone.on && ((d < 7 && !walker.watch) || document.getElementById('vSong').classList.contains('open')));   // (kept up while you're using its buttons)
-    const k = Math.max(0, 1 - d / 22);
-    return audio.musicLevel(0.04 + 0.5 * k * k, 1800 + 12000 * k * k); }
+    const k = Math.max(0, 1 - d / 24), k15 = Math.pow(k, 1.5);   // (carries through the house: a clear tune by the speakers, still there in the board room)
+    return audio.musicLevel(0.09 + 0.75 * k15, 1800 + 12000 * k15); }
   if (isRanch()) return audio.musicLevel(0.38, 14000);
   if (earOn) { audio.musicLevel(0.34, 20000); audio.gameLevel(0.3); }   // earpiece in: the music in your ears, the sea turned down behind it
   else { audio.musicLevel(0); audio.gameLevel(1); }   // (otherwise on the reef, only the sea: the sound of the wave is how you surf)
@@ -1429,8 +1426,8 @@ function warmAll() {
 { const idle = (f) => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 2500 }) : setTimeout(f, 60));
   ready.then(() => setTimeout(() => idle(() => { if (mode === 'villa' || starting) return; prepVilla(); if (villaW) { villaW.group.visible = false; crewW.group.visible = false; wildW.group.visible = false; } idle(() => { if (!starting) warmAll(); }); }), 1800)).catch(() => {}); }
 function startVilla() {
-  hello('the villa');
   if (starting) return;
+  hello('the villa');
   mode = 'villa'; setWeather('villa'); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
   prepVilla();
   setSpot('villa');
@@ -1593,7 +1590,10 @@ function villaTick(dt) {
   }
   { const tgt = W_.watch ? W_.watchH : W_.zoom ? 8 : 50; if (Math.abs(hfovHalf - tgt) > 0.05) setHfov(hfovHalf + (tgt - hfovHalf) * Math.min(1, dt * 6)); else if (hfovHalf !== tgt) setHfov(tgt); }   // binoculars: about 5x
   sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
-  audio.update({ H: 4.5, near: 0.15, barrel: false, riding: false, v: 0, turn: 0, lean: 0, slide: 0, stall: false, storm: 0, rain: 0, underwater: false, dt, chop: 1 });
+  // the sea from up here: a steady wash below the cliff, softer indoors (the walls between you and it)
+  { const lx = 88 - W_.x, lz = W_.z - 31, inside = lx > VILLA.x0 && lx < VILLA.x1 && lz > VILLA.z0 && lz < VILLA.z1 && W_.y < VILLA.Y + 3;
+    W_.seaK = (W_.seaK ?? 0.62) + ((inside ? 0.34 : 0.62) - (W_.seaK ?? 0.62)) * Math.min(1, dt * 2);
+    audio.update({ H: 3, near: 0.1, seaMul: W_.seaK, barrel: false, riding: false, v: 0, turn: 0, lean: 0, slide: 0, stall: false, storm: 0, rain: 0, underwater: false, dt, chop: 1 }); }
   villaBody(dt, moving);
 }
 // your own body in the villa, as a head-mounted camera sees it: standing tall, legs stepping and arms swinging opposite
