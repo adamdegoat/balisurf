@@ -704,8 +704,10 @@ export function coast(scene) {
   { const tx = -190, ty = cliffTop(tx), tz = 226, stone = [0.62, 0.56, 0.48], thatch = [0.14, 0.11, 0.09];
     group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(9, 3, 9), stone, 0.1), mat), tx, ty + 1.5, tz));
     group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(3, 3.5, 3), stone, 0.1), mat), tx, ty + 4.7, tz));
-    for (let k = 0; k < 7; k++) { const rr = 5.2 - k * 0.55, roof = new THREE.ConeGeometry(rr, 1.3, 4); roof.rotateY(Math.PI / 4);
-      group.add(at(new THREE.Mesh(colorize(roof, thatch, 0.1), mat), tx, ty + 7 + k * 1.55, tz)); }
+    for (let k = 0; k < 3; k++) { const rr = 4.2 - k * 1.1, roof = new THREE.ConeGeometry(rr, 1.5, 4); roof.rotateY(Math.PI / 4);
+      group.add(at(new THREE.Mesh(colorize(roof, thatch, 0.1), mat), tx, ty + 7 + k * 1.9, tz)); }
+    // the split gate (candi bentar) at the cliff edge: two stepped stone halves with a gap between them
+    for (const gs of [-1, 1]) for (let k = 0; k < 4; k++) group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(2.4 - k * 0.45, 1.8, 2.4 - k * 0.45), stone, 0.1), mat), tx - 13 + gs * 1.8, ty + 0.9 + k * 1.8, tz - 2));
     group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(22, 1.6, 0.8), stone, 0.1), mat), tx + 12, ty + 0.8, tz - 3)); }
   // Mount Agung, far inland: a broad volcanic cone
   // (placed inside the 900 m sky dome at the same apparent size it would have 30 km away)

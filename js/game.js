@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=81';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=82';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=92';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
@@ -56,6 +56,11 @@ const jukung = (() => {
     for (const xs of [-1.4, 1.4]) { const arm = m(new THREE.CylinderGeometry(0.05, 0.05, 2.7, 4), 0x5b4a36); arm.rotation.x = Math.PI / 2; arm.position.set(xs, 0.35, zs * 1.3); g.add(arm); }
   }
   const mast = m(new THREE.CylinderGeometry(0.04, 0.05, 3, 4), 0x5b4a36); mast.position.y = 1.7; g.add(mast);
+  // a furled-back triangular sail in bright bands, and a painted eye on each side of the prow
+  { const sg = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0.5, 0, 0, 3.4, 0, 2.4, 0.7, 0]), 3)); sg.computeVertexNormals();
+    const sail = new THREE.Mesh(sg, new THREE.MeshLambertMaterial({ color: 0xe84a2e, side: THREE.DoubleSide })); sail.position.set(0.05, 0.4, 0); g.add(sail);
+    const band = m(new THREE.BoxGeometry(0.02, 0.35, 1.9), 0xf3c522); band.position.set(0.9, 1.5, 0); band.rotation.set(0, Math.PI / 2, -0.62); g.add(band);
+    for (const zs of [-1, 1]) { const eye = m(new THREE.CircleGeometry(0.13, 10), 0xfafafa); eye.position.set(3.35, 0.28, zs * 0.3); eye.rotation.y = zs * Math.PI / 2 + (zs < 0 ? Math.PI : 0); g.add(eye); } }
   g.position.set(-70, 0, -120); g.rotation.y = 0.35; g.scale.setScalar(1.2); scene.add(g); return g;   // anchored out the back, where the swells pass unbroken: you see it while you wait
 })();
 const birds = (() => {
@@ -75,7 +80,7 @@ function updateLocals(dt) {
     const y = heightAt(waves, L.x, L.z);
     L.grp.position.set(L.x + Math.sin(T * 0.2 + L.ph) * 0.6, y + 0.05, L.z);
     L.grp.quaternion.setFromEuler(_le.set(-0.25 + Math.sin(T * 1.3 + L.ph) * 0.05, Math.PI + Math.sin(T * 0.15 + L.ph) * 0.3, Math.sin(T * 1.1 + L.ph) * 0.04));   // facing the sets, nose up (sitting on the tail)
-    L.mx.update(dt);
+    L.mx.update(dt); straddleFor(L.B, L.grp, L.body);   // legs down either side of the board, hands on the deck
   }
 }
 function updateScenery(dt) {
@@ -138,7 +143,7 @@ const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', 
     body.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
     body.position.set(0, -0.36, -0.25); grp.add(brd, body); scene.add(grp);
     const mx = new THREE.AnimationMixer(body); if (sit) { const a = mx.clipAction(sit); a.play(); a.time = ph; }
-    locals.push({ grp, mx, x, z, ph });
+    locals.push({ grp, mx, x, z, ph, body, B: {} });
   }
   res();
 }, undefined, (err) => { ui.load.textContent = 'Could not load the surfer. Check your connection and reload.'; rej(err); }));
@@ -793,27 +798,29 @@ function swingBone(bone, end, sgn, ang) {
 }
 let stanceW = 0, pumpC = 0, sitting = false, sitTilt = 0;
 const rigQ = new THREE.Quaternion();
-function straddle() {
+function straddle() { straddleFor(bones, rig, surfer); }
+// the same straddle for any sitting body B (bone map) on its board frame R (the locals use it too)
+function straddleFor(B, R, body) {
   // the sit clip is a chair pose (thighs forward); on a board the thighs go down either side and the shins hang in the water
-  if (!bones.thigh_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
-  surfer.updateMatrixWorld(true);
-  rig.getWorldQuaternion(_rq); _bf.set(0, 0, 1).applyQuaternion(_rq); _bs.set(1, 0, 0).applyQuaternion(_rq);
+  if (!B.thigh_l) body.traverse((o) => { if (o.isBone) B[o.name] = o; });
+  body.updateMatrixWorld(true);
+  R.getWorldQuaternion(_rq); _bf.set(0, 0, 1).applyQuaternion(_rq); _bs.set(1, 0, 0).applyQuaternion(_rq);
   for (const [s, sg] of [['l', 1], ['r', -1]]) {
-    const side = bones['thigh_' + s].getWorldPosition(_a).sub(rig.getWorldPosition(_b)).dot(_bs) > 0 ? 1 : -1;
+    const side = B['thigh_' + s].getWorldPosition(_a).sub(R.getWorldPosition(_b)).dot(_bs) > 0 ? 1 : -1;
     // thighs forward and down either side of the rails (your knees are what you see below you), shins hanging
     _t.set(0, -0.3, 0).addScaledVector(_bs, side * 0.32).addScaledVector(_bf, 1.1).normalize();   // thighs along the rails, knees at the rail edge
-    aimBone(bones['thigh_' + s], bones['calf_' + s], _t, 0.9);
+    aimBone(B['thigh_' + s], B['calf_' + s], _t, 0.9);
     _t.set(0, -1, 0).addScaledVector(_bf, 0.1).addScaledVector(_bs, side * 0.1).normalize();
-    aimBone(bones['calf_' + s], bones['foot_' + s], _t, 0.8);
+    aimBone(B['calf_' + s], B['foot_' + s], _t, 0.8);
   }
   // hands resting on the deck in front of you, either side of the stringer: from your own eyes you see your
   // knees, your hands and the board you're sitting on (without them the board looks like it floats away from you)
-  bones.pelvis.getWorldPosition(_sp);
-  const deckY = rig.getWorldPosition(_b).y + 0.07;
+  B.pelvis.getWorldPosition(_sp);
+  const deckY = R.getWorldPosition(_b).y + 0.07;
   for (const s of ['l', 'r']) {
-    const ua = bones['upperarm_' + s], side = ua.getWorldPosition(_a).sub(_b).dot(_bs) > 0 ? 1 : -1;
+    const ua = B['upperarm_' + s], side = ua.getWorldPosition(_a).sub(_b).dot(_bs) > 0 ? 1 : -1;
     _sT.copy(_sp).addScaledVector(_bf, 0.85).addScaledVector(_bs, side * 0.2); _sT.y = deckY;   // hands on the rails just ahead of your knees
-    reachArm(ua, bones['lowerarm_' + s], bones['hand_' + s], _sT, _t.set(0, 0, 0).addScaledVector(_bs, side).addScaledVector(_bf, -0.3), 0.9);
+    reachArm(ua, B['lowerarm_' + s], B['hand_' + s], _sT, _t.set(0, 0, 0).addScaledVector(_bs, side).addScaledVector(_bf, -0.3), 0.9);
   }
 }
 const _sp = new THREE.Vector3(), _sT = new THREE.Vector3();
