@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=84';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=93';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=87';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=98';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 
@@ -171,7 +171,7 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
 
 // ---------- the surf: a reef with the peak at x=0, z=0. Waves come in from the sea one swell period apart.
 // Each wave breaks at the peak when it gets there and peels off to the right. You sit in the lineup and pick your own.
-let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0, scores: [] }, nextBreak = 0, setLeft = 0, setPos = 0;
+let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0, scores: [], barrels: 0 }, nextBreak = 0, setLeft = 0, setPos = 0;
 const REEF = { xEnd: 190, zBeach: 150 }, PROFILES = new Map();   // room for the bigger swells to run (the sand starts ~185 m in)
 function condFor(m) { return m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {
@@ -202,10 +202,13 @@ function updateWaves(dt) {
     let rate = C.peel * (1 + sg * (0.6 * Math.sin(t * 0.55 + w.seed) + 0.4 * Math.sin(t * 1.3 + w.seed * 2.1)));
     // sections: every few seconds a stretch ahead of the curl throws all at once, so the break races ahead for about a
     // second (the curl jumps 1.5-2 wave heights down the line), then eases while it recovers. You race it, or pull in.
-    if (t > 0 && C.name !== 'Easy') {
+    if (t > 0) {
       if (w.secT === undefined) w.secT = 3 + Math.random() * 4;
-      if (w.secK === undefined || w.secK <= 0) { w.secT -= dt; if (w.secT <= 0) { w.secK = 1.1; w.secT = 5 + Math.random() * 5; if (w.spitT !== undefined) w.spitT = 0.25; } }
-      else { w.secK -= dt; const ph = 1 - w.secK / 1.1, A = C.name === 'Medium' ? 1.3 : C.name === 'Hard' ? 1.5 : 2.1; rate *= ph < 0.75 ? 1 + A * Math.sin(Math.PI * ph / 0.75) : 0.6; }
+      // set up in the pocket (standing, just ahead of the curl, low on the face, not racing away) and the next section
+      // throws right over you soon: real barrels mostly come to you like this, rather than after a long wait
+      if (rider && rider.wave === w && rider.state === 'RIDE' && !rider.inBarrel && rider.s > 0.2 * C.H && rider.s < 2.2 * C.H && rider.y < 0.6 * C.H && !(w.secK > 0) && w.secT > 0.6) { w.secT = 0.6; w.secSoft = true; }   // (a softer section: it covers you rather than racing past)
+      if (w.secK === undefined || w.secK <= 0) { w.secT -= dt; if (w.secT <= 0) { w.secK = 1.1; w.secA = w.secSoft ? 0.35 : 1; w.secSoft = false; w.secT = 5 + Math.random() * 5; if (w.spitT !== undefined) w.spitT = 0.25; } }
+      else { w.secK -= dt; const ph = 1 - w.secK / 1.1, A = C.name === 'Easy' ? 1.1 : C.name === 'Medium' ? 1.3 : C.name === 'Hard' ? 1.5 : 2.1; rate *= ph < 0.75 ? 1 + A * (w.secA || 1) * Math.sin(Math.PI * ph / 0.75) : 1 - 0.4 * (w.secA || 1); }
     }
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
     w.peelRate = rate;   // the physics uses the peel speed right now (not the average), so the wave's push matches what you see
@@ -337,7 +340,7 @@ async function start(m) {
   try { await ready; } catch (e) { starting = false; return; }
   ui.load.textContent = '';
   ui.start.style.display = 'none'; document.body.classList.add('playing');
-  session = { waves: 0, total: 0, best: 0, scores: [] };
+  session = { waves: 0, total: 0, best: 0, scores: [], barrels: 0 };
   setLeft = 0; setPos = 0;
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15;   // a calm start: time to look around and find the set
   updateWaves(0); spawnRider();
@@ -382,8 +385,8 @@ function povCamera(dt) {
   const dh = Math.atan2(Math.sin(rider.th - travel), Math.cos(rider.th - travel));
   let yawT = travel + dh * (standing ? 0.7 : 0.8);
   // in the barrel look down the tube toward the exit (along the line), not out through the open side at the beach
-  tubeLook += ((rider.inBarrel && standing ? 1 : 0) - tubeLook) * Math.min(1, dt * 3);
-  if (tubeLook > 0.01) yawT += Math.atan2(Math.sin(-0.15 - yawT), Math.cos(-0.15 - yawT)) * 0.65 * tubeLook;   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
+  tubeLook += ((rider.inBarrel && standing ? 1 : 0) - tubeLook) * Math.min(1, dt * 5);
+  if (tubeLook > 0.01) yawT += Math.atan2(Math.sin(-0.15 - yawT), Math.cos(-0.15 - yawT)) * 0.9 * tubeLook;   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
   // popping up, the head drives forward over the board (the eye ahead of the shoulders, which stay out of view), easing back as you rise
   const popFwd = st === 'POP' ? 0.15 : st === 'RIDE' ? 0.15 * Math.max(0, 1 - rider.stateT / 0.8) : 0;
   const sK = standing ? (st === 'POP' ? Math.min(1, rider.stateT / 0.25) : 1) : 0;   // (lying -> standing eye point blended over the start of the pop, not switched in a frame)
@@ -995,6 +998,8 @@ function updateHUD(dt) {
   else if (st === 'RIDE' && rider.inBarrel && (rider.foamT || 0) > 0.4) hint = 'Too deep! PUMP and steer up the face to get out';
   else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Slide your thumb left and right to carve, like a steering wheel' : rider.stateT < 5 ? 'Hold PUMP for speed, STALL to brake and let the barrel catch you' : 'Let go and the board just glides straight';
   else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: keep turning right till you face the breaking wave, then turn back';
+  // the curl is right behind you: tell the player how to get covered (a barrel comes to whoever sets up for it)
+  if (st === 'RIDE' && !hint && !rider.inBarrel && rider.wave && rider.s > 0 && rider.s < 2.2 * rider.wave.cond.H && rider.wave.cond.hollow > 0.5 && session.barrels < 2) hint = rider.y < 0.6 * rider.wave.cond.H ? 'Barrel coming! Stay low and hold STALL' : 'The lip is pitching behind you: drop low to get barreled';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
   // the callout: BARREL while you're in it, or the move you just landed
   const call = st !== 'RIDE' ? '' : rider.inBarrel ? 'BARREL' : rider.trick ? rider.trick.name : '';
@@ -1006,7 +1011,7 @@ function updateHUD(dt) {
     const r = rider.ride;
     const prevBest = bestFor(mode), newBest = r.t > 0 && r.score > prevBest && prevBest > 0;
     if (r.t > 0 && r.score > prevBest) saveBest(mode, r.score);
-    if (r.t > 0 || st === 'WIPE') { session.waves++; session.total += r.score; session.best = Math.max(session.best, r.score); session.scores.push(r.score); }
+    if (r.t > 0 || st === 'WIPE') { session.waves++; session.total += r.score; session.best = Math.max(session.best, r.score); session.scores.push(r.score); if (r.barrel > 0.5) session.barrels++; }
     // heat total, like a contest: your best two waves count
     const two = [...session.scores].sort((a, b) => b - a).slice(0, 2), heat = two.reduce((a, b) => a + b, 0);
     ui.msgT.textContent = rider.why;

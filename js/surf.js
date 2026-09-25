@@ -197,6 +197,15 @@ export class Rider {
       // stalling: weight on the tail and the trailing hand dragged in the face, a strong brake (you let the wave catch you)
       this.stalling = inp.stall || 0;
       if (this.stalling) { const sd = P.stallDrag * this.stalling * Math.min(1, Math.abs(along) / 2) * Math.sign(along); ax -= sd * dx; az -= sd * dz; }
+      // inside the tube the wave's own flow helps you hold your spot (the tiny foot adjustments a real surfer makes that a
+      // thumb can't): a small friendly tube holds you in well, a heavy one hardly at all. Pump or stall still override it.
+      if (this.inBarrel && w && C.tube) {
+        // the speed that keeps you at your spot in the tube: the curl's speed along the reef (a little more if you've
+        // drifted deep, less if you're near the mouth) combined with the wave's own run at the beach
+        const want = (-1.3 * C.H - this.s) * 0.6, vT = Math.hypot((w.peelRate || C.peel) + want, cw);
+        const sp = Math.hypot(this.vx, this.vz) || 1, push = Math.max(-5, Math.min(5, 2 * C.tube * (vT - sp)));
+        ax += push * this.vx / sp; az += push * this.vz / sp;   // along your line, like the push of a pump (a sideways shove, the fins would just cancel)
+      }
       // the harder you lay the rail over, the more the tail lets go: a little slide in an easy turn, a full drift at full thumb
       // the harder you lay it over, the more the tail lets go, but not at once: in a hard turn the tail holds for a moment,
       // then slides out; straighten up and it eases back in (a drift that builds, not a switch)
@@ -245,7 +254,7 @@ export class Rider {
     this.onFace = onFront && slope > 0.22 && this.hz < -0.1;          // downhill is toward the beach
     // the lip lands on anyone under it
     const fgL = C.forgive || 1;   // (a forgiving wave: the lip's landing zone is narrower and it throws you a little later)
-    if (lipDown && s < -0.3 * H && s > -4.5 * H && Math.abs(zl - sl.lipZ) < (0.45 + 0.1 * H) * fgL && y < 0.55 * H) return this.wipe('The lip landed on you');
+    if (lipDown && s < -0.3 * H && s > -4.5 * H && zl > sl.lipZ - 0.3 && zl - sl.lipZ < (0.45 + 0.1 * H) * fgL && y < 0.55 * H) return this.wipe('The lip landed on you');   // (only where it lands and just outside: tucked inside under it you're in the barrel, not under the hammer)
     if (!this.standing) {
       // caught inside: the whitewater rolls you toward the beach (you hang on to the board)
       if (sl.broken > 0.35 && onFront && y > 0.1 * H) this.washed = true;

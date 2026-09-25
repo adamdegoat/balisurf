@@ -17,11 +17,12 @@ export const CONDITIONS = {
   //   len   = how long the swell is along the reef (shoulder, tube and whitewater all stretch with it)
   //   width = how wide the wave is front to back (fat and soft vs narrow and steep)
   //   fat   = how gently the lower face ramps out in front (soft ramp vs near-vertical wall)
+  //   tube  = how much the barrel helps you hold your line inside it (a small friendly tube is easy to stay in; a heavy one is all on you)
   // speed from shallow-water physics c ~ sqrt(g(d+H/2)) with d = H/0.78, ~4.2*sqrt(H)
-  easy:    { H: 1.8,  speed: 5.6,  peel: 2.7,  angle: 62, period: 12, hollow: 0.3,  forgive: 0.6, len: 1,   width: 1.3,  fat: 1.5, name: 'Easy' },     // fat, soft, crumbly
-  medium:  { H: 3.0,  speed: 7.2,  peel: 3.8,  angle: 62, period: 14, hollow: 0.75, forgive: 1,   len: 1.1, width: 1.1,  fat: 1.1, name: 'Medium' },   // clean peeling walls
-  hard:    { H: 4.5,  speed: 8.9,  peel: 6.2,  angle: 55, period: 16, hollow: 1.0,  forgive: 0.85,   len: 1.5, width: 0.95, fat: 0.8, name: 'Hard' },     // steep, hollow, heavy
-  extreme: { H: 15,   speed: 13.5, peel: 11,   angle: 45, period: 20, hollow: 1.0,  forgive: 1,   len: 4,   width: 1.25, fat: 1.1, name: 'Extreme' },  // a 15 m mountain of water; a giant reef wave breaks in shallower water (H/d ~1.1) and runs ~13-14 m/s, like Jaws
+  easy:    { H: 2.0,  speed: 5.6,  peel: 2.7,  angle: 62, period: 12, hollow: 0.72, forgive: 0.6, len: 1,   width: 1.3,  fat: 1.3, tube: 1.3,  name: 'Easy' },     // small, slow, friendly: a round little tube you can crouch in
+  medium:  { H: 3.0,  speed: 7.2,  peel: 3.8,  angle: 62, period: 14, hollow: 0.8,  forgive: 1,   len: 1.1, width: 1.1,  fat: 1.1, tube: 1.0,  name: 'Medium' },   // clean peeling walls
+  hard:    { H: 4.5,  speed: 8.9,  peel: 6.2,  angle: 55, period: 16, hollow: 1.0,  forgive: 0.85,   len: 1.5, width: 0.95, fat: 0.8, tube: 0.45, name: 'Hard' },     // steep, hollow, heavy
+  extreme: { H: 15,   speed: 13.5, peel: 11,   angle: 45, period: 20, hollow: 1.0,  forgive: 1,   len: 4,   width: 1.25, fat: 1.1, tube: 0.3,  name: 'Extreme' },  // a 15 m mountain of water; a giant reef wave breaks in shallower water (H/d ~1.1) and runs ~13-14 m/s, like Jaws
 };
 
 // Cross-section keyframes (units of wave height H; z toward the beach, y up). Every keyframe lists the SAME 12
