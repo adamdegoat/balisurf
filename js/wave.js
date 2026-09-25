@@ -944,7 +944,7 @@ function seascape(group, O, mat) {
     boat.position.set(0, -0.4, -560); boat.frustumCulled = false; group.add(boat); }
   const m = new THREE.Mesh(mergeGeometries(parts.map((p0) => { const q = p0.index ? p0.toNonIndexed() : p0; for (const k of Object.keys(q.attributes)) if (!['position', 'normal', 'color'].includes(k)) q.deleteAttribute(k); return q; })), mat);
   group.add(m);
-  const fm = new THREE.Mesh(mergeGeometries(foam), foamMat()); fm.renderOrder = 2; fm.frustumCulled = false; group.add(fm);
+  if (foam.length) { const fm = new THREE.Mesh(mergeGeometries(foam), foamMat()); fm.renderOrder = 2; fm.frustumCulled = false; group.add(fm); }   // (none at Gunung Laut: no stacks there)
 }
 function mergeGeos(list) {
   // join simple non-indexed-compatible geometries into one (positions + normals)

@@ -24,15 +24,21 @@ function draw(fov, body, crop) {
     if (body) { a.position.copy(c.position); a.quaternion.copy(c.quaternion); a.aspect = fw / H; a.fov = body; a.setViewOffset(fw, H, x0, 0, W, H); a.updateProjectionMatrix(); } }
   else { c.aspect = W / H; c.fov = fov; c.updateProjectionMatrix(); if (body) { a.position.copy(c.position); a.quaternion.copy(c.quaternion); a.aspect = W / H; a.fov = typeof body === 'number' ? body : fov; a.updateProjectionMatrix(); } }
   c.updateMatrixWorld();
+  const mir = g.mirror; if (mir) { g.flipProj(c); if (body) g.flipProj(a); }   // (a right-hand spot: the picture flipped, as the game draws it)
   r.autoClear = false; r.clear(); r.render(g.scene, c);
   if (body) { r.clearDepth(); r.render(g.scene, a); }
   r.autoClear = true;
+  if (mir) { g.flipProj(c); if (body) g.flipProj(a); }
   if (crop !== undefined) { c.clearViewOffset(); a.clearViewOffset(); }
   cx.drawImage(r.domElement, 0, 0, W, H);   // (copied in the same task, before the browser clears the drawing buffer)
 }
+// frames are encoded on the spot and sent in batches (one request per dozen frames: a hidden tab throttles every
+// awaited callback to about one a second, which made one-request-per-frame crawl)
+let batch = [], batchShot = null;
+async function flush() { if (!batch.length) return; const b = batch; batch = []; await fetch(`http://127.0.0.1:8799/b?shot=${batchShot}`, { method: 'POST', body: JSON.stringify(b) }); }
 async function grab(shot, i) {
-  const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.92));
-  await fetch(`http://127.0.0.1:8799/f?shot=${shot}&i=${i}`, { method: 'POST', body: blob });
+  if (batchShot !== shot) { await flush(); batchShot = shot; }
+  batch.push([i, cv.toDataURL('image/jpeg', 0.92)]); if (batch.length >= 12) await flush();
 }
 const seeded = (seed) => { let st = seed >>> 0; return () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296); };
 
@@ -64,6 +70,9 @@ function rideTake(mode, seed, n, boardT = 'short') {
     done() { const g = G(); if (boardT !== 'short') g.useBoard('short'); Math.random = rnd0; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; } };
 }
 T.ride = rideTake('medium', 3, 600);
+// the reel: the other breaks, each in the game's own first-person view
+T.rHard = rideTake('hard', 11, 300); T.rHiu = rideTake('hiu', 5, 250); T.rKanan = rideTake('kanan', 8, 360); T.rEasy = rideTake('easy', 4, 380, 'fish');
+T.rHard.keep = [[120, 300]]; T.rHiu.keep = [[125, 250]]; T.rKanan.keep = [[150, 360]]; T.rEasy.keep = [[170, 380]];
 T.giant = rideTake('extreme', 7, 300, 'gun'); T.giant.keep = [[110, 300]];
 // the villa and the view from it: free cameras in the villa's world (it keeps living: waves, crew, whale, dolphins)
 const V = { ok: false };
@@ -112,6 +121,7 @@ function walkTake(n, start, pts, pitch0, pitch1, cropX = 0.5) { let wi = 0; retu
     const want = Math.atan2(tz - w.z, tx - w.x); w.yaw += Math.atan2(Math.sin(want - w.yaw), Math.cos(want - w.yaw)) * 0.08; w.pitch = pitch0 + (pitch1 - pitch0) * k;
     w.mz = wi >= pts.length - 1 && Math.hypot(tx - w.x, tz - w.z) < 0.7 ? 0 : 0.85; g.step(1 / FPS, 1 / FPS, false); return { fov: 61.6, body: 61.6, crop: cropX }; } }; }   // (the villa's own camera and lens, a tall slice of it)
 T.walk = walkTake(165, [-97.2, 36.6], [[-94.5, 36.5], [-91, 35.8], [-87.5, 36.6], [-85.9, 37.4], [-83.6, 38.2]], 0.12, -0.08);
+T.coach = walkTake(120, [-91.2, 35.2], [[-89.2, 36.4], [-88.4, 36.9]], 0.02, -0.02, 0.5);   // (in the living room, up to Coach Rudi at the open doors)
 T.rack = walkTake(85, [-95.6, 38.3], [[-97.9, 38.3], [-98.1, 38.3]], -0.02, -0.14, 0.58);
 // wildlife: set the moment up, then film it low from the water
 T.dolphins = { n: 100, init() { villaInit(); const g = G(), P = g.wild.pod; P.on = false; P.next = 0; g.step(1 / 30, 1 / 30, false); g.step(4, 1 / 30, false); },
@@ -127,6 +137,7 @@ export async function run(name, budget = 36000) {
   if (!S[name]) { S[name] = { i: 0 }; t.init(); }
   const s = S[name], t0 = performance.now();
   while (s.i < t.n && performance.now() - t0 < budget) { const o = t.frame(s.i); if (!t.keep || t.keep.some(([a, b]) => s.i >= a && s.i <= b)) { draw(o.fov, o.body, o.crop); await grab(name, s.i); } s.i++; }   // (keep: only the stretches the edit uses get drawn)
+  await flush();
   if (s.i >= t.n) { if (t.done) t.done(); return `${name}: done (${t.n} frames)`; }
   return `${name}: ${s.i}/${t.n}`;
 }
