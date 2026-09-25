@@ -90,6 +90,11 @@
   #vPanel { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: none; min-width: 300px; max-width: 80vw;
     background: rgba(8,14,20,.72); border: 1.5px solid rgba(253,247,238,.5); border-radius: 4px; padding: 12px 14px; text-align: left; }
   #vPanel.on { display: block; } #vPanel b { display: block; font-size: 16px; } #vPanel span { display: block; color: var(--dim); margin: 4px 0 10px; font-size: 12px; }
+  #vPanel { max-width: min(560px, 86vw); }
+  #vStats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; margin: 0 0 10px; }
+  #vStats div { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--dim); }
+  #vStats i { display: flex; gap: 3px; } #vStats b { width: 14px; height: 6px; border-radius: 2px; background: #9fe3d6; display: inline-block; } #vStats b.o { background: rgba(255,255,255,.18); }
+  #vStats .best { grid-column: 1 / -1; color: var(--ink); font-size: 12px; margin-top: 2px; }
   #vPanel button { font: 700 12px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .08em; color: #0d1720; background: #ffcf8a; border: 0; border-radius: 3px; padding: 9px 14px; touch-action: none; }
   #vPanel button.mine { background: rgba(255,255,255,.2); color: var(--ink); }
   #vTip { position: fixed; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 6; color: var(--ink); font-size: 13px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.6); pointer-events: none; text-align: center; white-space: nowrap; transition: opacity .6s; }
@@ -125,7 +130,7 @@
 <div class="vui" id="vMove"></div><div class="vui" id="vLook"></div><div class="vui" id="vStick"><b></b></div>
 <button class="vui" id="vGo">GO SURFING</button>
 <div class="vui" id="vTip">Left thumb to walk, right thumb to look around. Tap a board in the surf room.</div>
-<div class="vui" id="vPanel"><b id="vName"></b><span id="vDesc"></span><button id="vTake">TAKE THIS BOARD</button></div>
+<div class="vui" id="vPanel"><b id="vName"></b><span id="vDesc"></span><div id="vStats"></div><button id="vTake">TAKE THIS BOARD</button></div>
 <div class="ctl" id="ranch"><span>ORDER A WAVE</span><button data-wave="easy">MELLOW<small>3.5 m, slow</small></button><button data-wave="medium">BARREL<small>4.5 m, hollow</small></button><button data-wave="hard">HEAVY<small>6 m, fast</small></button></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
@@ -138,15 +143,15 @@
     <button data-mode="extreme">Gunung Laut<small><i>Experts only</i>15 m in a storm</small></button>
     <button data-mode="ranch">Surf Ranch<small><i>Wave pool</i>Order the wave you want</small></button>
   </div>
-  <div class="villarow"><button id="goVilla">Your villa<small><i>Home base</i>Walk around, pick your board, watch the surf from the cliff</small></button><span id="curBoard">Board: Shortboard</span></div>
+  <div class="villarow"><button id="goVilla">Your villa<small><i>Home base</i>Walk around, pick your board, watch the surf from the cliff</small></button></div>
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1447</small>
+<small id="build">build 260925-1449</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=443"></script>
+<script type="module" src="js/game.js?v=445"></script>
 </body>
 </html>

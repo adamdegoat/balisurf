@@ -4,11 +4,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=95';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
-import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=8';
+import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
 import { SurfAudio } from './audio.js?v=8';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=9';
-import { villa, VILLA } from './villa.js?v=5';
+import { villa, VILLA } from './villa.js?v=7';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -58,17 +58,18 @@ let board = makeBoard(); rig.add(board);
 // under you, so the nose reaches out ahead of your feet as on the real thing
 let boardType = 'short', boardTail = -0.9;
 const BOARD_INFO = {
-  short: ['Shortboard', "6'2\". Sharp, fast turns, snaps and airs. Paddles slower, so you catch waves later."],
-  fish: ['Fish', "5'8\", wide twin fin. Fast and loose, easy to paddle, holds speed on soft waves; slides out on heavy ones."],
-  long: ['Longboard', "9'2\". Catches everything early, very stable, glides forever. Slow wide turns, no airs."],
-  gun: ['Gun', "9'6\" big-wave board. Paddles into giant waves early, rock steady at speed. Stiff turns. For Gunung Laut."],
+  // name, how it feels, what it's best for, and 1-5 ratings (paddling, speed, turning, stability, airs)
+  short: ['Shortboard', "6'2\" thruster. The high-performance board: sharp, snappy turns, snaps off the lip and airs. It's small, so it paddles slowly and you have to take off late and steep, and it loses speed if you stop pumping.", 'Tanjung Uma, Batu Hitam, the Ranch', [2, 4, 5, 2, 5]],
+  fish: ['Fish', "5'8\" wide twin fin with a swallow tail. Loose and fast: planes easily, paddles well and flies down the line on soft or slow waves with little pumping. Turns are skatey and the tail drifts early; on steep, heavy waves it's twitchy and loses grip.", 'Pantai Kuda, the Ranch', [4, 5, 4, 3, 4]],
+  long: ['Longboard', "9'2\" single fin. Smooth and relaxed: paddles fast and catches waves early, rock steady, glides forever. Turns are slow, wide arcs, like steering a boat, and it can't do snaps or airs. Clumsy in steep barrels.", 'Pantai Kuda (learning)', [5, 3, 1, 5, 0]],
+  gun: ['Gun', "9'6\" big-wave board with a pointed nose and pin tail. Paddles into giant waves early, before they get too steep, and holds its line at high speed with lots of grip. Stiff, long turns; sluggish on small waves.", 'Gunung Laut', [5, 4, 2, 5, 2]],
 };
 function useBoard(t) {
   boardType = t; try { localStorage.setItem('sumbasurf.board', t); } catch (e) {}
   rig.remove(board); board.geometry.dispose(); board = makeBoard(t); board.position.z = Math.max(0, (BOARD_LENGTH(t) - 1.88) * 0.33); rig.add(board);
   boardTail = board.position.z - BOARD_LENGTH(t) / 2 + 0.04; setBoard(t);
   for (const b of document.querySelectorAll('[data-board]')) b.classList.toggle('on', b.dataset.board === t);
-  const cb = document.getElementById('curBoard'); if (cb) cb.textContent = 'Board: ' + BOARD_INFO[t][0];
+
 }
 try { const t = localStorage.getItem('sumbasurf.board'); if (t && t !== 'short') setTimeout(() => useBoard(t), 0); } catch (e) {}
 // a jukung (Balinese outrigger fishing boat) anchored in the channel up-reef of the peak, bobbing on the swell, and a
@@ -1186,7 +1187,8 @@ document.getElementById('vGo').addEventListener('touchstart', (e) => { e.prevent
 // the board panel: what it is and how it feels, and a button to take it
 function vPick(type) {
   vPickType = type; vPanel.classList.toggle('on', !!type); if (!type) return;
-  document.getElementById('vName').textContent = BOARD_INFO[type][0]; document.getElementById('vDesc').textContent = BOARD_INFO[type][1];
+  const I = BOARD_INFO[type]; document.getElementById('vName').textContent = I[0]; document.getElementById('vDesc').textContent = I[1];
+  document.getElementById('vStats').innerHTML = ['Paddling', 'Speed', 'Turning', 'Stability', 'Airs'].map((l, k) => `<div><span>${l}</span><i>${'<b></b>'.repeat(I[3][k])}${'<b class="o"></b>'.repeat(5 - I[3][k])}</i></div>`).join('') + `<div class="best">Best at: ${I[2]}</div>`;
   const tk = document.getElementById('vTake'), mine = type === boardType; tk.textContent = mine ? 'YOUR BOARD' : 'TAKE THIS BOARD'; tk.classList.toggle('mine', mine);
 }
 { const tk = document.getElementById('vTake'), take = (e) => { e.preventDefault(); e.stopPropagation(); if (vPickType) { useBoard(vPickType); vPick(vPickType); } };

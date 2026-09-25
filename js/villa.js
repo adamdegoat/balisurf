@@ -4,7 +4,7 @@
 // frangipani garden inside a low stone wall with a split gate. Built in the coast's own frame (same as coast() in
 // wave.js), so it sits on the Tanjung Uma cliff once the group is moved back by that spot's dz.
 import * as THREE from 'three';
-import { makeBoard } from './board.js?v=8';
+import { makeBoard } from './board.js?v=10';
 
 export const VILLA = { x0: -146, x1: -110, z0: 228, z1: 262, Y: 55 };   // the terrace (coast frame) and its floor height
 
