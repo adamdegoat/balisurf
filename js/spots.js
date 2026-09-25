@@ -3,6 +3,7 @@
 // whole coast is pushed back by dz (a longer run to the sand makes a longer ride).
 import * as THREE from 'three';
 import { coast, landMaterial } from './wave.js?v=93';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const SPOTS = {
   // beginners: a wide white-sand bay, low green points, calm turquoise over a pale reef, a village of beach huts
@@ -23,15 +24,28 @@ export function spotGroup(scene, key) {
   if (key === 'easy') coralBay(g);
   if (key === 'hard') blackRock(g);
   if (key === 'extreme') theMountain(g);
+  mergeProps(g);
   return (built[key] = g);
 }
 export const builtSpots = () => Object.values(built);
+
+// a spot's small landmarks (huts, posts, canoes, the lighthouse...) are many little meshes: join them into one so a
+// phone draws them in a single call instead of dozens
+function mergeProps(g) {
+  const parts = g.children.filter((m) => m.isMesh && !m.isInstancedMesh && m.userData.prop);
+  if (parts.length < 2) return;
+  const geos = parts.map((m) => { m.updateMatrix(); const q = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
+    for (const k of Object.keys(q.attributes)) if (!['position', 'normal', 'color'].includes(k)) q.deleteAttribute(k); return q; });
+  const merged = mergeGeometries(geos); if (!merged) return;
+  for (const m of parts) { g.remove(m); m.geometry.dispose(); }
+  g.add(new THREE.Mesh(merged, landMaterial()));
+}
 
 // vertex-coloured helpers on the shared land material
 const tint = (geo, rgb, jit = 0.08) => { const n = geo.attributes.position.count, c = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { const k = 1 + (Math.random() - 0.5) * jit; c[i * 3] = rgb[0] * k; c[i * 3 + 1] = rgb[1] * k; c[i * 3 + 2] = rgb[2] * k; }
   geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); return geo; };
-const put = (g, geo, rgb, x, y, z, jit) => { const m = new THREE.Mesh(tint(geo, rgb, jit), landMaterial()); m.position.set(x, y, z); g.add(m); return m; };
+const put = (g, geo, rgb, x, y, z, jit) => { const m = new THREE.Mesh(tint(geo, rgb, jit), landMaterial()); m.position.set(x, y, z); m.userData.prop = true; g.add(m); return m; };
 
 function coralBay(g) {
   // the bay's two arms: low green headlands running out into the sea either side, sandy at the foot, palms on top
@@ -43,7 +57,7 @@ function coralBay(g) {
       const col = sandy ? [0.8, 0.76, 0.64] : rocky ? [0.42, 0.4, 0.34] : [0.14, 0.26, 0.11];
       c[i * 3] = col[0] * k; c[i * 3 + 1] = col[1] * k; c[i * 3 + 2] = col[2] * k; }
     geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); geo.computeVertexNormals();
-    const m = new THREE.Mesh(geo, landMaterial()); m.position.set(x, -1, z); g.add(m);
+    const m = new THREE.Mesh(geo, landMaterial()); m.position.set(x, -1, z); m.userData.prop = true; g.add(m);
   };
   head(-420, 120, 150, 110, 38); head(-560, 40, 120, 90, 55); head(560, 140, 160, 120, 32); head(700, 60, 130, 90, 46);
 
