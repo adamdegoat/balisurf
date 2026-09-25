@@ -651,12 +651,45 @@ export function coast(scene) {
   for (let i = 0; i < N; i++) {
     const h = 8 + Math.random() * 7, lean = (Math.random() - 0.5) * 0.25 - 0.08, yaw = Math.PI / 2 + (Math.random() - 0.5) * 1.4;   // most lean out toward the sea
     const x = -700 + i * 8.2 + (Math.random() - .5) * 5, z = 222 + Math.random() * 12;
+    if (x < -95) { trunks.setMatrixAt(i, m4.makeScale(0, 0, 0)); crowns.setMatrixAt(i, m4.makeScale(0, 0, 0)); continue; }   // (under the cliffs)
     q.setFromEuler(new THREE.Euler(lean, yaw, 0));
     trunks.setMatrixAt(i, m4.compose(ps.set(x, 1.8, z), q, sc.set(1, h, 1)));
     const top = new THREE.Vector3(0.9, h, 0).applyQuaternion(q).add(ps);   // the top of the curved trunk
     crowns.setMatrixAt(i, m4.compose(top, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.random() * 6, 0)), sc.set(1, 1, 1).multiplyScalar(0.85 + Math.random() * 0.4)));
   }
   group.add(trunks, crowns);
+  // Uluwatu-style limestone cliffs up the reef from the break (toward -x): pale sheer rock streaked darker, wet and
+  // dark at the base, jungle hanging over the top edge; they slope down into the beach near the peak. A temple on the edge.
+  const cliffTop = (x) => (58 + 12 * Math.sin(x * 0.021) + 6 * Math.sin(x * 0.067 + 1.3)) * Math.min(1, Math.max(0, (-x - 70) / 35));
+  const CW = 660, cliff = new THREE.PlaneGeometry(CW, 1, 132, 26);
+  { const p = cliff.attributes.position, c = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i) - 400, v = p.getY(i) + 0.5, top = cliffTop(x), y = v * top;
+      const band = Math.sin(y * 0.55 + Math.sin(x * 0.02) * 2), n = Math.sin(x * 0.31 + y * 0.12) * 1.8 + Math.sin(x * 0.083 - y * 0.05) * 3.4 + Math.sin(x * 1.3 + y * 0.9) * 0.6 + band * 0.9;   // ledges and horizontal strata
+      p.setXYZ(i, x, y, 214 + n + y * 0.12 + (v > 0.97 ? 3 : 0));   // leans back a little; the top lip rolls back into the plateau
+      const streak = 0.7 + 0.3 * Math.pow(0.5 + 0.5 * Math.sin(x * 0.9 + Math.sin(y * 0.3) * 2), 2) + 0.1 * band, wet = Math.min(1, y / 4), green = Math.max(0, (v - 0.84) / 0.16) + Math.max(0, Math.sin(x * 0.13) * Math.sin(y * 0.2) - 0.75) * 2;   // weathered streaks, tufts of green on ledges
+      const crev = 0.6 + 0.4 * Math.min(1, Math.abs(Math.sin(x * 0.47 + Math.sin(y * 0.11) * 1.5)) * 2.2);   // dark vertical cracks and gullies
+      const k = streak * crev * (0.45 + 0.55 * wet) * (0.85 + 0.15 * v), r = 0.7 * k, g = 0.63 * k, b = 0.52 * k;
+      const gr = Math.min(1, green); c[i * 3] = r + (0.16 - r) * gr; c[i * 3 + 1] = g + (0.25 - g) * gr; c[i * 3 + 2] = b + (0.11 - b) * gr;
+    }
+    { const ix = cliff.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; } }   // face the sea
+    cliff.setAttribute('color', new THREE.BufferAttribute(c, 3)); cliff.computeVertexNormals(); }
+  group.add(new THREE.Mesh(cliff, mat));
+  // the plateau on top, and jungle along the edge
+  const plat = new THREE.PlaneGeometry(CW, 140, 66, 6); plat.rotateX(-Math.PI / 2);
+  { const p = plat.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i) - 400, z = p.getZ(i) + 290; p.setXYZ(i, x, cliffTop(x) + 1 + Math.sin(x * 0.05) * Math.cos(z * 0.04) * 2, z); } plat.computeVertexNormals(); }
+  group.add(new THREE.Mesh(colorize(plat, [0.13, 0.21, 0.1], 0.2), mat));
+  const NE = 160, edge = new THREE.InstancedMesh(blob, mat, NE);
+  for (let i = 0; i < NE; i++) { const x = -720 + Math.random() * 640, r = 3 + Math.random() * 4, t = cliffTop(x); if (t < 4) { edge.setMatrixAt(i, m4.makeScale(0, 0, 0)); continue; }
+    edge.setMatrixAt(i, m4.compose(ps.set(x, t + r * 0.3, 219 + Math.random() * 30), q.setFromEuler(new THREE.Euler(0, Math.random() * 6, 0)), sc.set(r * 1.3, r * 0.7, r))); }
+  group.add(edge);
+  // a Balinese temple on the cliff edge: stone base, a meru tower of stacked dark thatch roofs
+  { const tx = -190, ty = cliffTop(tx), tz = 226, stone = [0.62, 0.56, 0.48], thatch = [0.14, 0.11, 0.09];
+    group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(9, 3, 9), stone, 0.1), mat), tx, ty + 1.5, tz));
+    group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(3, 3.5, 3), stone, 0.1), mat), tx, ty + 4.7, tz));
+    for (let k = 0; k < 7; k++) { const rr = 5.2 - k * 0.55, roof = new THREE.ConeGeometry(rr, 1.3, 4); roof.rotateY(Math.PI / 4);
+      group.add(at(new THREE.Mesh(colorize(roof, thatch, 0.1), mat), tx, ty + 7 + k * 1.55, tz)); }
+    group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(22, 1.6, 0.8), stone, 0.1), mat), tx + 12, ty + 0.8, tz - 3)); }
   // Mount Agung, far inland: a broad volcanic cone
   // (placed inside the 900 m sky dome at the same apparent size it would have 30 km away)
   const agung = new THREE.ConeGeometry(470, 165, 40, 6, true); { const p = agung.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const n = Math.sin(p.getX(i) * 0.03) * Math.cos(p.getZ(i) * 0.04) * 10; p.setX(i, p.getX(i) * (1 + n / 470)); p.setY(i, y + (y < 60 ? n * 0.3 : 0)); } agung.computeVertexNormals(); }
