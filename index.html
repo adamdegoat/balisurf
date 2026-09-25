@@ -112,6 +112,8 @@
   #vSit.on { display: block; }
   #vSong { position: fixed; left: max(16px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 46px); z-index: 8; pointer-events: none; opacity: 0; transition: opacity .6s;
     background: rgba(20,10,4,.72); border: 1px solid rgba(255,194,102,.45); border-radius: 3px; padding: 7px 12px; color: #ffc266; font: 12px "Helvetica Neue", Helvetica, Arial, sans-serif; max-width: 60vw; }
+  #vNote { position: fixed; left: 50%; top: max(14px, env(safe-area-inset-top)); transform: translate(-50%, -8px); z-index: 9; pointer-events: none; opacity: 0; transition: opacity .5s, transform .5s; background: rgba(8,14,20,.75); border: 1px solid rgba(159,227,214,.6); color: #9fe3d6; border-radius: 3px; padding: 8px 14px; font: 600 13px "Helvetica Neue", Helvetica, Arial, sans-serif; white-space: nowrap; }
+  #vNote.on { opacity: 1; transform: translate(-50%, 0); }
   #vSong.on { opacity: 1; } #vSong i { display: block; font-style: normal; font-size: 10px; letter-spacing: .12em; color: #b8732a; text-transform: uppercase; } #vSong b { display: block; font-size: 14px; } #vSong span { color: #d99a4a; }
   #vWatch.on { background: #9fe3d6; color: #0d1720; border-color: #9fe3d6; }
   #vZoom.on { background: #ffcf8a; color: #0d1720; border-color: #ffcf8a; }
@@ -161,6 +163,7 @@
 <button class="vui" id="vZoom">ZOOM</button>
 <button class="vui" id="vWatch">WATCH A RIDE</button>
 <button class="vui" id="vSit">SIT</button>
+<div class="vui" id="vNote"></div>
 <div class="vui" id="vSong"><i>Now playing</i><b id="vSongT"></b><span id="vSongA"></span></div>
 <div class="vui" id="vPanel"><b id="vName"></b><span id="vDesc"></span><div id="vStats"></div><button id="vTake">TAKE THIS BOARD</button></div>
 <div class="ctl" id="ranch"><span>ORDER A WAVE</span><button data-wave="easy">MELLOW<small>3.5 m, slow</small></button><button data-wave="medium">BARREL<small>4.5 m, hollow</small></button><button data-wave="hard">HEAVY<small>6 m, fast</small></button></div>
@@ -181,11 +184,11 @@
   <p id="soundTip"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6 6 0 0 1 0 9"/></svg> Tap anywhere for music</p>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1618</small>
+<small id="build">build 260925-1627</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=460"></script>
+<script type="module" src="js/game.js?v=466"></script>
 </body>
 </html>

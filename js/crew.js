@@ -18,6 +18,16 @@ export function crew(scene) {
   const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), mat, N);
   const boards = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 6), new THREE.MeshStandardMaterial({ roughness: 0.4 }), N);
   for (const m of [limbs, heads, boards]) { m.frustumCulled = false; group.add(m); }
+  // spray thrown off the tail in hard turns and wipeouts: soft white points
+  const SPN = 400, spPos = new Float32Array(SPN * 3).fill(-999), spVel = new Float32Array(SPN * 3), spLife = new Float32Array(SPN); let spK = 0;
+  const spGeo = new THREE.BufferGeometry(); spGeo.setAttribute('position', new THREE.BufferAttribute(spPos, 3));
+  { const cv = document.createElement('canvas'); cv.width = cv.height = 32; const c = cv.getContext('2d'), gr = c.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = gr; c.fillRect(0, 0, 32, 32);
+    const pts = new THREE.Points(spGeo, new THREE.PointsMaterial({ size: 0.45, map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, color: 0xf6fafa })); pts.frustumCulled = false; group.add(pts); }
+  const spray = (p, vx, vy, vz, n, spread) => { for (let k = 0; k < n; k++) { spK = (spK + 1) % SPN; spPos[spK * 3] = p.x; spPos[spK * 3 + 1] = p.y + 0.1; spPos[spK * 3 + 2] = p.z;
+    spVel[spK * 3] = vx + (Math.random() - 0.5) * spread; spVel[spK * 3 + 1] = vy * (0.6 + Math.random() * 0.7); spVel[spK * 3 + 2] = vz + (Math.random() - 0.5) * spread; spLife[spK] = 0.7 + Math.random() * 0.6; } };
+  const sprayTick = (dt) => { for (let k = 0; k < SPN; k++) { if (spLife[k] <= 0) continue; spLife[k] -= dt; if (spLife[k] <= 0) { spPos[k * 3 + 1] = -999; continue; } spVel[k * 3 + 1] -= 9.8 * dt;
+    spPos[k * 3] += spVel[k * 3] * dt; spPos[k * 3 + 1] += spVel[k * 3 + 1] * dt; spPos[k * 3 + 2] += spVel[k * 3 + 2] * dt; } spGeo.attributes.position.needsUpdate = true; };
+  const tail = new THREE.Vector3(), rot = new THREE.Quaternion();
   const col = new THREE.Color();
   const S = [];
   for (let i = 0; i < N; i++) {
@@ -43,8 +53,8 @@ export function crew(scene) {
   function pose(i, s) {
     side.crossVectors(s.f, s.u).normalize();
     const [hip, sho, head, fL, fR, kL, kR, hL, hR] = P;
-    if (s.st === 'RIDE') {
-      const c = s.crouch, sg = s.sg;
+    if (s.st === 'RIDE' || s.st === 'WIPE') {
+      const c = s.st === 'WIPE' ? 0.9 : s.crouch, sg = s.sg;
       W(s, 0.3, 0.07, 0, fL); W(s, -0.3, 0.07, 0, fR);
       W(s, 0.02, 0.95 - 0.35 * c, 0.1 * sg * c, hip);
       W(s, 0.12 + 0.1 * c, 1.47 - 0.45 * c, 0.3 * sg * c + 0.05 * sg, sho);
@@ -89,7 +99,7 @@ export function crew(scene) {
       if (w.crewTaken || t < -0.4 || t > 0.4) continue; w.crewTaken = true;
       if (Math.random() < 0.12) continue;   // (now and then nobody's in position)
       let best = null, bd = 1e9; for (const s of S) if (s.st === 'SIT' && s.wait <= 0) { const d = Math.hypot(s.x - w.peelX - 3, s.z + 8); if (d < bd) { bd = d; best = s; } }
-      if (best) { const H = w.cond.H; Object.assign(best, { st: 'RIDE', kick: false, w, rs: 0.5 * H, fy: 0.85, tau: 0, ph: 0, tube: Math.random() < 0.85 ? 4.5 + Math.random() * 4 : 1e9, tubeT: 0, dur: 16 + Math.random() * 8, blend: 0, sBase: (0.9 + Math.random() * 0.5) * H, per: 2.6 + Math.random() * 1.2 }); }
+      if (best) { const H = w.cond.H; Object.assign(best, { st: 'RIDE', kick: false, w, rs: 0.5 * H, fy: 0.85, tau: 0, ph: 0, tube: Math.random() < 0.85 ? 4.5 + Math.random() * 4 : 1e9, tubeT: 0, dur: 16 + Math.random() * 8, blend: 0, sBase: (0.9 + Math.random() * 0.5) * H, per: 2.6 + Math.random() * 1.2, wipeAt: Math.random() < 0.18 ? 4 + Math.random() * 7 : 1e9, cut: 0, hidden: false }); }
     }
     S.forEach((s, i) => {
       prev.copy(s.p);
@@ -102,14 +112,26 @@ export function crew(scene) {
         else if (s.tau > s.tube && s.tubeT >= 3) { s.tubeT = 0; s.tube = Math.random() < 0.6 && s.tau < 9 ? s.tau + 2.5 + Math.random() * 2 : 1e9; }   // (another one further down the line? only while the wave is still coming at the villa, which sees into the barrel from down the line)
         if (sT === undefined && !s.kick && s.tau > s.tube && s.tubeT < 3) {   // stall into the barrel, hold, then race out
           const sl = w.prof.slice(-0.9 * H), open = sl.curl > 0.3 && sl.lipY < 0.62 * H;
-          if (!open && s.tubeT === 0) s.tube = s.tau + 2; else { s.tubeT += dt; sT = s.tubeT < 2.4 ? -0.9 * H : 1.2 * H; fT = 0.3; cT = 1; }
+          if (!open && s.tubeT === 0) s.tube = s.tau + 2; else { s.tubeT += dt; sT = s.tubeT < 2.4 ? -0.9 * H : 1.2 * H; fT = 0.3; cT = 1.4; }   // (tucked low under the lip)
         }
+        if (sT === undefined && !s.kick && s.tau > 3.5 && !(s.cut > 0) && s.fy > 0.55 && Math.random() < dt * 0.14) s.cut = 1.6;   // now and then a cutback: round and back toward the curl
+        if (sT === undefined && s.cut > 0) { s.cut -= dt; sT = s.sBase - 1.7 * H; fT = 0.5; cT = 0.8; }
         if (sT === undefined) { s.ph += dt * 2 * Math.PI / s.per; sT = s.sBase + 0.55 * H * Math.sin(s.ph); fT = 0.42 - 0.3 * Math.cos(s.ph); cT = 0.35 + 0.35 * Math.max(0, Math.cos(s.ph)); }   // carving: bottom turn (compressed), up to the lip, back down
-        s.rs += (sT - s.rs) * Math.min(1, dt * 1.6); s.fy += (fT - s.fy) * Math.min(1, dt * 2.2); s.crouch += (cT - s.crouch) * Math.min(1, dt * 4);
+        s.rs += (sT - s.rs) * Math.min(1, dt * (s.cut > 0 ? 2.6 : 1.6)); s.fy += (fT - s.fy) * Math.min(1, dt * 2.2); s.crouch += (cT - s.crouch) * Math.min(1, dt * 4);
         onFace(w, s.rs, Math.min(s.fy, 0.98), tgt, nrm);
         s.blend = Math.min(1, s.blend + dt * 1.5); s.p.lerp(tgt, s.blend < 1 ? s.blend * 0.3 + 0.1 : 1);
         s.u.copy(nrm).multiplyScalar(0.65).add(v.set(0, 0.35, 0)).normalize();
         if (s.kick && s.fy > 0.97) { s.st = 'PADDLE'; s.wait = 0; }
+        // spray off the tail: in hard turns, and flicking off the top turn
+        if (Math.abs(s.lean) > 0.2 || (s.fy > 0.7 && fT < s.fy)) { tail.copy(s.p).addScaledVector(s.f, -0.8); side.crossVectors(s.f, s.u).normalize();
+          const k = Math.sign(s.lean) || 1; spray(tail, -s.f.x * 2 + side.x * k * 3, 3.5, -s.f.z * 2 + side.z * k * 3, Math.random() < dt * 40 ? 3 : 0, 1.5); }
+        if (s.tau > s.wipeAt && !s.kick && !(s.tubeT > 0 && s.tubeT < 3)) { s.st = 'WIPE'; s.wt = 0; spray(s.p, 0, 5, 0, 30, 3); }   // caught by the lip
+      } else if (s.st === 'WIPE') {   // pitched off: tumbling down the face, under for a few seconds, then up and paddling
+        const w = s.w, H = w.cond.H; s.wt += dt;
+        if (s.wt < 0.9 && waves.includes(w)) { s.rs -= H * 1.2 * dt; s.fy = Math.max(0.05, s.fy - dt * 1.2); onFace(w, s.rs, s.fy, tgt, nrm); s.p.lerp(tgt, 0.5);
+          side.crossVectors(s.f, s.u).normalize(); rot.setFromAxisAngle(side, dt * 7); s.u.applyQuaternion(rot); s.f.applyQuaternion(rot); }
+        else if (s.wt < 3.4) { if (!s.hidden) { s.hidden = true; spray(s.p, 0, 4, 0, 40, 2.5); } s.p.y = -1; }
+        else { s.hidden = false; s.p.y = heightAt(waves, s.p.x, s.p.z); s.u.set(0, 1, 0); s.f.set(0, 0, -1); s.st = 'PADDLE'; spray(s.p, 0, 2, 0, 10, 1); }
       } else if (s.st === 'PADDLE') {   // back out to the lineup (the waves roll under you on the way)
         const dx = s.home[0] - s.p.x, dz = s.home[1] - s.p.z, d = Math.hypot(dx, dz);
         s.p.x += dx / d * 1.8 * dt; s.p.z += dz / d * 1.8 * dt; s.p.y = heightAt(waves, s.p.x, s.p.z) + 0.02; s.arm += dt * 5.5;
@@ -120,12 +142,14 @@ export function crew(scene) {
         s.u.lerp(Y, Math.min(1, dt * 3)).normalize(); s.f.lerp(fwd.set(0.2 * Math.sin(s.bob * 0.2 + i), 0, -1), Math.min(1, dt)).normalize();
       }
       // heading: along the way you're moving (projected flat onto the board's plane); a little roll into the turn
-      if (s.st !== 'SIT') { fwd.subVectors(s.p, prev); if (s.st === 'RIDE') fwd.addScaledVector(s.u, -fwd.dot(s.u)); const sp = fwd.length();
+      if (s.st !== 'SIT' && s.st !== 'WIPE') { fwd.subVectors(s.p, prev); if (s.st === 'RIDE') fwd.addScaledVector(s.u, -fwd.dot(s.u)); const sp = fwd.length();
         if (sp > 0.02) { fwd.divideScalar(sp); const turn = new THREE.Vector3().crossVectors(s.f, fwd).dot(s.u) / Math.max(dt, 1e-3); s.lean += (Math.max(-0.5, Math.min(0.5, turn * 0.25)) - s.lean) * Math.min(1, dt * 3); s.f.lerp(fwd, Math.min(1, dt * 6)).normalize(); } }
-      s.f.addScaledVector(s.u, -s.f.dot(s.u)).normalize();
+      if (s.st !== 'WIPE') s.f.addScaledVector(s.u, -s.f.dot(s.u)).normalize();
       if (s.st === 'RIDE') { side.crossVectors(s.f, s.u).normalize(); s.u.addScaledVector(side, -s.lean).normalize(); s.arm += dt * 1.5; }
       pose(i, s);
+      if (s.hidden) { m4.makeScale(0, 0, 0); for (let k = 0; k < SEG; k++) limbs.setMatrixAt(i * SEG + k, m4); heads.setMatrixAt(i, m4); boards.setMatrixAt(i, m4); }
     });
+    sprayTick(dt);
     limbs.instanceMatrix.needsUpdate = true; heads.instanceMatrix.needsUpdate = true; boards.instanceMatrix.needsUpdate = true;
   }
   return { group, update, surfers: S };
