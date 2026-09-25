@@ -345,13 +345,13 @@ export const SUN_DIR = new THREE.Vector3(0.25, 0.1, -1).normalize();   // low su
 // Weather follows the difficulty. Every water/sky material shares these uniforms, so switching weather is instant.
 export const WEATHER = {
   // good weather on the three normal levels (his call): morning, midday, afternoon sun; the storm is Extreme only
-  easy:    { sun: [0.35, 0.62, -0.7], zen: 0x2e6db4, hor: 0xbfe0ee, sunCol: 0xfff4dc, fog: 0xc8e2ec, deep: 0x0b5a73, turq: 0x19b3a4, cloud: 0.18, chop: 0.8, fogFar: 320, rain: 0, sunVis: 1 },
-  medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2862a6, hor: 0xc4dfe9, sunCol: 0xfff7e6, fog: 0xcde3ea, deep: 0x094c66, turq: 0x15a99f, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
-  hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2458a0, hor: 0xbcd6e4, sunCol: 0xffe6bf, fog: 0xc6dbe4, deep: 0x083f55, turq: 0x149a90, cloud: 0.2, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
+  easy:    { sun: [0.35, 0.62, -0.7], zen: 0x2a6cb8, hor: 0xa9d5ec, sunCol: 0xfff4dc, fog: 0xb6daeb, deep: 0x0a5a84, turq: 0x1ccabb, cloud: 0.18, chop: 0.8, fogFar: 320, rain: 0, sunVis: 1 },
+  medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2562ab, hor: 0xacd4e8, sunCol: 0xfff7e6, fog: 0xbadae9, deep: 0x08527c, turq: 0x18c2b3, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
+  hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2158a6, hor: 0xa6cde3, sunCol: 0xffe6bf, fog: 0xb4d4e3, deep: 0x07496e, turq: 0x16b2a5, cloud: 0.2, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
   extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
   villa:   { sun: [-0.35, 0.22, -0.9], zen: 0x3a64a8, hor: 0xf0c9a2, sunCol: 0xffc68a, fog: 0xe8c9ac, deep: 0x0a4a62, turq: 0x15a39a, cloud: 0.25, chop: 0.9, fogFar: 1100, rain: 0, sunVis: 1 },   // golden hour at the villa: the sun going down over the sea
   ranch:   { sun: [0.45, 0.72, -0.5], zen: 0x2a6cb8, hor: 0xcfe2ea, sunCol: 0xfff3dd, fog: 0xd4e5ec, deep: 0x1a8ea0, turq: 0x3fd6c8, cloud: 0.08, chop: 0.3, fogFar: 700, rain: 0, sunVis: 1 },   // dry, clear country sky; calm pool water
-  random:  { sun: [0.3, 0.7, -0.6],  zen: 0x2b66aa, hor: 0xc2dde8, sunCol: 0xfff3dc, fog: 0xcbe1e9, deep: 0x0a4e69, turq: 0x16a6a0, cloud: 0.32, chop: 1.1, fogFar: 310, rain: 0, sunVis: 1 },
+  random:  { sun: [0.3, 0.7, -0.6],  zen: 0x2766ae, hor: 0xabd3e7, sunCol: 0xfff3dc, fog: 0xb9d9e8, deep: 0x09547e, turq: 0x19bdb2, cloud: 0.32, chop: 1.1, fogFar: 310, rain: 0, sunVis: 1 },
 };
 export const ENV = {
   uSun: { value: SUN_DIR.clone() }, uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSunCol: { value: new THREE.Color() },
@@ -410,7 +410,7 @@ export function waterMaterial({ wave = false } = {}) {
       // smooth glow reflected through ripples smeared into white blobs beside the board)
       vec3 skyR(vec3 d){
         float h = clamp(d.y, 0., 1.);
-        vec3 c = mix(uHor, uZen, pow(h, .45)) + uSunCol * pow(max(dot(d, uSun), 0.), 12.) * .08;
+        vec3 c = mix(uHor, uZen, pow(h, .3)) + uSunCol * pow(max(dot(d, uSun), 0.), 12.) * .08;   // (a touch more blue sky in it than the view straight at the horizon: the sea read milky)
         return mix(c, uHor * .8 + uZen * .2, uCloud * .6) + uFlash;
       }
       void main(){
@@ -448,8 +448,9 @@ export function waterMaterial({ wave = false } = {}) {
         thin *= smoothstep(.03, .22 * uH, vW.y);                        // flat water in front of the wave matches the open sea (no seam)
         float base = smoothstep(.0, .9, vW.y / max(uH, .5));
         float back = pow(max(dot(-V, uSun), 0.), 3.);                // looking toward the sun through the water
-        vec3 body = mix(deep, turq, thin * .8) + turq * thin * back * 1.6 * uSunVis + uSunCol * thin * back * .25 * uSunVis + turq * thin * .25 * (1. - uSunVis);
+        vec3 body = mix(deep, turq, thin * .8) + turq * thin * back * 1.3 * uSunVis + uSunCol * thin * back * .25 * uSunVis + turq * thin * .25 * (1. - uSunVis);
         body *= .55 + .45 * base;
+        body = mix(vec3(dot(body, vec3(.3, .59, .11))), body, 1.2 - .2 * thin);   // (the filmic tone curve greys colours: the water gets a little back; not the glowing thin water, which went neon)
         // the reef under clear shallow water (flat water inside the break, toward the beach): pale turquoise over sand
         // with darker coral and rock patches, fading out in deep water, on the wave faces and under a stormy sky
         float reefK = smoothstep(-45., 15., vW.z) * (1. - smoothstep(uReefEnd - 25., uReefEnd, vW.z)) * smoothstep(-160., -60., vW.x)
@@ -459,12 +460,25 @@ export function waterMaterial({ wave = false } = {}) {
           vec3 reefCol = mix(vec3(.3, .66, .62), vec3(.13, .25, .22), clamp(smoothstep(.46, .6, rn) + .35 * (rn2 - .5), 0., 1.));
           body = mix(body, reefCol * uReefTint * (.55 + .45 * uSunVis), reefK * .38);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
         }
-        ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);' : ''}
+        ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);\n        // the throwing lip is a moving sheet: light and dark streaks run through it, and its thinnest edge glows palest\n        vec2 shq = vec2(vW.x * .9, (vW.y - vW.z) * .3 + uTime * 1.2); float sheet = vnoise(shq) * .62 + vnoise(shq * 2.3 + 1.7) * .38;   // (two layers of noise: plenty for a streak, half the cost of the full four)\n        body *= 1. + (sheet - .5) * 1.4 * glow;\n        body += vec3(.3, .55, .5) * smoothstep(.8, 1., vFT.y) * glow * .25 * (.4 + .6 * uSunVis);' : ''}
+        ${wave ? 'if (N.y < -.15) refl = mix(refl, body * .8, smoothstep(-.15, -.55, N.y));   // (the underside of the lip mirrors the water below it, not the sky)' : ''}
         vec3 col = mix(body, refl, fres);
         // sun glint
         // (broken into glitter by the small ripples, as on real water; a smooth glint reads as a white smudge up close)
         float glit = smoothstep(.6, .74, fbm(vW.xz * 16. + vec2(uTime * 1.6, -uTime * 1.1))) * smoothstep(.3, .6, fbm(vW.xz * 3.1 - uTime * .3));   // fine sparkles, not blobs
         col += uSunCol * min(.55, pow(max(dot(R, uSun), 0.), 220.) * 3. * (.04 + glit)) * uSunVis;   // (capped: unbounded it merged into white blobs)
+        // sun sparkle: tiny points of sunlight winking on the water. Each 40 cm cell holds one little ripple facet tilted its
+        // own way (and rocking); it flashes only when it would really mirror the sun into your eye, so the sparkle gathers
+        // toward the sun and none shows looking away from it. Kept a pixel or two wide, faded where it'd go sub-pixel
+        vec2 gp = vW.xz * 2.5; float fw = fwidth(gp.x) * 1.4;   // (fwidth outside the branch: it needs every pixel of the block)
+        if (N.y > .5 && fw < .7 && uSunVis * (1. - uCloud) > .02) {   // (skipped wholesale where it can't show: steep faces, far off, a storm)
+        vec2 gi = floor(gp), gf = fract(gp);
+        float sh = hash(gi), ph = sh * 60.;
+        vec3 nC = normalize(vec3((hash(gi + 1.3) - .5) * 1.2 + .2 * sin(uTime * 2.1 + ph), 1., (hash(gi + 5.9) - .5) * 1.2 + .2 * cos(uTime * 1.7 + ph)));
+        float spr = clamp(fw * .9, .03, .07);   // (up close a bigger point read as a white blob)
+        float spark = (1. - smoothstep(spr * .4, spr, length(gf - vec2(hash(gi + 3.1), hash(gi + 7.7)) * .7 - .15))) * smoothstep(.955, .99, dot(reflect(-V, nC), uSun)) * (1. - smoothstep(.3, .7, fw));
+        col += uSunCol * spark * 1.6 * uSunVis * (1. - uCloud);
+        }
         ${wave ? `
         // foam: churned white where the lip throws and the whitewater rolls
         // foam features scale with the wave: a 15 m wave boils in big lumps, not a fine repeating pattern
@@ -492,7 +506,7 @@ export function waterMaterial({ wave = false } = {}) {
         ` : ''}
         // distance haze toward the horizon
         float d = length(cameraPosition - vW);
-        col = mix(col, uFog, smoothstep(uFogFar * .15, uFogFar, d) * .9);
+        col = mix(col, uFog, smoothstep(uFogFar * .25, uFogFar, d) * .9);   // (from a quarter of the way out: from 15% the whole mid-distance went milky)
         gl_FragColor = vec4(col, 1.);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

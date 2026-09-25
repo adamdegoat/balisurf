@@ -22,8 +22,7 @@ const PAINT = {
   short: (u, v, deck) => { const WHITE = [0.95, 0.95, 0.93], CORAL = [0.93, 0.33, 0.24];
     if (!deck) return mix(CORAL, [0.98, 0.55, 0.42], sm(0.2, 0.9, u) * 0.4);
     if (Math.abs(v) < 0.02) return [0.55, 0.42, 0.28];
-    const logo = Math.hypot((u - 0.62) * 9, v * 1.4) < 0.5 ? 1 : 0;
-    return logo ? [0.12, 0.12, 0.14] : mix(WHITE, CORAL, sm(0.72, 0.95, Math.abs(v))); },
+    return mix(WHITE, CORAL, sm(0.72, 0.95, Math.abs(v))); },   // (the logo is drawn over it below, with smooth edges)
   // retro fish: mustard-yellow deck with a wide teal racing stripe, teal bottom
   fish: (u, v, deck) => { const MUSTARD = [0.95, 0.72, 0.22], TEAL = [0.08, 0.5, 0.5];
     if (!deck) return TEAL;
@@ -60,7 +59,10 @@ function paintSheet(type, S) {
       const i = (y * FW * 2 + x) * 4; d[i] = srgb(pc[0] * wax); d[i + 1] = srgb(pc[1] * wax); d[i + 2] = srgb(pc[2] * wax); d[i + 3] = 255; } }
   c.putImageData(img, 0, 0);
   if (type === 'short' || !(type in PAINT)) {   // the shortboard's logo inside its dark oval: the SumbaSurf wave (the game's icon)
-    const cx = FW / 2, cy = (1 - 0.62) * (H - 1); c.save(); c.translate(cx, cy); c.scale(0.2, 0.2); c.translate(-261, -265);
+    // (a little up toward the nose, so lying on the board to paddle you see all of it ahead of you, not a grey half-disc under your chin;
+    // drawn with the canvas so its edge is smooth, not a staircase of pixels)
+    const cx = FW / 2, cy = (1 - 0.68) * (H - 1); c.fillStyle = '#1e2126'; c.beginPath(); c.ellipse(cx, cy, 0.357 * FW / 2, 0.0556 * (H - 1), 0, 0, Math.PI * 2); c.fill();
+    c.save(); c.translate(cx, cy); c.scale(0.2, 0.2); c.translate(-261, -265);
     c.fillStyle = '#f2efe8'; c.beginPath(); c.moveTo(70, 390); c.bezierCurveTo(150, 390, 190, 300, 250, 190); c.bezierCurveTo(300, 110, 420, 110, 440, 200); c.bezierCurveTo(450, 250, 420, 300, 370, 300);
     c.bezierCurveTo(400, 260, 390, 210, 350, 205); c.bezierCurveTo(300, 200, 280, 260, 290, 330); c.bezierCurveTo(296, 370, 330, 390, 380, 390); c.closePath(); c.fill();
     c.fillStyle = '#ffc978'; c.fillRect(60, 405, 392, 16); c.restore(); }

@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=95';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=102';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=115';
-import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=13';
+import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
 import { SurfAudio } from './audio.js?v=13';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
-import { villa, VILLA } from './villa.js?v=41';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=12';
+import { villa, VILLA } from './villa.js?v=43';
 import { crew } from './crew.js?v=5';
 import { wildlife } from './wildlife.js?v=7';
 
@@ -428,7 +428,7 @@ function toMenu() {
   if (surfer) endWipe(); rider = null; rig.visible = false; endT = -1;
   for (const w of waves) w.dispose(scene); waves = [];
   setWeather('medium'); setSpot('medium'); ui.cond.textContent = '';
-  underK = 0; underEl.style.opacity = 0; underEl.style.display = 'none'; setText(ui.speed, ''); setText(ui.score, ''); setText(ui.hint, ''); ui.tube.style.opacity = 0;
+  underK = 0; underWas = false; clearLens(); underEl.style.opacity = 0; underEl.style.display = 'none'; setText(ui.speed, ''); setText(ui.score, ''); setText(ui.hint, ''); ui.tube.style.opacity = 0;
   input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
   keys.clear(); steerF = stickY = 0; ui.paddle.classList.remove('down'); ui.stall.classList.remove('down');
   document.body.classList.remove('playing', 'riding', 'ranch-wait', 'villa', 'reef'); ui.msg.style.display = 'none'; walker = null; vPick(null); setHfov(50);
@@ -604,8 +604,49 @@ document.body.appendChild(underEl);
   for (let i = 0; i < 46; i++) { const b = document.createElement('div'); b.className = 'bub'; const sz = 4 + Math.random() * Math.random() * 26;
     b.style.cssText = `left:${Math.random() * 100}%;width:${sz}px;height:${sz}px;--dx:${(Math.random() - .5) * 120}px;animation-duration:${0.9 + Math.random() * 1.6}s;animation-delay:${-Math.random() * 2.5}s`;
     underEl.appendChild(b); } }
-let underK = 0;
-function setUnder(k, dt) { underK += (k - underK) * Math.min(1, dt * (k > underK ? 14 : 5)); underEl.style.opacity = underK.toFixed(3); underEl.style.display = underK > 0.01 ? '' : 'none'; }   // (hidden = the bubbles stop animating)
+let underK = 0, underWas = false;
+function setUnder(k, dt) { underK += (k - underK) * Math.min(1, dt * (k > underK ? 14 : 5)); underEl.style.opacity = underK.toFixed(3); underEl.style.display = underK > 0.01 ? '' : 'none';   // (hidden = the bubbles stop animating)
+  if (k > 0.5) { underWas = true; clearLens(); } else if (k === 0 && underWas) { underWas = false; splashLens(12, 1.3); } }   // (coming up: water streaming off the lens)
+// water on the lens, like a GoPro: coming out of the barrel, blown out by the spit, surfacing after a wipeout, whitewater
+// over your head. Drops land, hang, and some run down and off. Plain CSS moved by the browser's compositor: nothing for
+// the 3D to pay for, even on a phone
+const lensEl = document.createElement('div');
+lensEl.style.cssText = 'position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:6';
+document.body.appendChild(lensEl);
+{ const st = document.createElement('style');
+  // (a bright glint up top, light caught in its lower half and a darker upper edge, no hard ring, which read as bubbles;
+  // blurring what's behind each drop looked best but halved the frame rate: not worth it)
+  st.textContent = `.ldrop{position:absolute;opacity:0;border-radius:52% 48% 46% 54%/58% 55% 45% 42%;will-change:transform,opacity;
+    background:radial-gradient(circle at 36% 24%,rgba(255,255,255,.85) 0 4%,rgba(255,255,255,0) 13%),radial-gradient(ellipse at 50% 70%,rgba(255,255,255,.16),rgba(255,255,255,.05) 60%),linear-gradient(rgba(255,255,255,0) 40%,rgba(0,28,38,.12));
+    box-shadow:inset 0 -4px 7px rgba(255,255,255,.3),inset 0 3px 6px rgba(0,22,32,.22),0 1px 2px rgba(0,20,30,.12)}`;
+  document.head.appendChild(st); }
+const lensDrops = []; let lensI = 0;
+for (let i = 0; i < 14; i++) { const el = document.createElement('div'); el.className = 'ldrop'; lensEl.appendChild(el); lensDrops.push({ el, anim: null }); }
+function splashLens(n, big = 1) {
+  if (Q.has('nolens')) return;
+  const w = innerWidth, h = innerHeight, k = Math.min(1.4, h / 400);
+  for (let i = 0; i < n; i++) {
+    const d = lensDrops[lensI++ % lensDrops.length]; if (d.anim) d.anim.cancel();
+    const sz = (10 + Math.random() * Math.random() * 55 * big) * k, run = Math.random() < 0.45, life = 1300 + Math.random() * 2200, fall = run ? h * (0.12 + Math.random() * 0.35) : sz * 0.3;
+    const rr = () => 38 + Math.random() * 24 | 0;   // (each drop its own lumpy shape: perfect circles read as bubbles)
+    Object.assign(d.el.style, { borderRadius: `${rr()}% ${rr()}% ${rr()}% ${rr()}%/${rr()}% ${rr()}% ${rr()}% ${rr()}%`, width: sz * (0.8 + Math.random() * 0.4) + 'px', height: sz * (0.8 + Math.random() * 0.4) + 'px', left: Math.random() * w + 'px', top: Math.random() * h * 0.85 + 'px' });
+    d.anim = d.el.animate([
+      { transform: 'translateY(0) scale(.5)', opacity: 0 },
+      { transform: 'translateY(0) scale(1)', opacity: 0.95, offset: 0.05 },
+      { transform: `translateY(${fall * 0.25}px) scale(1)`, opacity: 0.85, offset: 0.5 },
+      { transform: `translateY(${fall}px) scale(${run ? '.75,1.3' : '.85'})`, opacity: 0 }],
+      { duration: life, delay: Math.random() * 150, easing: 'ease-in', fill: 'both' });
+  }
+}
+function clearLens() { for (const d of lensDrops) if (d.anim) { d.anim.cancel(); d.anim = null; } }
+let lensBarrelT = 0, lensSpit = 0, lensWashed = false;
+function lensTick(dt) {
+  const st = rider.state;
+  if (rider.inBarrel && st === 'RIDE') lensBarrelT += dt;
+  else { if (lensBarrelT > 0.6 && st === 'RIDE') splashLens(8); lensBarrelT = 0; }   // (out of the tube, through its spray)
+  if ((rider.spitOut || 0) > lensSpit + 0.5) splashLens(11, 1.2); lensSpit = rider.spitOut || 0;   // (the spit blows you out)
+  if (rider.washed && !lensWashed && st === 'LIE') splashLens(9); lensWashed = !!rider.washed;   // (whitewater over your head)
+}
 // wiping out, in first person: thrown, rolled under the whitewater (the view tumbles, but damped so it doesn't make
 // you sick), then you surface, the view levels out and you look for your board
 const _wiq = new THREE.Quaternion(), _wm = new THREE.Matrix4();
@@ -1425,7 +1466,7 @@ function tick(dt) {
     railSpray.update(dt);
     wake.update(dt);
     updateCamera(dt);
-    updateHUD(dt);
+    updateHUD(dt); lensTick(dt);
     // sound follows what's happening: the breaking wave is loud near the curl
     const st = rider.state, w = rider.wave;
     let near = 0;
@@ -1492,4 +1533,4 @@ renderer.setAnimationLoop(() => {
   }
   autoQuality(dt); musicTick();
 });
-window.__g = { get walker() { return walker; }, get crew() { return crewW; }, get wild() { return wildW; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
+window.__g = { get walker() { return walker; }, get crew() { return crewW; }, get wild() { return wildW; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, splashLens, get T() { return T; }, want: () => _want };
