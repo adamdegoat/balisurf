@@ -1,6 +1,7 @@
 // Bali surf: session loop, controls, camera, surfer model, HUD, automatic quality.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=77';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=91';
 import { makeBoard } from './board.js?v=5';
@@ -63,6 +64,16 @@ const birds = (() => {
   for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(geo, mat); b.userData = { r: 25 + Math.random() * 30, h: 35 + Math.random() * 25, a: Math.random() * 6.3, w: 0.12 + Math.random() * 0.08, cx: -20 + Math.random() * 60, cz: 20 + Math.random() * 40 }; scene.add(b); list.push(b); }
   return list;
 })();
+const locals = [], _lq = new THREE.Quaternion(), _le = new THREE.Euler(0, 0, 0, 'YXZ');
+function updateLocals(dt) {
+  for (const L of locals) {
+    L.grp.visible = !!rider; if (!rider) continue;
+    const y = heightAt(waves, L.x, L.z);
+    L.grp.position.set(L.x + Math.sin(T * 0.2 + L.ph) * 0.6, y + 0.05, L.z);
+    L.grp.quaternion.setFromEuler(_le.set(-0.25 + Math.sin(T * 1.3 + L.ph) * 0.05, Math.PI + Math.sin(T * 0.15 + L.ph) * 0.3, Math.sin(T * 1.1 + L.ph) * 0.04));   // facing the sets, nose up (sitting on the tail)
+    L.mx.update(dt);
+  }
+}
 function updateScenery(dt) {
   if (jukung.visible = !!rider) { const y = heightAt(waves, jukung.position.x, jukung.position.z); jukung.position.y += (y - 0.05 - jukung.position.y) * Math.min(1, dt * 3); jukung.rotation.x = Math.sin(T * 0.9) * 0.04; jukung.rotation.z = Math.sin(T * 0.7 + 1) * 0.03; }
   for (const b of birds) { const u = b.userData; u.a += u.w * dt; b.position.set(u.cx + Math.cos(u.a) * u.r, u.h + Math.sin(T * 0.3 + u.r) * 2, u.cz + Math.sin(u.a) * u.r); b.rotation.set(0, -u.a, Math.sin(T * 0.8 + u.r) * 0.25);
@@ -116,6 +127,15 @@ const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', 
   surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/.test(b.name)) ARMBONE.value[i] = 1; }); });
   mixer = new THREE.AnimationMixer(surfer);
   for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale')); clips[c.name] = mixer.clipAction(c); }
+  // two locals sitting in the lineup either side of you, waiting for a set like you (same body, their own board)
+  const sit = g.animations.find((c) => c.name === 'sit');
+  for (const [x, z, ph] of [[-13, -15, 0], [17, -7, 2.1]]) {
+    const body = cloneSkinned(g.scene), grp = new THREE.Group(), brd = makeBoard();
+    body.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+    body.position.set(0, -0.36, -0.25); grp.add(brd, body); scene.add(grp);
+    const mx = new THREE.AnimationMixer(body); if (sit) { const a = mx.clipAction(sit); a.play(); a.time = ph; }
+    locals.push({ grp, mx, x, z, ph });
+  }
   res();
 }, undefined, (err) => { ui.load.textContent = 'Could not load the surfer. Check your connection and reload.'; rej(err); }));
 function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
@@ -967,7 +987,7 @@ function tick(dt) {
     if (rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out('Drifted out of the lineup'); }
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); paddleArms(dt); dtArm = dt; surfStance(); }
-    updateLeash(); updateScenery(dt);
+    updateLeash(); updateScenery(dt); updateLocals(dt);
     railSpray.update(dt);
     wake.update(dt);
     updateCamera(dt);
