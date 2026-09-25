@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=82';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=92';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=83';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=93';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 
@@ -193,7 +193,7 @@ function updateWaves(dt) {
     if (t > 0 && C.name !== 'Easy') {
       if (w.secT === undefined) w.secT = 3 + Math.random() * 4;
       if (w.secK === undefined || w.secK <= 0) { w.secT -= dt; if (w.secT <= 0) { w.secK = 1.1; w.secT = 5 + Math.random() * 5; if (w.spitT !== undefined) w.spitT = 0.25; } }
-      else { w.secK -= dt; const ph = 1 - w.secK / 1.1, A = C.name === 'Medium' ? 1.5 : 2.1; rate *= ph < 0.75 ? 1 + A * Math.sin(Math.PI * ph / 0.75) : 0.6; }
+      else { w.secK -= dt; const ph = 1 - w.secK / 1.1, A = C.name === 'Medium' ? 1.3 : C.name === 'Hard' ? 1.5 : 2.1; rate *= ph < 0.75 ? 1 + A * Math.sin(Math.PI * ph / 0.75) : 0.6; }
     }
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
     w.peelRate = rate;   // the physics uses the peel speed right now (not the average), so the wave's push matches what you see

@@ -244,7 +244,8 @@ export class Rider {
     const onFront = zl > sl.topZ - 0.3;                               // on the face side of the wave, not behind it
     this.onFace = onFront && slope > 0.22 && this.hz < -0.1;          // downhill is toward the beach
     // the lip lands on anyone under it
-    if (lipDown && s < -0.3 * H && s > -4.5 * H && Math.abs(zl - sl.lipZ) < 0.45 + 0.1 * H && y < 0.55 * H) return this.wipe('The lip landed on you');
+    const fgL = C.forgive || 1;   // (a forgiving wave: the lip's landing zone is narrower and it throws you a little later)
+    if (lipDown && s < -0.3 * H && s > -4.5 * H && Math.abs(zl - sl.lipZ) < (0.45 + 0.1 * H) * fgL && y < 0.55 * H) return this.wipe('The lip landed on you');
     if (!this.standing) {
       // caught inside: the whitewater rolls you toward the beach (you hang on to the board)
       if (sl.broken > 0.35 && onFront && y > 0.1 * H) this.washed = true;
@@ -279,7 +280,7 @@ export class Rider {
     else if (this.wwFloatT > 0) { if (this.wwFloatT > 0.35) this.move('FLOATER', Math.min(1, this.wwFloatT / 1.2)); this.wwFloatT = 0; }   // made it back onto the clean face
     // too high while it's throwing
     // (only a wave that pitches can throw you; a soft, crumbly one just breaks around you and the whitewater rule decides)
-    if (C.hollow > 0.5 && onFront && y > 0.86 * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
+    if (C.hollow > 0.5 && onFront && y > Math.min(0.97, 0.86 / Math.sqrt(C.forgive || 1)) * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
     this.inBarrel = lipDown && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
     // too deep: fall behind the curl and the foam ball (the broken wave churning inside the tube) catches you. You have
     // to keep your speed matched to the peel to stay in (pump, or come off the stall in time)
