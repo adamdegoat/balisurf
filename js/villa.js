@@ -643,8 +643,9 @@ export function villa(scene) {
     { id: 'nando', name: 'Nando', pose: 'bino', x: OX - NANDO.x, z: NANDO.z + OZ, y: Y + DH, yaw: wyaw(Math.cos(-0.8), Math.sin(-0.8)) },
     { id: 'rudi', name: 'Coach Rudi', pose: 'coach', x: OX + 87.0, z: 37.6 + OZ, y: Y, yaw: wyaw(1, -0.25) },          // (in the living room: at the open doors, watching the waves...)
     { id: 'putu', name: 'Putu', pose: 'sofa', x: OX + 88.55, z: 41.55 + OZ, y: Y, seat: 0.7, yaw: wyaw(0, -1) },
-    { id: 'belle', name: 'Belle', pose: 'pool', x: OX - (PL.x1 - 0.75), z: PL.z0 + 0.5 + OZ, y: Y - 1.17, edgeY: Y + 0.16, yaw: wyaw(0, -1) } ];   // (in the pool: at the south-east corner, facing out to sea)
-  block(PL.x1 - 1.1, PL.x1 - 0.4, PL.z0, PL.z0 + 0.85);   // (Belle)   // (...and on the sofa with a map)
+    { id: 'belle', name: 'Belle', pose: 'pool', x: OX - (PL.x1 - 0.75), z: PL.z0 + 0.5 + OZ, y: Y - 0.98, edgeY: Y + 0.16, yaw: wyaw(0, -1) } ];   // (in the pool: at the south-east corner, on the step, facing out to sea)
+  block(PL.x1 - 1.1, PL.x1 - 0.4, PL.z0, PL.z0 + 0.85);   // (Belle)
+  box(1.0, 0.2, 0.9, [0.5, 0.76, 0.75], PL.x1 - 0.75, Y - 1.08, PL.z0 + 0.45, 0.06);   // (the tiled step in the corner she stands on)   // (...and on the sofa with a map)
   block(-87.35, -86.65, 37.25, 37.95);   // (Rudi)
   block(WAX.x - 0.3, WAX.x + 0.3, WAX.z - 1.0, WAX.z - 0.45);   // (Wayan)
   // ---- the fire's sparks, and fireflies over the garden: points of light, coloured as they fade

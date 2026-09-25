@@ -74,6 +74,36 @@ const LINES = {
     'First time? Start at Pantai Kuda, then come home to Tanjung Uma. The others will wait for you.'],
 };
 
+// Belle: the one body the game has is the lads', so hers is reshaped from it in its rest pose (y up, x across, z forward,
+// feet at 0, 1.63 m): shoulders and waist in, hips out, a bust; and a coral one-piece painted on in place of the shorts
+function womanise(mesh) {
+  const g = mesh.geometry = mesh.geometry.clone(), p = g.attributes.position;
+  const bump = (v, c, w) => Math.exp(-(((v - c) / w) ** 2));
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i); const ax = Math.abs(x), arm = ax > 0.19 && y > 0.93, torso = ax < 0.2;
+    let f = 1 - 0.11 * bump(y, 1.3, 0.1);                                     // (narrower shoulders)
+    if (!arm) f *= (1 - 0.13 * bump(y, 1.02, 0.07)) * (1 + (y < 0.97 ? 0.08 * bump(y, 0.86, 0.08) : 0));   // (a waist; fuller hips)
+    x = arm ? x - Math.sign(x) * 0.19 * (1 - f) : x * f;
+    if (torso && !arm) z = z * (1 - 0.1 * bump(y, 1.02, 0.07)) - 0.012 * bump(y, 0.84, 0.06) * (z < 0 ? -1.6 : 0);
+    if (z > 0.03 && y > 1.1 && y < 1.32 && ax < 0.17) z += 0.042 * bump(y, 1.2, 0.05) * bump(ax, 0.085, 0.045);   // (a bust)
+    p.setXYZ(i, x, y, z);
+  }
+  p.needsUpdate = true; g.computeBoundingSphere();
+  const m = mesh.material; m.onBeforeCompile = (sh) => {
+    sh.vertexShader = 'varying vec3 vBP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vBP = position;');
+    sh.fragmentShader = 'varying vec3 vBP;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      float ax = abs(vBP.x), y = vBP.y, e = 0.006;
+      float wide = mix(0.26, 0.185, smoothstep(0.93, 0.98, y)); wide = mix(wide, 0.142, smoothstep(1.1, 1.17, y));   // (hugging the sides, cut in under the arms)
+      float body = smoothstep(wide + e, wide - e, ax) * smoothstep(0.7, 0.72, y);
+      float lo = 0.8 + 0.13 * smoothstep(0.02, 0.15, ax);                                                      // (high-cut legs)
+      float hi = vBP.z > 0.0 ? 1.215 + 0.05 * smoothstep(0.02, 0.1, ax) : 1.1 + 0.15 * smoothstep(0.03, 0.12, ax);   // (a scoop at the front, a low back)
+      float suit = body * smoothstep(lo - e, lo + e, y) * smoothstep(hi + e, hi - e, y);
+      float strap = smoothstep(0.066, 0.072, ax) * smoothstep(0.092, 0.086, ax) * smoothstep(1.37, 1.36, y) * step(hi - 0.01, y) * smoothstep(0.7, 0.72, y);
+      suit = max(suit, strap);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.1, 0.18), clamp(suit, 0., 1.));`);
+  };
+  m.customProgramCacheKey = () => 'belle-suit-2';
+}
 export function friends(scene, src, spots) {
   const group = new THREE.Group(); scene.add(group);
   const list = [];
@@ -85,7 +115,7 @@ export function friends(scene, src, spots) {
       const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
     const B = {}; body.traverse((o) => { if (o.isBone) B[o.name] = o; });
     if (L.scale) body.scale.setScalar(L.scale);
-    if (S.id === 'belle') body.traverse((o) => { if (o.isMesh && o.material.name === 'hair') o.visible = false; });   // (her own long hair instead of the lads' crop)
+    if (S.id === 'belle') body.traverse((o) => { if (o.isMesh && (o.material.name === 'hair' || /short/.test(o.material.name))) o.visible = false; if (o.isSkinnedMesh && o.material.name === 'skin') womanise(o); });   // (her own long hair instead of the lads' crop; a swimsuit instead of board shorts)
     const skins = []; body.traverse((o) => { if (o.isSkinnedMesh) skins.push(o); });
     root.position.set(S.x, S.y, S.z); root.rotation.y = S.yaw;
     const F = { id: S.id, name: S.name, root, body, B, skins, S, props: {}, look: 0, lineI: 0, talkT: 0, cool: 0, head: new THREE.Vector3() };
@@ -117,15 +147,14 @@ export function friends(scene, src, spots) {
       group.add(cap); F.props.cap = cap;
       const wh = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.02, 0.05), new THREE.MeshStandardMaterial({ color: 0xd8b04a, metalness: 0.5, roughness: 0.4 })); group.add(wh); F.props.whistle = wh;
     }
-    if (S.id === 'belle') {   // long black hair (wet ends down her back) and a coral bandeau top
-      const hm = new THREE.MeshStandardMaterial({ color: 0x100c0b, roughness: 0.45 }), sw = new THREE.MeshStandardMaterial({ color: 0xd6405c, roughness: 0.55 });
+    if (S.id === 'belle') {   // long black hair (wet ends down her back)
+      const hm = new THREE.MeshStandardMaterial({ color: 0x1c1411, roughness: 0.32 }), sw = new THREE.MeshStandardMaterial({ color: 0xd6405c, roughness: 0.55 });
       // (the hair: a crown over the top down to a hairline on the forehead, and a shell round the sides and back; the face left open)
       const hair = new THREE.Group(), hs = THREE.DoubleSide; hm.side = hs;
-      const crown = new THREE.Mesh(new THREE.SphereGeometry(0.118, 18, 6, 0, Math.PI * 2, 0, 0.78), hm); crown.scale.set(1.04, 1.05, 1.1); crown.position.set(0, 0.04, -0.012); hair.add(crown);
-      const back = new THREE.Mesh(new THREE.SphereGeometry(0.12, 18, 10, Math.PI / 2 + 1.0, Math.PI * 2 - 2.0, 0, Math.PI * 0.66), hm); back.scale.set(1.05, 1.08, 1.1); back.position.set(0, 0.025, -0.018); hair.add(back);
-      const fall = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 0.42, 12, 1, true), hm); fall.material = hm.clone(); fall.material.side = THREE.DoubleSide; fall.scale.set(1, 1, 0.45); fall.position.set(0, -0.17, -0.085); fall.rotation.x = 0.12; hair.add(fall);
+      const crown = new THREE.Mesh(new THREE.SphereGeometry(0.116, 18, 7, 0, Math.PI * 2, 0, 1.0), hm); crown.scale.set(1.03, 1.05, 1.12); crown.position.set(0, 0.036, -0.022); hair.add(crown);
+      const back = new THREE.Mesh(new THREE.SphereGeometry(0.116, 18, 10, Math.PI / 2 + 1.0, Math.PI * 2 - 2.0, 0, Math.PI * 0.66), hm); back.scale.set(1.03, 1.06, 1.14); back.position.set(0, 0.02, -0.026); hair.add(back);
+      const fall = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.05, 0.4, 12, 1, true), hm); fall.material = hm.clone(); fall.material.side = THREE.DoubleSide; fall.scale.set(1, 1, 0.42); fall.position.set(0, -0.16, -0.078); fall.rotation.x = 0.12; hair.add(fall);
       group.add(hair); F.props.hair = hair;
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.148, 0.12, 20, 1, true), sw); top.material.side = THREE.DoubleSide; group.add(top); F.props.top = top;
     }
     if (S.id === 'putu') {   // a folded paper map of the island, spots marked
       const cv = document.createElement('canvas'); cv.width = 256; cv.height = 176; const c = cv.getContext('2d');
@@ -252,7 +281,6 @@ export function friends(scene, src, spots) {
         B.neck_01.getWorldPosition(TA); B.head.getWorldPosition(W); const hu = TB.subVectors(W, TA).normalize(), hf = SD.copy(fw).applyAxisAngle(up, lookOut); hf.addScaledVector(hu, -hf.dot(hu)).normalize();
         HM.makeBasis(HX.crossVectors(hu, hf), hu, hf); const k = L2(F);
         const hr = F.props.hair; hr.position.copy(W); hr.quaternion.setFromRotationMatrix(HM); hr.scale.setScalar(k);
-        B.spine_03.getWorldPosition(W); const tp = F.props.top; tp.position.copy(W).addScaledVector(up, 0.075).addScaledVector(fw, 0.015); tp.quaternion.setFromUnitVectors(_a.set(0, 1, 0), up); tp.rotateY(Math.atan2(fw.x, fw.z)); tp.scale.set(1, 1, 0.74);
       }
       if (F.talkT > 0) F.talkT -= dt;
     }
