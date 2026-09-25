@@ -20,7 +20,7 @@ export async function onRequestPost({ request, env }) {
   let country = request.cf && request.cf.country || '';
   try { country = new Intl.DisplayNames(['en'], { type: 'region' }).of(country) || country; } catch (e) {}
   const ua = request.headers.get('user-agent') || '', dev = /iPad|Tablet/i.test(ua) ? 'tablet' : /iPhone|Android|Mobile/i.test(ua) ? 'phone' : 'computer';
-  const text = `${b.kind === 'back' ? 'A player is back' : 'New player'} at ${where}${country ? ` (${country}, ${dev})` : ` (${dev})`}`;
+  const text = `${b.who === 'claude' ? 'Claude testing: ' : ''}${b.kind === 'back' ? 'A player is back' : 'New player'} at ${where}${country ? ` (${country}, ${dev})` : ` (${dev})`}`;
   await fetch(`https://api.telegram.org/bot${env.TG_TOKEN}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) });
   return new Response(null, { status: 204 });
 }

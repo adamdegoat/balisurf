@@ -52,6 +52,13 @@ for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEv
 document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 // in the Safari browser (not opened from the home screen icon), tell them how to get full screen
+// on a computer (a mouse, no touch screen): the menu shows a QR code to play on the phone instead, and the keys
+const DESK = matchMedia('(hover: hover) and (pointer: fine)').matches && !('ontouchstart' in window) && !navigator.maxTouchPoints;   // (a computer: keyboard and mouse)
+// SumbaSurf is a phone game: on a computer it shows a card with a QR code to open it on the phone instead. (Still
+// playable here for the owner's own Mac, marked with ?me=1, for testing on this machine, and with ?desk=1.)
+{ let own = /[?&]me=(1|claude)\b/.test(location.search); try { own = own || !!localStorage.getItem('sumbasurf.me'); } catch (e) {}
+  if (DESK && !own && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]desk=1\b/.test(location.search)) document.body.classList.add('phoneonly');
+  else if (DESK) document.body.classList.add('desk'); }
 if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) document.getElementById('homeTip').hidden = false;
 fit();
 
@@ -379,19 +386,25 @@ const _rc = new THREE.Color();
 // ---------- controls: PADDLE/PUMP (hold, left) and a thumb pad (right half). Keyboard for testing.
 const input = { paddle: false, steer: 0 };
 const keys = new Set();
-addEventListener('keydown', (e) => keys.add(e.code)); addEventListener('keyup', (e) => keys.delete(e.code)); addEventListener('blur', () => keys.clear());   // (switching apps mid-press)
+addEventListener('keydown', (e) => { keys.add(e.code); if (/^(Space|Arrow)/.test(e.code) && ui.start.style.display === 'none') { e.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });   // (in play, Space and the arrows are the controls: never 'press' a button left focused, never scroll) addEventListener('keyup', (e) => keys.delete(e.code)); addEventListener('blur', () => keys.clear());   // (switching apps mid-press)
 const ui = {
   paddle: document.getElementById('paddle'), stall: document.getElementById('stall'), pad: document.getElementById('pad'), touch: document.getElementById('touch'), knob: document.querySelector('#touch b'),
   speed: document.getElementById('speed'), score: document.getElementById('score'), cond: document.getElementById('cond'),
   msg: document.getElementById('msg'), msgT: document.getElementById('msg-t'), msgN: document.getElementById('msg-n'), msgS: document.getElementById('msg-s'),
   tube: document.getElementById('tube'), hint: document.getElementById('hint'), load: document.getElementById('load'), start: document.getElementById('start'), sess: document.getElementById('sess'),
 };
+// the same tips in keyboard words, on a computer
+const DESK_WORDS = [['Slide your thumb left and right to carve, like a steering wheel', 'Carve with the arrow keys (or A and D), like a steering wheel'], ['Let go and the board just glides straight', 'Let go of the keys and the board just glides straight'],
+  ['PUMP and steer', 'Hold Space and steer'], ['hold PUMP', 'hold Space'], ['Hold PUMP', 'Hold Space'], ['STALL', 'Down'], ['Paddle now!', 'Paddle now! (Space)'], ['Paddle hard!', 'Paddle hard! (hold Space)'], ['Keep paddling!', 'Keep paddling! (Space)'],
+  ['Wave coming: turn to face', 'Wave coming: use the arrow keys to face']];
+const deskHint = (h) => { for (const [a, b] of DESK_WORDS) if (h.includes(a)) h = h.replace(a, b); return h; };
 const hold = (el, on, off) => {
   el.addEventListener('touchstart', (e) => { e.preventDefault(); on(e); }, { passive: false });
   el.addEventListener('touchend', (e) => { e.preventDefault(); if (e.targetTouches.length === 0) off(e); }, { passive: false });
   el.addEventListener('touchcancel', (e) => { e.preventDefault(); if (e.targetTouches.length === 0) off(e); }, { passive: false });
   el.addEventListener('mousedown', on); addEventListener('mouseup', off);
 };
+if (DESK) ui.stall.innerHTML = 'STALL<small>DOWN</small>';
 hold(ui.paddle, () => { audio.wake(); input.paddleBtn = true; ui.paddle.classList.add('down'); }, () => { input.paddleBtn = false; ui.paddle.classList.remove('down'); });
 hold(ui.stall, () => { audio.wake(); input.stallBtn = true; ui.stall.classList.add('down'); }, () => { input.stallBtn = false; ui.stall.classList.remove('down'); });
 // thumb: touch anywhere on the right half and drag; the spot you first touch is the centre.
@@ -471,13 +484,13 @@ document.getElementById('menu').addEventListener('click', toMenu);
 // first time a phone or computer plays, 'back again' on a later day. Never for the owner's own devices (open the game
 // once with ?me=1 to mark one), never from localhost or GitHub Pages. Nothing personal is sent: which spot, that's all.
 let helloSent = false;
-try { if (/[?&]me=1\b/.test(location.search)) localStorage.setItem('sumbasurf.me', '1'); if (/[?&]me=0\b/.test(location.search)) localStorage.removeItem('sumbasurf.me'); } catch (e) {}
+try { const me = (location.search.match(/[?&]me=(1|0|claude)\b/) || [])[1]; if (me === '0') localStorage.removeItem('sumbasurf.me'); else if (me) localStorage.setItem('sumbasurf.me', me); } catch (e) {}   // (?me=claude: the owner's assistant testing the live site: still sends, marked as such)
 function hello(where) {
   if (helloSent || !/\.pages\.dev$/.test(location.hostname)) return; helloSent = true;
-  let kind = 'new';
-  try { if (localStorage.getItem('sumbasurf.me') === '1') return; const last = localStorage.getItem('sumbasurf.seen'), today = new Date().toISOString().slice(0, 10);
+  let kind = 'new', who = '';
+  try { const me = localStorage.getItem('sumbasurf.me'); if (me === '1') return; if (me === 'claude') { who = 'claude'; kind = 'test'; throw 0; } const last = localStorage.getItem('sumbasurf.seen'), today = new Date().toISOString().slice(0, 10);
     if (last === today) return; kind = last ? 'back' : 'new'; localStorage.setItem('sumbasurf.seen', today); } catch (e) {}
-  fetch('/api/ping', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, where }), keepalive: true }).catch(() => {});
+  fetch('/api/ping', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, where, who }), keepalive: true }).catch(() => {});
 }
 async function start(m) {
   if (starting) return; starting = true; if (window.__g) window.__g.paused = false;
@@ -1264,7 +1277,7 @@ function updateHUD(dt) {
   setText(ui.speed, rider.standing ? `${Math.round(rider.v * 3.6)} km/h` : '');
   if (mode === 'random') setText(ui.cond, rider.wave && rider.standing ? `Random: ${rider.wave.cond.name.toLowerCase()} wave` : 'Random');
   ui.paddle.style.visibility = st === 'WIPE' || st === 'OUT' ? 'hidden' : 'visible';
-  const lbl = rider.standing ? 'PUMP' : 'PADDLE'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
+  const lbl = rider.standing ? 'PUMP' : 'PADDLE'; if (ui.paddle.dataset.l !== lbl) { ui.paddle.dataset.l = lbl; ui.paddle.innerHTML = DESK ? `${lbl}<small>SPACE</small>` : lbl; }
   // coaching for the first few waves: read the sea like a surfer would
   let hint = '';
   if (st === 'LIE' && ranchWaiting()) hint = session.waves < 3 ? 'Order a wave: it comes out of the machine wall in front of you' : '';
@@ -1276,14 +1289,14 @@ function updateHUD(dt) {
     else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? `Wave coming: turn to face ${isRanch() ? 'the shallow end' : 'the beach'}` : inc.t < 2.5 ? 'Paddle hard!' : 'Wave coming... get ready';
     else if (session.waves < 2 && inc.t >= 7) hint = 'Watch the horizon for the next set';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
-  } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Go LEFT along the wave, hold PUMP for speed' : 'Up!';
+  } else if (st === 'POP') hint = session.waves < 5 ? `Up! Go ${MIRROR ? 'RIGHT' : 'LEFT'} along the wave, hold PUMP for speed` : 'Up!';
   else if (st === 'RIDE' && rider.inBarrel && (rider.foamT || 0) > 0.4) hint = 'Too deep! PUMP and steer up the face to get out';
   else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Slide your thumb left and right to carve, like a steering wheel' : rider.stateT < 5 ? 'Hold PUMP for speed, STALL to brake and let the barrel catch you' : 'Let go and the board just glides straight';
-  else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: keep turning right till you face the breaking wave, then turn back';
+  else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = `Cutback: keep turning ${MIRROR ? 'left' : 'right'} till you face the breaking wave, then turn back`;
   else if (st === 'RIDE' && rider.stateT > 13 && rider.stateT < 17 && session.waves >= 1 && session.waves < 6 && !rider.ride.moves.some((m) => m.name.startsWith('AIR')) && RIDE.air) hint = 'Air: race down, then turn hard up the face into the lip and it launches you';
   // the curl is right behind you: tell the player how to get covered (a barrel comes to whoever sets up for it)
   if (st === 'RIDE' && !hint && !rider.inBarrel && rider.wave && rider.s > 0 && rider.s < 2.2 * rider.wave.cond.H && rider.wave.cond.hollow > 0.5 && session.barrels < 2) hint = rider.y < 0.6 * rider.wave.cond.H ? 'Barrel coming! Stay low and hold STALL' : 'The lip is pitching behind you: drop low to get barreled';
-  setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
+  setText(ui.hint, session.waves < 5 || st === 'POP' ? (DESK ? deskHint(hint) : hint) : '');
   // the callout: BARREL while you're in it, or the move you just landed
   tubeShowT = rider.inBarrel ? 0.4 : Math.max(0, tubeShowT - dt);   // (held a moment: a wobble at the tube's edge doesn't flicker the word)
   const call = st !== 'RIDE' ? '' : tubeShowT > 0 ? 'BARREL' : rider.trick ? rider.trick.name : '';
@@ -1428,7 +1441,7 @@ function startVilla() {
   if (drone.on) droneSet(false);
   walker = { x: villaW.spawn.x, z: villaW.spawn.z, yaw: villaW.spawn.yaw, pitch: -0.08, y: VILLA.Y + 1.65, mx: 0, mz: 0 };
   ui.start.style.display = 'none'; document.body.classList.add('playing', 'villa'); ui.cond.textContent = 'Your villa';
-  document.getElementById('vTip').textContent = 'Left thumb walks, right thumb looks. Boards are in the board room.';
+  document.getElementById('vTip').textContent = DESK ? 'WASD or the arrow keys walk, drag the mouse to look, click to pick. Boards are in the board room.' : 'Left thumb walks, right thumb looks. Boards are in the board room.';
   document.getElementById('vTip').style.opacity = 1; setTimeout(() => { document.getElementById('vTip').style.opacity = 0; }, 7000);
 }
 document.getElementById('goVilla').addEventListener('click', startVilla);
@@ -1453,7 +1466,7 @@ function droneSet(on) {
     document.getElementById('vSong').classList.remove('open');
     if (W_.sit) vStand(); if (W_.watch) document.getElementById('vWatch').click(); vSitB.classList.remove('on'); W_.near = null;
     Object.assign(drone, { on: true, x: W_.x + Math.cos(W_.yaw) * 0.8, y: W_.y + 0.3, z: W_.z + Math.sin(W_.yaw) * 0.8, vx: 0, vy: 0, vz: 0, up: 0, roll: 0, t: 0, save: [W_.yaw, W_.pitch] });
-    W_.pitch = -0.15; const tip = document.getElementById('vTip'); tip.textContent = 'Left thumb flies, right thumb turns the camera. Hold UP or DOWN to climb and sink.'; tip.style.opacity = 1; clearTimeout(tip.t); tip.t = setTimeout(() => { tip.style.opacity = 0; }, 6000);
+    W_.pitch = -0.15; const tip = document.getElementById('vTip'); tip.textContent = DESK ? 'WASD flies, drag the mouse to turn the camera, Space or E climbs, Q or Shift sinks.' : 'Left thumb flies, right thumb turns the camera. Hold UP or DOWN to climb and sink.'; tip.style.opacity = 1; clearTimeout(tip.t); tip.t = setTimeout(() => { tip.style.opacity = 0; }, 6000);
   } else { drone.on = false; if (drone.save) [W_.yaw, W_.pitch] = drone.save; audio.droneBuzz(0); }
   document.body.classList.toggle('drone', drone.on); droneB.classList.toggle('on', drone.on); droneB.querySelector('span').textContent = drone.on ? 'LAND' : 'FLY DRONE';
 }
