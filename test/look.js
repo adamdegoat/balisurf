@@ -5,8 +5,10 @@ import { moment } from './shots.js';
 const G = () => window.__g;
 export async function cap(i, pr = 2) {
   const g = G(), r = g.renderer; g.paused = true; r.setPixelRatio(pr);
+  const mir = g.mirror; if (mir) g.flipProj(g.camera);   // (a right-hand spot: the picture flipped, as the game draws it)
   r.autoClear = false; r.clear(); r.render(g.scene, g.camera);
-  const a = g.armCam; a.position.copy(g.camera.position); a.quaternion.copy(g.camera.quaternion); r.clearDepth(); r.render(g.scene, a); r.autoClear = true;
+  const a = g.armCam; a.position.copy(g.camera.position); a.quaternion.copy(g.camera.quaternion); if (mir) g.flipProj(a); r.clearDepth(); r.render(g.scene, a); if (mir) g.flipProj(a); r.autoClear = true;
+  if (mir) g.flipProj(g.camera);
   const b = await new Promise((res) => r.domElement.toBlob(res, 'image/jpeg', 0.92));
   await fetch(`http://127.0.0.1:8799/f?shot=look&i=${i}`, { method: 'POST', body: b });
   return `${r.domElement.width}x${r.domElement.height}`;

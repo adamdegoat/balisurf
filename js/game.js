@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=112';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=115';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=118';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
 import { SurfAudio } from './audio.js?v=16';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=23';
-import { villa, VILLA } from './villa.js?v=66';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=26';
+import { villa, VILLA } from './villa.js?v=69';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=4';
 import { crew } from './crew.js?v=8';
@@ -63,6 +63,7 @@ let board = makeBoard(); rig.add(board);
 let boardType = 'short', boardTail = -0.9;
 // your stance: goofy (right foot forward) or regular (left foot forward). Every break here is a left, so goofy rides
 // facing the wave (frontside) and regular rides with your back to it (backside): a different, slightly harder ride
+let MIRROR = false;   // a right-hand spot (see setSpot)
 let stance = 'goofy'; try { if (localStorage.getItem('sumbasurf.stance') === 'regular') stance = 'regular'; } catch (e) {}
 const stanceName = () => (stance === 'regular' ? 'Regular' : 'Goofy');
 const BOARD_INFO = {
@@ -96,14 +97,16 @@ function stancePicker() {
 }
 function useStance(k) {
   stance = k; try { localStorage.setItem('sumbasurf.stance', k); } catch (e) {}
-  stanceQ.setFromAxisAngle(WORLD_UP, k === 'regular' ? -Math.PI / 2 : Math.PI / 2);
   for (const b of document.querySelectorAll('[data-stance]')) b.classList.toggle('on', b.dataset.stance === k);
-  if (rider) rider.backside = k === 'regular';
+  applyStance();
 }
+// the body's stance on the board as the physics sees it: at a mirrored (right-hand) spot, the other way round
+const physStance = () => (MIRROR ? (stance === 'goofy' ? 'regular' : 'goofy') : stance);
+function applyStance() { stanceQ.setFromAxisAngle(WORLD_UP, physStance() === 'regular' ? -Math.PI / 2 : Math.PI / 2); if (rider) rider.backside = physStance() === 'regular'; }   // (on a left, regular is backside; on a right, goofy)
 setTimeout(stancePicker, 0);
 function useBoard(t) {
   boardType = t; try { localStorage.setItem('sumbasurf.board', t); } catch (e) {}
-  rig.remove(board); board.geometry.dispose(); board = makeBoard(t); board.position.z = Math.max(0, (BOARD_LENGTH(t) - 1.88) * 0.33); rig.add(board);
+  rig.remove(board); board.geometry.dispose(); board = makeBoard(t); board.position.z = Math.max(0, (BOARD_LENGTH(t) - 1.88) * 0.33); board.scale.x = MIRROR ? -1 : 1; rig.add(board);   // (at a mirrored spot, mirrored back: the logo reads right)
   boardTail = board.position.z - BOARD_LENGTH(t) / 2 + 0.04; setBoard(t);
   for (const b of document.querySelectorAll('[data-board]')) b.classList.toggle('on', b.dataset.board === t);
   document.getElementById('boardName').textContent = BOARD_INFO[t][0]; if (document.body.classList.contains('playing') && mode !== 'villa') ui.cond.textContent = modeName(mode) + '  \u00b7  ' + BOARD_INFO[t][0] + '  \u00b7  ' + stanceName();
@@ -256,6 +259,10 @@ function setSpot(m) {
   if (r) ENV.uPool.value.set(POOL.x0, POOL.x1, POOL.z0, POOL.z1); else ENV.uPool.value.set(-1e6, 1e6, -1e6, 1e6);
   ENV.uReef.value = r ? 0 : 1;
   REEF = r ? RANCH_REEF : { xEnd: S.xEnd || OCEAN_REEF.xEnd, zBeach: OCEAN_REEF.zBeach + S.dz };   // (each spot's beach is further back or closer in)
+  // a right-hand spot: the same world and physics as a left, the finished picture flipped left to right (so the wave
+  // peels to your right); the stance you chose is kept as you see it, which means the body inside is the other way round
+  const was = MIRROR; MIRROR = !!S.mirror && !r && m !== 'villa'; board.scale.x = MIRROR ? -1 : 1; applyStance();   // (the board mirrored back, so its logo reads right in the flipped picture)
+  if (MIRROR !== was) renderer.state.reset();   // (the triangle facing flips with it: have the renderer set it afresh)
 }
 function condFor(m) { return m === 'villa' ? 'medium' : m === 'ranch' ? ranchKind : m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {
@@ -322,7 +329,7 @@ function spawnRider() {
   if (surfer) endWipe(); rig.visible = true; board.visible = true; for (const b of birds) b.visible = !isRanch();
   pumpC = 0; pumpA = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
   rider = rider || new Rider();
-  rider.backside = stance === 'regular';   // (all lefts: regular is backside)
+  rider.backside = physStance() === 'regular';   // (on a left regular is backside; at a mirrored right, goofy)
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
   rider.reset(2 + Math.random() * 4, -7 - Math.random() * 3, -Math.PI / 2);
   // don't drop a wave on your head as you arrive
@@ -405,7 +412,7 @@ function readInput(dt) {
   // and a light filter so the board answers smoothly instead of twitching with every pixel
   const shape = (v) => { const a = Math.abs(v); return a < 0.08 ? 0 : Math.sign(v) * Math.pow((a - 0.08) / 0.92, 1.35); };
   const ky = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
-  const sx = input.stick ? input.stick.x : kx || shape(padX), sy = input.stick ? input.stick.y : ky || shape(padY);
+  const sx = input.stick ? input.stick.x : (kx || shape(padX)) * (MIRROR ? -1 : 1), sy = input.stick ? input.stick.y : ky || shape(padY);   // (a mirrored spot: your thumb steers what you see)
   steerF += (sx - steerF) * Math.min(1, dt * 14);
   stickY += (sy - stickY) * Math.min(1, dt * 14);
   input.steer = input.test != null ? input.test : steerF;   // input.test: scripted steering for automated checks
@@ -1614,11 +1621,16 @@ function tick(dt) {
   if (rider && tick.demo) { tick.demo.dispose(scene); tick.demo = null; }
   fx.update(dt, camera.position);
 }
+// flipping the picture: the camera's projection mirrored left to right, and every triangle's facing with it (done at
+// the GL call, so the renderer's own bookkeeping stays as it is)
+const flipProj = (cam) => { cam.projectionMatrix.elements[0] *= -1; cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert(); };
+{ const gl = renderer.getContext(), ff = gl.frontFace.bind(gl); gl.frontFace = (m) => ff(MIRROR ? (m === gl.CW ? gl.CCW : gl.CW) : m); }
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
   if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
   if (portrait.matches !== lastPortrait) { lastPortrait = portrait.matches; if (document.body.classList.contains('playing')) audio.pause(portrait.matches); }   // (and so does the sound: no endless drone while it waits)
   // pass 1: the world; pass 2: your body through its own lens (skipped when a test view shows the body in the world cam)
+  const mir = MIRROR; if (mir) flipProj(camera);   // (a right-hand spot: the picture drawn flipped left to right)
   HIDELEGS.value = camera.layers.isEnabled(1) || mode === 'villa' ? 0 : 1;   // (walking round the villa, your legs are yours again)
   // the ride's over (the score is up): your body settling back onto the board moves faster than your eyes follow, and
   // from just behind it you'd see your own back; it isn't drawn in your view until you're back in the lineup
@@ -1629,9 +1641,10 @@ renderer.setAnimationLoop(() => {
     ARMCUT.value = 0; WATERY.value = rider && rider.state === 'LIE' && !W.on ? rig.position.y + 0.01 : -99;
     armK += ((rider && rider.standing && !(W.on) ? 1 : 0) - armK) * Math.min(1, dt * 4);
     armCam.position.copy(camera.position); armCam.quaternion.copy(camera.quaternion);
-    armCam.aspect = camera.aspect; armCam.fov = camera.fov + (62 - camera.fov) * armK; armCam.updateProjectionMatrix();
+    armCam.aspect = camera.aspect; armCam.fov = camera.fov + (62 - camera.fov) * armK; armCam.updateProjectionMatrix(); if (mir) flipProj(armCam);
     renderer.autoClear = false; renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(scene, armCam); renderer.autoClear = true;
   }
+  if (mir) { flipProj(camera); if (!camera.layers.isEnabled(1)) flipProj(armCam); }   // (both lenses back to normal between frames)
   autoQuality(dt); musicTick();
 });
-window.__g = { get walker() { return walker; }, get villaW() { return villaW; }, get drone() { return drone; }, get crew() { return crewW; }, get wild() { return wildW; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, splashLens, get T() { return T; }, want: () => _want };
+window.__g = { get mirror() { return MIRROR; }, flipProj: (c) => flipProj(c), get walker() { return walker; }, get villaW() { return villaW; }, get drone() { return drone; }, get crew() { return crewW; }, get wild() { return wildW; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, splashLens, get T() { return T; }, want: () => _want };

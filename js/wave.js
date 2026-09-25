@@ -22,6 +22,9 @@ export const CONDITIONS = {
   easy:    { H: 3.5,  speed: 6.4,  peel: 3.4,  angle: 62, period: 12, hollow: 0.72, forgive: 0.6, len: 1,   width: 1.3,  fat: 1.3, tube: 1.3,  name: 'Easy' },     // a proper double-overhead wave, but slow and forgiving (slower than a real one this size): the beginner's barrel
   medium:  { H: 4.5,  speed: 8.4,  peel: 5.0,  angle: 62, period: 14, hollow: 0.8,  forgive: 1,   len: 1.1, width: 1.1,  fat: 1.1, tube: 1.0,  name: 'Medium' },   // clean peeling walls
   hard:    { H: 6.0,  speed: 10.2, peel: 7.6,  angle: 55, period: 16, hollow: 1.0,  forgive: 0.85,   len: 1.5, width: 0.95, fat: 0.8, tube: 0,    name: 'Hard' },     // steep, hollow, heavy
+  // the two rights (drawn mirrored): their own waves, not copies of the lefts
+  kanan:   { H: 4.2,  speed: 8.2,  peel: 5.6,  angle: 60, period: 13, hollow: 0.92, forgive: 0.95, len: 1.0, width: 1.05, fat: 1.0, tube: 0.8,  name: 'Medium' },   // a racier, hollower mid-size right: more tube, a bit less wall
+  hiu:     { H: 5.6,  speed: 10.0, peel: 7.6,  angle: 52, period: 15, hollow: 1.0,  forgive: 0.85, len: 1.35, width: 0.92, fat: 0.76, tube: 0, name: 'Hard' },     // a fast, shallow, square right over coral: runs away from you
   extreme: { H: 15,   speed: 13.5, peel: 11,   angle: 45, period: 20, hollow: 1.0,  forgive: 1,   len: 4,   width: 1.25, fat: 1.1, tube: 0.3,  name: 'Extreme' },  // a 15 m mountain of water; a giant reef wave breaks in shallower water (H/d ~1.1) and runs ~13-14 m/s, like Jaws
 };
 
@@ -348,6 +351,8 @@ export const WEATHER = {
   easy:    { sun: [0.35, 0.62, -0.7], zen: 0x2a6cb8, hor: 0xa9d5ec, sunCol: 0xfff4dc, fog: 0xb6daeb, deep: 0x0a5a84, turq: 0x1ccabb, cloud: 0.18, chop: 0.8, fogFar: 320, rain: 0, sunVis: 1 },
   medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2562ab, hor: 0xacd4e8, sunCol: 0xfff7e6, fog: 0xbadae9, deep: 0x08527c, turq: 0x18c2b3, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
   hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2158a6, hor: 0xa6cde3, sunCol: 0xffe6bf, fog: 0xb4d4e3, deep: 0x07496e, turq: 0x16b2a5, cloud: 0.2, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
+  kanan:   { sun: [-0.45, 0.5, -0.75], zen: 0x2a66b0, hor: 0xb4d8e8, sunCol: 0xffefd2, fog: 0xc0dbe8, deep: 0x075a7a, turq: 0x1ec8b4, cloud: 0.26, chop: 0.9, fogFar: 320, rain: 0, sunVis: 1 },   // late morning, a few puffy clouds
+  hiu:     { sun: [0.35, 0.62, -0.7], zen: 0x1f5aa8, hor: 0xa2cde6, sunCol: 0xfff3dc, fog: 0xb0d4e6, deep: 0x06466e, turq: 0x12c4c4, cloud: 0.12, chop: 1.3, fogFar: 300, rain: 0, sunVis: 1 },   // clear and windy, glassy blue over the coral
   extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
   villa:   { gold: 1, sun: [-0.35, 0.22, -0.9], zen: 0x3a64a8, hor: 0xf0c9a2, sunCol: 0xffc68a, fog: 0xf0c6a0, deep: 0x0a4a62, turq: 0x15a39a, cloud: 0.18, chop: 0.9, fogFar: 1100, rain: 0, sunVis: 1 },   // golden hour at the villa: the sun going down over the sea
   ranch:   { sun: [0.45, 0.72, -0.5], zen: 0x2a6cb8, hor: 0xcfe2ea, sunCol: 0xfff3dd, fog: 0xd4e5ec, deep: 0x1a8ea0, turq: 0x3fd6c8, cloud: 0.08, chop: 0.3, fogFar: 700, rain: 0, sunVis: 1 },   // dry, clear country sky; calm pool water

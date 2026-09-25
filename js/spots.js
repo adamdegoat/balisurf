@@ -1,8 +1,8 @@
-// The four surf spots. Each one is the same coast builder with its own look (see coast() in wave.js), plus a few
+// The surf spots (four lefts and two rights). Each one is the same coast builder with its own look (see coast() in wave.js), plus a few
 // landmarks of its own. Distances are in the coast's own frame: the beach is ~185-225 m in from the break, and the
 // whole coast is pushed back by dz (a longer run to the sand makes a longer ride).
 import * as THREE from 'three';
-import { coast, landMaterial } from './wave.js?v=112';
+import { coast, landMaterial } from './wave.js?v=115';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const SPOTS = {
@@ -12,6 +12,11 @@ export const SPOTS = {
   medium: { name: 'Tanjung Uma', dz: 60, xEnd: 200, reefTint: [1, 1, 1], look: { rock: [0.7, 0.6, 0.46] } },   // (weathered honey limestone: the pale cream read as foam from the villa)
   // advanced: a black volcanic slab, basalt cliffs, black sand, a lighthouse on the point
   hard: { name: 'Batu Hitam', dz: 110, xEnd: 290, reefTint: [0.55, 0.62, 0.6], look: { sandWet: [0.1, 0.1, 0.11], sandDry: [0.1, 0.1, 0.1], land: [0.1, 0.16, 0.09], palms: 0.35, cliffH: 1.25, rock: [0.15, 0.15, 0.16], cliffGreen: 0.3, temple: false, mountain: [0.18, 0.2, 0.22], mountainScale: 1.15, jungle: 0.7 } },
+  // the rights (mirror: the whole place is drawn the other way round, so the wave peels to your right). Watu Kanan:
+  // red sandstone bluffs, golden sand, a green valley behind; a temple on the headland
+  kanan: { name: 'Watu Kanan', mirror: true, dz: 80, xEnd: 220, reefTint: [1.05, 1.1, 1.0], look: { sandWet: [0.5, 0.4, 0.28], sandDry: [0.42, 0.33, 0.22], land: [0.13, 0.26, 0.1], palms: 0.9, cliffH: 0.75, rock: [0.64, 0.36, 0.24], cliffGreen: 1.2, temple: true, mountain: [0.24, 0.32, 0.26], mountainScale: 0.8, jungle: 1.1 } },
+  // Karang Hiu: a shallow coral shelf off a low grey reef-rock shore, bright white sand, windswept palms
+  hiu: { name: 'Karang Hiu', mirror: true, dz: 100, xEnd: 280, reefTint: [1.15, 1.3, 1.25], look: { sandWet: [0.64, 0.62, 0.55], sandDry: [0.4, 0.39, 0.35], land: [0.14, 0.24, 0.12], palms: 0.7, cliffH: 0.45, rock: [0.5, 0.5, 0.47], cliffGreen: 0.6, temple: false, mountain: [0.28, 0.33, 0.33], mountainScale: 0.7, jungle: 0.6 } },
   // experts: a giant outer reef far off a towering coast, sea stacks, a storm
   extreme: { name: 'Gunung Laut', dz: 230, xEnd: 430, reefTint: [0.6, 0.65, 0.65], look: { sandWet: [0.18, 0.17, 0.16], sandDry: [0.12, 0.12, 0.11], land: [0.09, 0.14, 0.08], palms: 0.1, cliffH: 2.6, rock: [0.36, 0.35, 0.33], cliffGreen: 0.7, temple: false, mountain: [0.2, 0.23, 0.24], mountainScale: 1.6, jungle: 0.6 } },
 };
