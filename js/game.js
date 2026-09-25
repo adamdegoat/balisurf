@@ -2,11 +2,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=91';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=92';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=100';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 import { ranch, POOL } from './ranch.js?v=3';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=4';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -24,7 +25,7 @@ const fitFov = () => { camera.aspect = innerWidth / innerHeight; camera.fov = TH
 const setHfov = (h) => { if (h !== hfovHalf) { hfovHalf = h; fitFov(); } };
 fitFov();
 skyDome(scene); ocean(scene);
-const coastObjs = (() => { const n0 = scene.children.length; coast(scene); return scene.children.slice(n0); })();   // the Bali coast (hidden at the Surf Ranch)
+spotGroup(scene, 'medium');   // Temple Point: the coast behind the menu (the other spots are built the first time you go)
 const ranchW = ranch(scene);
 const fx = new WeatherFX(scene);
 const audio = new SurfAudio();
@@ -179,15 +180,17 @@ let REEF = { xEnd: 190, zBeach: 150 }; const PROFILES = new Map();   // room for
 const OCEAN_REEF = REEF, RANCH_REEF = { xEnd: POOL.x1 - 60, zBeach: POOL.z1 - 20 };
 let ranchKind = 'medium';   // the wave you last ordered at the Surf Ranch
 const isRanch = () => mode === 'ranch';
-const modeName = (m) => m === 'ranch' ? 'Surf Ranch' : m === 'random' ? 'Random' : CONDITIONS[m].name;
+const modeName = (m) => m === 'ranch' ? 'Surf Ranch' : m === 'random' ? 'Random' : SPOTS[m] ? SPOTS[m].name : CONDITIONS[m].name;
 // which world you're in: the Bali coast, or the wave pool (same water and waves, clipped to the pool, no reef under it)
 function setSpot(m) {
-  const r = m === 'ranch';
-  for (const o of coastObjs) o.visible = !r;
+  const r = m === 'ranch', key = SPOTS[m] ? m : 'medium', S = SPOTS[key];
+  for (const g of builtSpots()) g.visible = false;
+  if (!r) spotGroup(scene, key).visible = true;
   ranchW.group.visible = r;
+  ENV.uReefEnd.value = 190 + S.dz; ENV.uReefTint.value.setRGB(...S.reefTint);
   if (r) ENV.uPool.value.set(POOL.x0, POOL.x1, POOL.z0, POOL.z1); else ENV.uPool.value.set(-1e6, 1e6, -1e6, 1e6);
   ENV.uReef.value = r ? 0 : 1;
-  REEF = r ? RANCH_REEF : OCEAN_REEF;
+  REEF = r ? RANCH_REEF : { xEnd: S.xEnd || OCEAN_REEF.xEnd, zBeach: OCEAN_REEF.zBeach + S.dz };   // (each spot's beach is further back or closer in)
 }
 function condFor(m) { return m === 'ranch' ? ranchKind : m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {

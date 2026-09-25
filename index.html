@@ -74,6 +74,7 @@
   #start .row button { flex: 1 1 0; min-width: 0; padding: 12px 12px; }   /* five levels on one row on a phone */
   #start button { font: 600 13px "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); background: rgba(8,14,20,.35); border: 1.5px solid rgba(253,247,238,.6); padding: 12px 16px; border-radius: 3px; min-width: 104px; text-align: left; }
   #start button small { display: block; font-weight: 400; color: var(--dim); margin-top: 3px; font-size: 11px; }
+  #start button small i { display: block; font-style: normal; font-weight: 700; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #9fe3d6; margin-bottom: 2px; }
   #load { margin-top: 12px; min-height: 1.3em; color: var(--dim); }
   #start button .best { display: block; margin-top: 6px; font-style: normal; font-size: 11px; font-weight: 700; color: #ffcf8a; min-height: 1em; }
   #start button:active { background: rgba(253,247,238,.18); }
@@ -107,22 +108,22 @@
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
   <h1>Bali Surf</h1>
-  <p>A left-hand reef break in Bali, like Uluwatu and Padang Padang: the wave peels to your left as you ride it. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: slide left and right to carve, like a steering wheel. On the left, hold PUMP for speed and STALL to brake and get barrelled.</p>
+  <p>Pick a spot. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: slide left and right to carve, like a steering wheel. On the left, hold PUMP for speed and STALL to brake and get barrelled.</p>
   <div class="row">
-    <button data-mode="easy">Easy<small>Sunny, slow friendly barrels</small></button>
-    <button data-mode="medium">Medium<small>Sunny, clean barrels</small></button>
-    <button data-mode="hard">Hard<small>Sunny, fast heavy barrels</small></button>
-    <button data-mode="extreme">Extreme<small>Storm, 15 m monsters</small></button>
-    <button data-mode="ranch">Surf Ranch<small>Wave pool: order your wave</small></button>
+    <button data-mode="easy">Coral Bay<small><i>Beginners</i>3.5 m, slow, friendly barrels</small></button>
+    <button data-mode="medium">Temple Point<small><i>Intermediate</i>4.5 m clean barrels under the cliffs</small></button>
+    <button data-mode="hard">Black Rock Slab<small><i>Advanced</i>6 m, fast and heavy</small></button>
+    <button data-mode="extreme">The Mountain<small><i>Experts only</i>15 m in a storm</small></button>
+    <button data-mode="ranch">Surf Ranch<small><i>Wave pool</i>Order the wave you want</small></button>
   </div>
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1304</small>
+<small id="build">build 260925-1313</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=429"></script>
+<script type="module" src="js/game.js?v=430"></script>
 </body>
 </html>

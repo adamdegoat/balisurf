@@ -358,7 +358,8 @@ export const ENV = {
   uTime: { value: 0 },                                // one clock for every water surface, so the sea and the wave match
   uCloud: { value: 0.3 }, uChop: { value: 1 }, uFogFar: { value: 260 }, uSunVis: { value: 1 }, uFlash: { value: 0 },
   uPool: { value: new THREE.Vector4(-1e6, 1e6, -1e6, 1e6) },   // water only inside this box (x0, x1, z0, z1): the wave pool
-  uReef: { value: 1 },                                           // 0 = no reef under the water (a concrete pool)
+  uReef: { value: 1 },
+  uReefEnd: { value: 190 }, uReefTint: { value: new THREE.Color(1, 1, 1) },   // where the shallows stop (the beach), and each spot's reef colour                                           // 0 = no reef under the water (a concrete pool)
 };
 export function setWeather(name) {
   const w = WEATHER[name]; ENV.weather = w; ENV.name = name;
@@ -393,7 +394,7 @@ export function waterMaterial({ wave = false } = {}) {
       }`,
     fragmentShader: /* glsl */`
       precision highp float;
-      uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash, uReef; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq; uniform vec4 uPool;
+      uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash, uReef, uReefEnd; uniform vec3 uReefTint; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq; uniform vec4 uPool;
       varying vec3 vW; varying vec3 vN; varying vec2 vFT; varying float vAge;
       ${NOISE}
       vec3 sky(vec3 d){
@@ -450,12 +451,12 @@ export function waterMaterial({ wave = false } = {}) {
         body *= .55 + .45 * base;
         // the reef under clear shallow water (flat water inside the break, toward the beach): pale turquoise over sand
         // with darker coral and rock patches, fading out in deep water, on the wave faces and under a stormy sky
-        float reefK = smoothstep(-45., 15., vW.z) * (1. - smoothstep(165., 190., vW.z)) * smoothstep(-160., -60., vW.x)
+        float reefK = smoothstep(-45., 15., vW.z) * (1. - smoothstep(uReefEnd - 25., uReefEnd, vW.z)) * smoothstep(-160., -60., vW.x)
                     * smoothstep(.55, .99, normalize(vN).y) * (1. - smoothstep(.05, 1.4, vW.y)) * (1. - .7 * uCloud) * uReef;
         if (reefK > .001) {
           float rn = fbm(vW.xz * .06), rn2 = fbm(vW.xz * .27 + 3.1);
           vec3 reefCol = mix(vec3(.3, .66, .62), vec3(.13, .25, .22), clamp(smoothstep(.46, .6, rn) + .35 * (rn2 - .5), 0., 1.));
-          body = mix(body, reefCol * (.55 + .45 * uSunVis), reefK * .38);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
+          body = mix(body, reefCol * uReefTint * (.55 + .45 * uSunVis), reefK * .38);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
         }
         ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);' : ''}
         vec3 col = mix(body, refl, fres);
@@ -575,8 +576,19 @@ export class WeatherFX {
 
 // The coast behind the break (a Bukit-style left like Uluwatu / Padang Padang): golden sand, a line of
 // coconut palms, jungle behind, and Mount Agung far inland. All of it hazed by distance like real sea air.
-export function coast(scene) {
-  const mat = new THREE.ShaderMaterial({
+// the land material (vertex colours, sun, sky light and aerial haze), shared by every coast and its props
+let _landMat = null;
+export function landMaterial() { return _landMat || (_landMat = makeLandMat()); }
+// each surf spot is this coast built with its own look: sand, rock, how tall the cliffs are, how far back the beach is
+// (a longer run to the sand = a longer ride), and a few landmarks
+export function coast(scene, opt = {}) {
+  const O = Object.assign({ dz: 0, sandWet: [0.36, 0.3, 0.22], sandDry: [0.4, 0.35, 0.25], land: [0.12, 0.2, 0.1], palms: 1, cliffH: 1, rock: [0.9, 0.8, 0.63],
+    cliffGreen: 1, temple: true, mountain: [0.26, 0.3, 0.3], mountainScale: 1, jungle: 1 }, opt);
+  const mat = landMaterial();
+  return buildCoast(scene, O, mat);
+}
+function makeLandMat() {
+  return new THREE.ShaderMaterial({
     uniforms: ENV,
     vertexShader: `attribute vec3 color; varying vec3 vC; varying vec3 vW; varying vec3 vN;
       void main(){ vC = color; vec4 w = modelMatrix * vec4(position, 1.);
@@ -597,6 +609,8 @@ export function coast(scene) {
         #include <colorspace_fragment>
       }`,
   });
+}
+function buildCoast(scene, O, mat) {
   const colorize = (g, rgb, jitter = 0.08) => {
     const n = g.attributes.position.count, c = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) { const k = 1 + (Math.random() - .5) * jitter; c[i * 3] = rgb[0] * k; c[i * 3 + 1] = rgb[1] * k; c[i * 3 + 2] = rgb[2] * k; }
@@ -612,14 +626,14 @@ export function coast(scene) {
     for (let i = 0; i < p.count; i++) {
       const z = p.getZ(i), x = p.getX(i); p.setY(i, (z + 20) / 40 * 2.2 - 0.2 + Math.sin(x * 0.05) * 0.2);
       const dry = Math.min(1, Math.max(0, (z + 17) / 10)), k = 1 + (Math.random() - .5) * 0.06 + Math.sin(x * 0.21) * 0.03;
-      c[i * 3] = (0.36 + 0.4 * dry) * k; c[i * 3 + 1] = (0.3 + 0.35 * dry) * k; c[i * 3 + 2] = (0.22 + 0.25 * dry) * k;
+      c[i * 3] = (O.sandWet[0] + O.sandDry[0] * dry) * k; c[i * 3 + 1] = (O.sandWet[1] + O.sandDry[1] * dry) * k; c[i * 3 + 2] = (O.sandWet[2] + O.sandDry[2] * dry) * k;
     }
     sd.setAttribute('color', new THREE.BufferAttribute(c, 3)); sd.computeVertexNormals(); }
   group.add(at(new THREE.Mesh(sd, mat), 0, 0, 205));
   // land behind, gently rolling
   const land = new THREE.PlaneGeometry(1800, 500, 90, 20); land.rotateX(-Math.PI / 2);
   { const p = land.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, 2 + 4 * Math.sin(x * 0.013) * Math.cos(z * 0.02) + (z + 250) * 0.03); } land.computeVertexNormals(); }
-  group.add(at(new THREE.Mesh(colorize(land, [0.12, 0.2, 0.1], 0.2), mat), 0, 0, 475));
+  group.add(at(new THREE.Mesh(colorize(land, O.land, 0.2), mat), 0, 0, 475));
   // height of the rolling land at a world point (the same formula that shapes the land mesh, placed at z = 475)
   const landY = (x, z) => { const lz = z - 475; return 2 + 4 * Math.sin(x * 0.013) * Math.cos(lz * 0.02) + (lz + 250) * 0.03; };
   // jungle: layered tree canopies behind the palms. Each tree is a lumpy crown (a noise-dented blob, darker underneath
@@ -635,13 +649,13 @@ export function coast(scene) {
       c[i * 3] = 0.09 * k; c[i * 3 + 1] = 0.2 * k; c[i * 3 + 2] = 0.08 * k;
     }
     blob.setAttribute('color', new THREE.BufferAttribute(c, 3)); blob.computeVertexNormals(); }
-  const NJ = 620, jungle = new THREE.InstancedMesh(blob, mat, NJ); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+  const NJ = Math.round(620 * O.jungle), jungle = new THREE.InstancedMesh(blob, mat, NJ); const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
   const NT = 90, jTrunk = new THREE.InstancedMesh(colorize(new THREE.CylinderGeometry(0.25, 0.45, 1, 6).translate(0, 0.5, 0), [0.22, 0.18, 0.14], 0.2), mat, NT);
   let n = 0, nt = 0;
   const crown = (x, y, z, r) => { if (n >= NJ) return; q.setFromEuler(new THREE.Euler(0, Math.random() * 6.3, 0));
     jungle.setMatrixAt(n++, m4.compose(ps.set(x, y, z), q, sc.set(r * (1 + Math.random() * 0.4), r * (0.7 + Math.random() * 0.3), r * (0.9 + Math.random() * 0.4)))); };
   // understory: a dense band of low bushes so no sky shows through at the foot of the forest
-  for (let i = 0; i < 380; i++) { const x = -750 + Math.random() * 1500, z = 232 + Math.random() * 60, r = 3 + Math.random() * 4; crown(x, landY(x, z) + r * 0.4, z, r); }
+  for (let i = 0; i < 380 * O.jungle; i++) { const x = -750 + Math.random() * 1500, z = 232 + Math.random() * 60, r = 3 + Math.random() * 4; crown(x, landY(x, z) + r * 0.4, z, r); }
   // trees: a crown of two or three overlapping lumps; the tall ones stand on a trunk above the understory
   while (n < NJ - 3) {
     const tall = nt < NT && Math.random() < 0.3, r = tall ? 5 + Math.random() * 4 : 3 + Math.random() * 3;
@@ -672,7 +686,7 @@ export function coast(scene) {
   for (let i = 0; i < N; i++) {
     const h = 8 + Math.random() * 7, lean = (Math.random() - 0.5) * 0.25 - 0.08, yaw = Math.PI / 2 + (Math.random() - 0.5) * 1.4;   // most lean out toward the sea
     const x = -700 + i * 8.2 + (Math.random() - .5) * 5, z = 222 + Math.random() * 12;
-    if (x < -60) { trunks.setMatrixAt(i, m4.makeScale(0, 0, 0)); crowns.setMatrixAt(i, m4.makeScale(0, 0, 0)); continue; }   // (under the cliffs)
+    if ((O.cliffH >= 0.2 && x < -60) || Math.random() > O.palms) { trunks.setMatrixAt(i, m4.makeScale(0, 0, 0)); crowns.setMatrixAt(i, m4.makeScale(0, 0, 0)); continue; }   // (under the cliffs; fewer on a sparse coast)
     q.setFromEuler(new THREE.Euler(lean, yaw, 0));
     trunks.setMatrixAt(i, m4.compose(ps.set(x, 1.8, z), q, sc.set(1, h, 1)));
     const top = new THREE.Vector3(0.9, h, 0).applyQuaternion(q).add(ps);   // the top of the curved trunk
@@ -681,7 +695,7 @@ export function coast(scene) {
   group.add(trunks, crowns);
   // Uluwatu-style limestone cliffs up the reef from the break (toward -x): pale sheer rock streaked darker, wet and
   // dark at the base, jungle hanging over the top edge; they slope down into the beach near the peak. A temple on the edge.
-  const cliffTop = (x) => (58 + 12 * Math.sin(x * 0.021) + 6 * Math.sin(x * 0.067 + 1.3)) * Math.min(1, Math.max(0, (-x - 70) / 35));
+  const cliffTop = (x) => O.cliffH * (58 + 12 * Math.sin(x * 0.021) + 6 * Math.sin(x * 0.067 + 1.3)) * Math.min(1, Math.max(0, (-x - 70) / 35));
   const CW = 660, cliff = new THREE.PlaneGeometry(CW, 1, 132, 26);
   { const p = cliff.attributes.position, c = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i++) {
@@ -691,8 +705,8 @@ export function coast(scene) {
       const streak = 0.7 + 0.3 * Math.pow(0.5 + 0.5 * Math.sin(x * 0.9 + Math.sin(y * 0.3) * 2), 2) + 0.1 * band, wet = Math.min(1, y / 4), green = Math.max(0, (v - 0.84) / 0.16) + Math.max(0, Math.sin(x * 0.13) * Math.sin(y * 0.2) - 0.75) * 2;   // weathered streaks, tufts of green on ledges
       const crev = 0.6 + 0.4 * Math.min(1, Math.abs(Math.sin(x * 0.47 + Math.sin(y * 0.11) * 1.5)) * 2.2);   // dark vertical cracks and gullies
       const ledge = 0.72 + 0.28 * Math.min(1, Math.max(0, band * 2 + 0.6));   // shadow under each ledge
-      const k = streak * crev * ledge * (0.4 + 0.6 * wet) * (0.8 + 0.2 * v), r = 0.9 * k, g = 0.8 * k, b = 0.63 * k;   // warm cream limestone
-      const gr = Math.min(1, green); c[i * 3] = r + (0.16 - r) * gr; c[i * 3 + 1] = g + (0.25 - g) * gr; c[i * 3 + 2] = b + (0.11 - b) * gr;
+      const k = streak * crev * ledge * (0.4 + 0.6 * wet) * (0.8 + 0.2 * v), r = O.rock[0] * k, g = O.rock[1] * k, b = O.rock[2] * k;   // warm cream limestone at Temple Point (each spot has its own rock)
+      const gr = Math.min(1, green) * O.cliffGreen; c[i * 3] = r + (0.16 - r) * gr; c[i * 3 + 1] = g + (0.25 - g) * gr; c[i * 3 + 2] = b + (0.11 - b) * gr;
     }
     { const ix = cliff.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; } }   // face the sea
     cliff.setAttribute('color', new THREE.BufferAttribute(c, 3)); cliff.computeVertexNormals(); }
@@ -706,7 +720,7 @@ export function coast(scene) {
     edge.setMatrixAt(i, m4.compose(ps.set(x, t + r * 0.3, 219 + Math.random() * 30), q.setFromEuler(new THREE.Euler(0, Math.random() * 6, 0)), sc.set(r * 1.3, r * 0.7, r))); }
   group.add(edge);
   // a Balinese temple on the cliff edge: stone base, a meru tower of stacked dark thatch roofs
-  { const tx = -190, ty = cliffTop(tx), tz = 226, stone = [0.62, 0.56, 0.48], thatch = [0.14, 0.11, 0.09];
+  if (O.temple) { const tx = -190, ty = cliffTop(tx), tz = 226, stone = [0.62, 0.56, 0.48], thatch = [0.14, 0.11, 0.09];
     group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(9, 3, 9), stone, 0.1), mat), tx, ty + 1.5, tz));
     group.add(at(new THREE.Mesh(colorize(new THREE.BoxGeometry(3, 3.5, 3), stone, 0.1), mat), tx, ty + 4.7, tz));
     for (let k = 0; k < 3; k++) { const rr = 4.2 - k * 1.1, roof = new THREE.ConeGeometry(rr, 1.5, 4); roof.rotateY(Math.PI / 4);
@@ -717,7 +731,8 @@ export function coast(scene) {
   // Mount Agung, far inland: a broad volcanic cone
   // (placed inside the 900 m sky dome at the same apparent size it would have 30 km away)
   const agung = new THREE.ConeGeometry(470, 165, 40, 6, true); { const p = agung.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const n = Math.sin(p.getX(i) * 0.03) * Math.cos(p.getZ(i) * 0.04) * 10; p.setX(i, p.getX(i) * (1 + n / 470)); p.setY(i, y + (y < 60 ? n * 0.3 : 0)); } agung.computeVertexNormals(); }
-  group.add(at(new THREE.Mesh(colorize(agung, [0.26, 0.3, 0.3], 0.1), mat), -230, 80, 820));
+  { const mt = at(new THREE.Mesh(colorize(agung, O.mountain, 0.1), mat), -230, 80 * O.mountainScale, 820); mt.scale.setScalar(O.mountainScale); group.add(mt); }
+  group.position.z = O.dz;   // the whole coast further back: a longer run in to the sand
   scene.add(group);
   return group;
 }
