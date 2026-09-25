@@ -3,25 +3,31 @@
 // (scratchpad trailer/recv.py on :8799). Each take is resumable across calls (the browser tool gives ~40 s a call).
 //   const f = await import('./test/film.js'); f.setup(); await f.run('ride')  (repeat until it says done)
 import * as THREE from 'three';
-import { brain } from './sim2.js';
+import { brain, carveBrain } from './sim2.js';
 const G = () => window.__g;
-const W = 1080, H = 1920, FPS = 30;
+let W = 1080, H = 1920; const FPS = 30;
 const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const cx = cv.getContext('2d');
 let saved = null;
-export function setup() {
-  const g = G(), r = g.renderer; g.paused = true;
+export function setup(w = 1080, h = 1920) {
+  const g = G(), r = g.renderer; g.paused = true; W = w; H = h; cv.width = W; cv.height = H;
   if (!saved) saved = { pr: r.getPixelRatio() };
   r.setPixelRatio(1); r.setSize(W, H, false);
   document.getElementById('hint') && (document.getElementById('hint').style.visibility = 'hidden');
 }
 export function teardown() { const g = G(), r = g.renderer; r.setPixelRatio(saved ? saved.pr : devicePixelRatio); r.setSize(innerWidth, innerHeight, false); g.paused = false; saved = null; }
 // draw the world through the camera (and your own arms and board through their own lens, like the game does)
-function draw(fov, body) {
-  const g = G(), r = g.renderer, c = g.camera;
-  c.aspect = W / H; c.fov = fov; c.updateProjectionMatrix(); c.updateMatrixWorld();
+function draw(fov, body, crop) {
+  const g = G(), r = g.renderer, c = g.camera, a = g.armCam;
+  // crop: a vertical slice of the game's own landscape view (a phone on its side, 2.16:1), the slice centred at crop
+  // (0..1 across it). The camera and its lens are exactly the game's; only the window onto them is tall
+  if (crop !== undefined) { const fw = H * 2.16, x0 = Math.max(0, Math.min(fw - W, crop * fw - W / 2)); c.aspect = fw / H; c.fov = fov; c.setViewOffset(fw, H, x0, 0, W, H); c.updateProjectionMatrix();
+    if (body) { a.position.copy(c.position); a.quaternion.copy(c.quaternion); a.aspect = fw / H; a.fov = body; a.setViewOffset(fw, H, x0, 0, W, H); a.updateProjectionMatrix(); } }
+  else { c.aspect = W / H; c.fov = fov; c.updateProjectionMatrix(); if (body) { a.position.copy(c.position); a.quaternion.copy(c.quaternion); a.aspect = W / H; a.fov = typeof body === 'number' ? body : fov; a.updateProjectionMatrix(); } }
+  c.updateMatrixWorld();
   r.autoClear = false; r.clear(); r.render(g.scene, c);
-  if (body) { const a = g.armCam; a.position.copy(c.position); a.quaternion.copy(c.quaternion); a.aspect = W / H; a.fov = typeof body === 'number' ? body : fov; a.updateProjectionMatrix(); r.clearDepth(); r.render(g.scene, a); }   // (your arms through a narrower lens than the world, like the game: a wide lens bloats anything that close)
+  if (body) { r.clearDepth(); r.render(g.scene, a); }
   r.autoClear = true;
+  if (crop !== undefined) { c.clearViewOffset(); a.clearViewOffset(); }
   cx.drawImage(r.domElement, 0, 0, W, H);   // (copied in the same task, before the browser clears the drawing buffer)
 }
 async function grab(shot, i) {
@@ -37,7 +43,7 @@ T.open = { n: 150, init() { const g = G(); document.getElementById('start').styl
   frame(i) { const g = G(); g.step(1 / FPS, 1 / FPS, false); const c = g.camera; const k = i / 150; c.rotateY(-0.42 + 0.06 * k); c.rotateX(0.1); c.translateZ(-0.8 * k); return { fov: 84 - 6 * k }; } };
 // your ride: paddle in, the drop, set up in the pocket, pull in and ride the barrel out (Tanjung Uma); and the giant
 function rideTake(mode, seed, n, boardT = 'short') {
-  let br, rnd0; const rs = { w: 0 };
+  let br, rnd0; const rs = { w: 0, pan: 0.5 };
   return { n, init() { const g = G(); rnd0 = Math.random; Math.random = seeded(seed); g.setMode(mode); document.getElementById('start').style.display = 'none'; document.body.classList.add('playing', 'riding');
       g.useBoard(boardT); g.spawnRider(); br = brain({}); const r = g.rider;   // (wait in the lineup until the wave is 3 s away)
       for (let i = 0; i < 60 * 90; i++) { const o = br(r); g.input.test = o.steer; g.input.paddleBtn = r.standing ? !!o.pump : !!o.paddle; g.step(1 / 60, 1 / 60, false); if (r.state === 'LIE' && g.incoming().t < 3.2) break; } },
@@ -52,13 +58,13 @@ function rideTake(mode, seed, n, boardT = 'short') {
       }
       // the GoPro framing for a tall screen: once you're up, the camera turns from the game's view (toward the beach)
       // to look down the line: the wall on your left, the lip curling over, the way out ahead
-      const c = g.camera; rs.w += ((r.standing ? 1 : 0) - rs.w) * 0.06;
-      if (rs.w > 0.01) { const f = new THREE.Vector3(); c.getWorldDirection(f); const dl = new THREE.Vector3(1, -0.5, -0.08).normalize(); f.lerp(dl, rs.w * 0.85).normalize(); c.lookAt(c.position.clone().add(f)); }
-      return { fov: 116, body: 82 }; },
+      const c = g.camera, lip = new THREE.Vector3(); if (r.wave && r.state === 'RIDE') { const L = r.wave.lipAt(r.s + 2); lip.set(L[0], L[1] * (r.wave.fade || 1), L[2]); c.updateMatrixWorld();
+      const sp = lip.clone().project(c); const fx = 0.5 + sp.x * 0.5 * (1 / 2.16) * 2.16; rs.pan += (Math.max(0.33, Math.min(0.67, 0.5 + (fx - 0.5) * 0.55)) - rs.pan) * 0.05; } else rs.pan += (0.5 - rs.pan) * 0.05;
+      return { fov: 70, body: 62, crop: rs.pan }; },   // (the game's own camera, untouched)
     done() { const g = G(); if (boardT !== 'short') g.useBoard('short'); Math.random = rnd0; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; } };
 }
 T.ride = rideTake('medium', 3, 600);
-T.giant = rideTake('extreme', 7, 540, 'gun');
+T.giant = rideTake('extreme', 7, 300, 'gun'); T.giant.keep = [[110, 300]];
 // the villa and the view from it: free cameras in the villa's world (it keeps living: waves, crew, whale, dolphins)
 const V = { ok: false };
 function villaInit() { const g = G(); if (!document.body.classList.contains('villa')) { g.startVilla(); } g.step(0.5, 1 / 30, false); V.ok = true; }
@@ -77,6 +83,36 @@ function crewCam(pick, place, n) { let idx = -1; return { n, init() { villaInit(
   frame(i) { const g = G(); g.step(1 / FPS, 1 / FPS, false); const s = g.crew.surfers[idx]; place(g.camera, s, i); return { fov: 60 }; } }; }
 T.carve = crewCam((s) => s.st === 'RIDE' && s.tau > 2.5 && s.tau < 4 && !(s.tube < 8), (c, s, i) => { const p = s.p; c.position.set(p.x + 3.5, p.y + 1.6, p.z + 6.5); c.lookAt(p.x, p.y + 0.9, p.z); }, 90);
 T.tube = crewCam((s) => s.st === 'RIDE' && s.tubeT > 0.05 && s.tubeT < 0.4, (c, s, i) => { const p = s.p; c.position.set(p.x + 9, p.y + 2.2, p.z + 9); c.lookAt(p.x, p.y + 1, p.z); }, 75);
+// the showcase ride: paddle in, the drop, a bottom turn and carves up and down the face, then pull in, get barrelled
+// and spat out as the wave backs off at the end (one continuous take; the GoPro turns down the line once you're tubed)
+T.ride2 = (() => { let br, cb, rnd0; const rs = { w: 0, pan: 0.5 }; return { n: 830, keep: [[90, 440], [540, 830]],
+  init() { const g = G(); rnd0 = Math.random; Math.random = seeded(3); g.setMode('medium'); document.getElementById('start').style.display = 'none'; document.body.classList.add('playing', 'riding');
+    g.useBoard('short'); g.spawnRider(); br = brain({}); cb = carveBrain({ hi: 0.72, lo: 0.22 }); const r = g.rider;
+    for (let i = 0; i < 60 * 90; i++) { const o = br(r); g.input.test = o.steer; g.input.paddleBtn = r.standing ? !!o.pump : !!o.paddle; g.step(1 / 60, 1 / 60, false); if (r.state === 'LIE' && g.incoming().t < 3.0) break; } },
+  frame() { const g = G(), r = g.rider;
+    for (let k = 0; k < 2; k++) {
+      if (r.state === 'RIDE' && r.stateT > 4.2) {   // the barrel
+        const w = r.wave, Hh = w.cond.H, sH = r.s / Hh, yH = r.y / Hh, err = yH - 0.35 + (r.stalling ? 0.12 : 0);
+        const sn = Math.max(-0.6, Math.min(0.97, w.cond.speed / Math.max(r.v, 1) + err * 0.9)), a0 = Math.asin(sn), steer = Math.max(-1, Math.min(1, Math.atan2(Math.sin(a0 - r.th), Math.cos(a0 - r.th)) * 3));
+        const stall = !r.inBarrel && sH > -0.2 && !(r.spitOut > 0); g.input.test = stall ? null : steer; g.input.stick = stall ? { x: steer, y: 1 } : null; g.input.paddleBtn = !stall && sH < -1.2;
+      } else if (r.state === 'RIDE' && r.stateT > 1.2) { g.input.stick = null; const o = cb(r); g.input.test = o.steer; g.input.paddleBtn = false; }   // carving
+      else if (r.state === 'RIDE' || r.state === 'POP' || r.state === 'LIE') { g.input.stick = null; const o = br(r); g.input.test = o.steer; g.input.paddleBtn = r.standing ? !!o.pump : !!o.paddle; }
+      g.step(1 / 60, 1 / 60, false);
+    }
+    const c = g.camera, lip = new THREE.Vector3(); if (r.wave && r.state === 'RIDE') { const L = r.wave.lipAt(r.s + 2); lip.set(L[0], L[1] * (r.wave.fade || 1), L[2]); c.updateMatrixWorld();
+      const sp = lip.clone().project(c); const fx = 0.5 + sp.x * 0.5 * (1 / 2.16) * 2.16; rs.pan += (Math.max(0.33, Math.min(0.67, 0.5 + (fx - 0.5) * 0.55)) - rs.pan) * 0.05; } else rs.pan += (0.5 - rs.pan) * 0.05;
+    return { fov: 70, body: 62, crop: rs.pan }; },   // (the game's own first-person camera and lenses; the frame is a tall slice of it that leans toward the wave)
+  done() { const g = G(); Math.random = rnd0; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; } }; })();
+// in the villa, as you: walking from the board room through the living room, out through the open doors to the balcony
+// and the view; and reaching for a board in the rack
+function walkTake(n, start, pts, pitch0, pitch1, cropX = 0.5) { let wi = 0; return { n,
+  init() { villaInit(); const g = G(), w = g.walker; w.sit = null; w.x = OX - start[0]; w.z = start[1] + OZ; w.y = 27.65; w.yaw = Math.atan2(pts[0][1] + OZ - w.z, OX - pts[0][0] - w.x); wi = 0; g.step(0.3, 1 / 30, false); },
+  frame(i) { const g = G(), w = g.walker, k = i / n; const tgt = pts[Math.min(wi, pts.length - 1)], tx = OX - tgt[0], tz = tgt[1] + OZ;
+    if (Math.hypot(tx - w.x, tz - w.z) < 0.6 && wi < pts.length - 1) wi++;
+    const want = Math.atan2(tz - w.z, tx - w.x); w.yaw += Math.atan2(Math.sin(want - w.yaw), Math.cos(want - w.yaw)) * 0.08; w.pitch = pitch0 + (pitch1 - pitch0) * k;
+    w.mz = wi >= pts.length - 1 && Math.hypot(tx - w.x, tz - w.z) < 0.7 ? 0 : 0.85; g.step(1 / FPS, 1 / FPS, false); return { fov: 61.6, body: 61.6, crop: cropX }; } }; }   // (the villa's own camera and lens, a tall slice of it)
+T.walk = walkTake(165, [-97.2, 36.6], [[-94.5, 36.5], [-91, 35.8], [-87.5, 36.6], [-85.9, 37.4], [-83.6, 38.2]], 0.12, -0.08);
+T.rack = walkTake(85, [-95.6, 38.3], [[-97.9, 38.3], [-98.1, 38.3]], -0.02, -0.14, 0.58);
 // wildlife: set the moment up, then film it low from the water
 T.dolphins = { n: 100, init() { villaInit(); const g = G(), P = g.wild.pod; P.on = false; P.next = 0; g.step(1 / 30, 1 / 30, false); g.step(4, 1 / 30, false); },
   frame(i) { const g = G(); g.step(1 / FPS, 1 / FPS, false); const P = g.wild.pod, px = P.x0 + P.dx * P.t, pz = P.z0 + P.dz * P.t; const c = g.camera;
@@ -90,11 +126,16 @@ export async function run(name, budget = 36000) {
   const t = T[name]; if (!t) return 'no take ' + name;
   if (!S[name]) { S[name] = { i: 0 }; t.init(); }
   const s = S[name], t0 = performance.now();
-  while (s.i < t.n && performance.now() - t0 < budget) { const o = t.frame(s.i); draw(o.fov, o.body); await grab(name, s.i); s.i++; }
+  while (s.i < t.n && performance.now() - t0 < budget) { const o = t.frame(s.i); if (!t.keep || t.keep.some(([a, b]) => s.i >= a && s.i <= b)) { draw(o.fov, o.body, o.crop); await grab(name, s.i); } s.i++; }   // (keep: only the stretches the edit uses get drawn)
   if (s.i >= t.n) { if (t.done) t.done(); return `${name}: done (${t.n} frames)`; }
   return `${name}: ${s.i}/${t.n}`;
 }
 export function reset(name) { delete S[name]; }
 // one test frame of a take (after k frames), saved as frames/_peek/<name>.jpg, to judge the framing before filming it all
-export async function peek(name, k = 0) { const t = T[name]; delete S[name]; t.init(); let o; for (let i = 0; i <= k; i++) o = t.frame(i); draw(o.fov, o.body);
+export async function peek(name, k = 0) { const t = T[name]; delete S[name]; t.init(); let o; for (let i = 0; i <= k; i++) o = t.frame(i); draw(o.fov, o.body, o.crop);
   const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.85)); await fetch(`http://127.0.0.1:8799/f?shot=_peek_${name}&i=${k}`, { method: 'POST', body: blob }); return 'peeked ' + name; }
+// dry run of a take (no drawing): the rider's line every few frames, to set a take up before filming it
+export function sim(name, n, every = 20) { const t = T[name], g = G(); delete S[name]; t.init(); const out = [];
+  for (let i = 0; i < n; i++) { t.frame(i); if (i % every === 0) { const r = g.rider; if (!r) continue; const w = r.wave, H = w ? w.cond.H : 1;
+    out.push(`${i} ${r.state} t${r.stateT.toFixed(1)} s${w ? (r.s / H).toFixed(2) : '-'} y${w ? (r.y / H).toFixed(2) : '-'}${r.inBarrel ? ' B' : ''}${w && w.endK < 1 ? ' end' + (w.endK * 100 | 0) : ''}`); } }
+  return out.join(' | '); }

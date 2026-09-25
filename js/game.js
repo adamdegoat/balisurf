@@ -448,8 +448,15 @@ async function start(m) {
   session = { waves: 0, total: 0, best: 0, scores: [], barrels: 0 };
   setLeft = 0; setPos = 0;
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15;   // a calm start: time to look around and find the set
-  updateWaves(0); spawnRider();
+  updateWaves(0); spawnRider(); warmShaders();
   ui.cond.textContent = modeName(mode) + '  \u00b7  ' + BOARD_INFO[boardType][0];   // (the spot, and the board you're on)
+}
+// build the shader for everything that could show up in a session (the boat, the locals, spray, what's still hidden), now at the tap,
+// not in a stall mid-paddle the first time each thing comes into view
+function warmShaders() {
+  if (warmShaders.done) return; warmShaders.done = true;
+  const shown = []; scene.traverse((o) => { if (!o.visible) { o.visible = true; shown.push(o); } });
+  try { renderer.compile(scene, camera); } finally { for (const o of shown) o.visible = false; }
 }
 if (Q.get('mode')) start(Q.get('mode'));
 
@@ -1172,7 +1179,7 @@ function updateHUD(dt) {
 }
 
 // ---------- automatic quality
-let fpsAcc = 0, fpsN = 0, lowT = 0, highT = 0, refFps = 30;
+let fpsAcc = 0, fpsN = 0, lowT = 0, highT = 0, refFps = 60, prCap = MAX_PR, capT = 0, probe = null;
 function autoQuality(dt) {
   fpsAcc += dt; fpsN++;
   if (fpsAcc < 1) return;
@@ -1180,9 +1187,17 @@ function autoQuality(dt) {
   fit();
   // compare against what this screen can actually do (60, 120, or 30 in iPhone Low Power Mode), not a fixed number
   refFps = Math.max(Math.min(fps, 125), refFps - 2);
+  // every change of sharpness rebuilds the screen's buffers: a visible stall (~70 ms on a laptop chip), so it isn't done
+  // lightly: a level that proved too slow isn't retried for a minute (no drop, climb, drop, climb every few seconds), and
+  // climbing back up waits until you're not mid-ride (dropping still happens at once: a slow ride is worse than one stall)
+  if (capT > 0 && --capT === 0) prCap = MAX_PR;
+  // a drop is a test: two seconds on, did it get faster? if not, the screen itself is the limit (30 Hz Low Power Mode),
+  // not the drawing: put the sharpness back and take this pace as the screen's
+  if (probe) { if (++probe.t < 2) return; if (fps < probe.fps * 1.12) { pr = probe.pr; renderer.setPixelRatio(pr); prCap = pr; capT = 60; refFps = Math.min(refFps, fps + 2); } probe = null; lowT = highT = 0; return; }
   if (fps < refFps * 0.82) { lowT++; highT = 0; } else if (fps > refFps * 0.95) { highT++; lowT = 0; }
-  if (lowT >= 2 && pr > 0.75) { pr = Math.max(0.75, pr - 0.15); renderer.setPixelRatio(pr); lowT = 0; }
-  if (highT >= 6 && pr < MAX_PR) { pr = Math.min(MAX_PR, pr + 0.1); renderer.setPixelRatio(pr); highT = 0; }
+  const riding = rider && (rider.state === 'RIDE' || rider.state === 'POP');
+  if (lowT >= 2 && pr > 0.75) { probe = { pr, fps, t: 0 }; prCap = pr - 0.05; capT = 60; pr = Math.max(0.75, pr - 0.15); renderer.setPixelRatio(pr); lowT = 0; }
+  if (highT >= 6 && pr + 0.1 <= prCap && !riding) { pr = Math.min(MAX_PR, pr + 0.1); renderer.setPixelRatio(pr); highT = 0; }
   if (Q.has('debug')) document.getElementById('fps').textContent = `${Math.round(fps)} fps · pr ${pr.toFixed(2)}`;
 }
 
