@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=93';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
-import { makeBoard, BOARD_LENGTH } from './board.js?v=7';
+import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=8';
 import { SurfAudio } from './audio.js?v=8';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=7';
@@ -861,7 +861,7 @@ function aimBone(bone, child, target, w) {
 // paddling: alternating crawl strokes. Each arm reaches far forward over the water, digs in and pulls back under the
 // board, comes out by the hip and swings forward elbow-high; the other arm half a stroke behind. (The stock clip is a
 // breaststroke that keeps both hands under the board, where your own eyes can never see them.)
-let paddlePh = 0, paddleW = 0; const _pf = new THREE.Vector3(), _pr = new THREE.Vector3(), _ps = new THREE.Vector3(), _ppo = new THREE.Vector3();
+let paddlePh = 0, paddleW = 0; const _pf = new THREE.Vector3(), _pr = new THREE.Vector3(), _ps = new THREE.Vector3(), _ppo = new THREE.Vector3(), _ps2 = new THREE.Vector3();
 function paddleArms(dt) {
   const want = rider.state === 'LIE' && rider.paddling ? 1 : 0;
   paddleW += (want - paddleW) * Math.min(1, dt * 6);
@@ -881,11 +881,13 @@ function paddleArms(dt) {
     const wl = rig.position.y + 0.02;                                                   // the water line beside the board
     if (u < 0.55) { const k = u / 0.55;                                                  // pull: catch ahead -> hip, under the surface
       _t.copy(sh).addScaledVector(_pf, 0.47 - 0.77 * k).addScaledVector(_pr, side * (0.05 + 0.05 * Math.sin(k * Math.PI)));
-      _t.y = wl - 0.03 - 0.18 * Math.sin(k * Math.PI);   // (full reach at the catch: the fingertips go in ahead, where you can see them)
+      _t.y = wl - 0.03 - 0.18 * Math.sin(k * Math.PI);
+      { const half = BOARD_WIDTH(boardType) / 2, lat = _ps2.subVectors(_t, rig.position).dot(_pr), want = side * (half + 0.08 + 0.05 * Math.sin(k * Math.PI)); if (lat * side < want * side) _t.addScaledVector(_pr, want - lat); }   // (just outside this board's rail: a wide board would swallow the hands)   // (full reach at the catch: the fingertips go in ahead, where you can see them)
       _ppo.copy(_pr).multiplyScalar(side * 0.7).addScaledVector(WORLD_UP, 0.7);          // elbow up and out, like pulling over a barrel
     } else { const k = (u - 0.55) / 0.45, e = k * k * (3 - 2 * k);                     // recovery: out by the hip, forward over the water
       _t.copy(sh).addScaledVector(_pf, -0.3 + 0.77 * e).addScaledVector(_pr, side * (0.1 + 0.12 * Math.sin(k * Math.PI)));
       _t.y = wl + 0.02 + 0.2 * Math.sin(k * Math.PI);
+      { const half = BOARD_WIDTH(boardType) / 2, lat = _ps2.subVectors(_t, rig.position).dot(_pr), want = side * (half + 0.12 + 0.1 * Math.sin(k * Math.PI)); if (lat * side < want * side) _t.addScaledVector(_pr, want - lat); }
       _ppo.copy(WORLD_UP).addScaledVector(_pr, side * 0.5).addScaledVector(_pf, -0.3);   // elbow high, leading
     }
     reachArm(ua, la, hd, _t, _ppo, 0.95 * paddleW);

@@ -14,6 +14,7 @@ const SHAPES = {
     OUT: [[-.05, .16], [0, .26], [.08, .45], [.25, .78], [.45, .97], [.55, 1], [.7, .92], [.82, .75], [.9, .55], [.95, .35], [.985, .14], [1, .0], [1.01, -.1]] },
 };
 export const BOARD_LENGTH = (type) => (SHAPES[type] || SHAPES.short).L;
+export const BOARD_WIDTH = (type) => (SHAPES[type] || SHAPES.short).W;
 
 export function makeBoard(type = 'short') {
   const S = SHAPES[type] || SHAPES.short;
