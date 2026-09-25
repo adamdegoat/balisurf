@@ -1,165 +1,176 @@
-// Your villa: a small luxury Indonesian surf villa on the clifftop at Tanjung Uma, beside the temple, looking down on the
-// break. A stone terrace on the cliff with a timber viewing deck and glass balustrade over the edge, an infinity pool
-// along the cliff, an open-sided living bale under a steep thatched roof, a surf room with your boards in a rack, and a
-// frangipani garden inside a low stone wall with a split gate. Built in the coast's own frame (same as coast() in
-// wave.js), so it sits on the Tanjung Uma cliff once the group is moved back by that spot's dz.
+// Your villa: a small wooden cliff house out on the rocky point at Tanjung Uma, right beside the takeoff, so from its
+// balcony you look straight down the line of the waves and watch every ride. Inside it's all warm timber: plank walls,
+// wide floorboards, a pitched boarded ceiling on dark beams. A living room with glass on the two sea sides opens onto
+// a wraparound balcony; through a doorway, the board room, with your four boards standing in a rack on the wall.
+// Built in the coast's own frame (same as coast() in wave.js), so it sits right once the group is moved back by the
+// spot's dz. The waves break at x 0 (coast z about -60) and peel off toward +x; the point is just up the reef from them.
 import * as THREE from 'three';
 import { makeBoard } from './board.js?v=10';
+import { landMaterial } from './wave.js?v=95';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-export const VILLA = { x0: -146, x1: -110, z0: 228, z1: 262, Y: 55 };   // the terrace (coast frame) and its floor height
+export const VILLA = { x0: -100, x1: -86, z0: 30, z1: 44, Y: 26 };   // the house and its floor height (in the point's own frame, below)
+// where the point is: the whole house and point are drawn around (-93, 37) and moved by this much, which puts the
+// balcony about 75 m from the takeoff and 50-100 m from the rides, as close as it can be without the broken wave's
+// whitewater (up to ~60 m behind the peak) ever reaching the rock
+const OX = 33, OZ = -25;
 
 export function villa(scene) {
-  const g = new THREE.Group(); g.visible = false; scene.add(g);
-  // (lit like real materials, close up: the land material's distance haze washed everything out at arm's length)
-  const V = VILLA, Y = V.Y, mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
+  const root = new THREE.Group(); root.visible = false; scene.add(root);
+  const g = new THREE.Group(); g.position.set(OX, 0, OZ); root.add(g);
+  const V = VILLA, Y = V.Y;
+  // (lit like real materials, close up: the land material's distance haze washes things out at arm's length)
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0 });
   const tint = (geo, rgb, jit = 0.06) => { const n = geo.attributes.position.count, c = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) { const k = 1 + (Math.random() - 0.5) * jit; c[i * 3] = rgb[0] * k; c[i * 3 + 1] = rgb[1] * k; c[i * 3 + 2] = rgb[2] * k; }
     geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); return geo; };
   const box = (w, h, d, rgb, x, y, z, jit) => { const m = new THREE.Mesh(tint(new THREE.BoxGeometry(w, h, d), rgb, jit), mat); m.position.set(x, y, z); g.add(m); return m; };
-  const cyl = (r0, r1, h, rgb, x, y, z, seg = 8) => { const m = new THREE.Mesh(tint(new THREE.CylinderGeometry(r0, r1, h, seg), rgb), mat); m.position.set(x, y, z); g.add(m); return m; };
-  // a steep hipped alang-alang thatch roof: thick (a darker fascia edge under the outer layer), shaded in horizontal
-  // bands like layered grass bundles, with a woven bamboo underside you see from inside
-  const thatch = (w, d, h, x, y, z) => {
-    const mk = (sc, dy, col, band) => { const geo = new THREE.ConeGeometry(1, 1, 4, 10, true); geo.rotateY(Math.PI / 4); geo.scale(w * sc, h * sc, d * sc);
-      const p = geo.attributes.position, c = new Float32Array(p.count * 3);
-      for (let i = 0; i < p.count; i++) { const yy = p.getY(i), b = band ? 0.82 + 0.18 * (Math.floor((yy + h) * 3.2) % 2) : 1, k = b * (0.9 + Math.random() * 0.2);
-        c[i * 3] = col[0] * k; c[i * 3 + 1] = col[1] * k; c[i * 3 + 2] = col[2] * k; p.setX(i, p.getX(i) * (1 + (Math.random() - 0.5) * 0.02)); }
-      geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); geo.computeVertexNormals(); return geo; };
-    const outer = new THREE.Mesh(mk(1, 0, THATCH, true), mat); outer.position.set(x, y, z); g.add(outer);
-    const edge = new THREE.Mesh(mk(1.01, 0, THATCH_D, false), mat); edge.position.set(x, y - 0.28, z); g.add(edge);   // the thick cut edge of the thatch
-    const under = new THREE.Mesh(mk(0.97, 0, [0.62, 0.5, 0.33], true), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.BackSide })); under.position.set(x, y - 0.12, z); g.add(under);
-    cyl(0.12, 0.2, 0.9, THATCH_D, x, y + h / 2 + 0.35, z, 6);   // the crown knot at the peak
-  };
-  // tropical planting: big glossy leaves (elephant ears, philodendron) fanned out from a clump, in a few greens
-  const LEAVES = [[0.1, 0.32, 0.09], [0.14, 0.38, 0.1], [0.08, 0.25, 0.08], [0.2, 0.4, 0.12]];
-  const leafGeo = (() => { const geo = new THREE.SphereGeometry(1, 8, 4); geo.scale(0.45, 0.06, 1); geo.translate(0, 0, 0.9); return geo; })();
-  const plant = (x, z, s = 1, n = 9) => {
-    for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2 + Math.random() * 0.4, tilt = 0.5 + Math.random() * 0.5;
-      const m = new THREE.Mesh(tint(leafGeo.clone(), LEAVES[k % 4], 0.2), mat); m.position.set(x, Y + (0.4 + Math.random() * 0.5) * s, z);
-      m.rotation.set(0, a, 0); m.rotateX(-tilt); m.scale.setScalar(s * (0.7 + Math.random() * 0.5)); g.add(m); }
-  };
-  const bougain = (x, y, z, len) => {   // bougainvillea spilling over a wall: magenta and green clumps
-    for (let k = 0; k < len * 2; k++) { const m = new THREE.Mesh(tint(new THREE.IcosahedronGeometry(0.35 + Math.random() * 0.25, 0), k % 3 ? [0.78, 0.16, 0.45] : LEAVES[k % 4], 0.25), mat);
-      m.position.set(x + (Math.random() - 0.5) * 0.6, y + (Math.random() - 0.3) * 0.6, z + k * 0.5); g.add(m); }
-  };
+  const cyl = (r0, r1, h, rgb, x, y, z, seg = 10) => { const m = new THREE.Mesh(tint(new THREE.CylinderGeometry(r0, r1, h, seg), rgb), mat); m.position.set(x, y, z); g.add(m); return m; };
   const colliders = [];   // rectangles you can't walk through: [x0, x1, z0, z1]
   const block = (x0, x1, z0, z1) => colliders.push([Math.min(x0, x1), Math.max(x0, x1), Math.min(z0, z1), Math.max(z0, z1)]);
 
-  // colours
-  const STONE = [0.64, 0.58, 0.5], STONE_D = [0.46, 0.41, 0.35], TEAK = [0.42, 0.28, 0.17], TEAK_L = [0.55, 0.39, 0.25], TERRAZZO = [0.86, 0.83, 0.77],
-    THATCH = [0.5, 0.39, 0.22], THATCH_D = [0.36, 0.27, 0.15], LINEN = [0.93, 0.91, 0.86], RENDER = [0.9, 0.87, 0.8], LAWN = [0.24, 0.42, 0.16], LEAF = [0.12, 0.3, 0.1];
+  // warm honey planks, darker posts and beams, linen, rattan
+  const PLANK = [0.62, 0.43, 0.26], PLANK_L = [0.7, 0.5, 0.31], PLANK_D = [0.46, 0.3, 0.17], POST = [0.3, 0.19, 0.11], FLOOR = [0.5, 0.33, 0.19], FLOOR_L = [0.57, 0.38, 0.22],
+    LINEN = [0.92, 0.89, 0.83], RATTAN = [0.72, 0.56, 0.34], TEAL = [0.2, 0.44, 0.44], LEAF = [0.13, 0.33, 0.1];
+  const H = 3.2, RIDGE = 5.4, xm = (V.x0 + V.x1) / 2, zm = (V.z0 + V.z1) / 2;
+  const xL = -95;                                  // the wall between the board room (west) and the living room (east)
+  const B = { x0: V.x0, x1: V.x1 + 3.4, z0: V.z0 - 3.4, z1: V.z1 };   // the balcony wraps the two sea sides (south and east)
 
-  // the terrace: a stone plinth down to the clifftop (the ground falls away toward the edge), a terrazzo floor, lawn
-  const cx = (V.x0 + V.x1) / 2, cz = (V.z0 + V.z1) / 2, W = V.x1 - V.x0, D = V.z1 - V.z0;
-  // (the plinth and floor are laid round the pool's hole, not over it)
-  const PX0 = -144, PX1 = -127.5, PZ0 = V.z0 + 1, PZ1 = 234;
-  const slab = (x0, x1, z0, z1, top, h, rgb, jit) => box(x1 - x0, h, z1 - z0, rgb, (x0 + x1) / 2, top - h / 2, (z0 + z1) / 2, jit);
-  for (const [x0, x1, z0, z1] of [[V.x0, V.x1, PZ1, V.z1], [V.x0, PX0, V.z0, PZ1], [PX1, V.x1, V.z0, PZ1], [PX0, PX1, V.z0, PZ0]]) { slab(x0, x1, z0, z1, Y - 0.05, 14, STONE_D, 0.1); slab(x0, x1, z0, z1, Y, 0.1, TERRAZZO, 0.03); }
-  slab(PX0, PX1, PZ0, PZ1, Y - 1.25, 13, STONE_D, 0.1);   // under the pool
-  box(W - 2, 0.12, 12, LAWN, cx, Y - 0.02, V.z1 - 7, 0.2);               // back lawn
-  box(10, 0.12, 8, LAWN, V.x0 + 6, Y - 0.02, 241, 0.2);                  // side garden
+  // ---- the rocky point: a long finger of limestone running out from the cliffs, scrub on top, sheer sides into the sea
+  {
+    const cliffTop = (xl) => { const x = xl + OX; return (58 + 12 * Math.sin(x * 0.021) + 6 * Math.sin(x * 0.067 + 1.3)) * Math.min(1, Math.max(0, (-x - 70) / 35)); };   // (the coast's own cliff height, before its fade)
+    const cx = (z) => { const k = Math.min(1, Math.max(0, (z - 70) / 150)); return -93 + 4 * Math.sin((z - 37) * 0.03) - 32 * k * k * (3 - 2 * k); }, hw = (z) => 13.5 + 12 * Math.min(1, Math.max(0, (z - 60) / 120)), tipZ = 37;   // (the ridge curves back west into the cliffs)
+    const top = (x, z) => { const k = Math.min(1, Math.max(0, (z - 55) / 160)), s = k * k * (3 - 2 * k), far = cliffTop(x) + 1;
+      return (Y - 0.25) * (1 - s) + Math.max(3, far) * s + (z > 55 ? Math.sin(x * 0.3) * Math.cos(z * 0.2) * 0.6 : 0); };
+    const geo = new THREE.PlaneGeometry(120, 260, 120, 200); geo.rotateX(-Math.PI / 2);
+    const p = geo.attributes.position, c = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i) - 104, z = p.getZ(i) + 135, a = Math.atan2(z - tipZ, x - cx(z));
+      const w = hw(z) * (1 + 0.14 * Math.sin(z * 0.09 + 2) + 0.08 * Math.sin(z * 0.23 + 1) + 0.05 * Math.sin(z * 0.71) + 0.07 * Math.sin(a * 5) + 0.04 * Math.sin(a * 13)), dx = Math.abs(x - cx(z)) / w, dz = Math.max(0, tipZ - z) / w;
+      const d = Math.hypot(dx, dz), t = top(x, z);
+      let y, col, X = x, Z = z;
+      if (d < 0.78) { y = t; col = d < 0.7 ? [0.16, 0.27, 0.11] : [0.4, 0.37, 0.28]; }
+      else { const f = Math.min(1, (d - 0.78) / 0.22); y = t - (t + 4) * Math.pow(f, 0.6);
+        // a rugged face: rock strata stepping in and out with height, buttresses and gullies along it
+        const out = 1.4 * Math.sin(y * 0.55 + z * 0.13) + 0.7 * Math.sin(y * 1.6 - z * 0.4 + x * 0.3) + 1.1 * Math.sin(z * 0.37 + a * 3) * (y / Math.max(t, 1));
+        const nx = x - cx(z), nz = Math.min(0, z - tipZ), nl = Math.hypot(nx, nz) || 1; X = x + nx / nl * out * Math.min(1, f * 4); Z = z + nz / nl * out * Math.min(1, f * 4);
+        const band = 0.8 + 0.2 * Math.sin(y * 2.1 + Math.sin(z * 0.2)), streak = 0.88 + 0.12 * Math.sin(x * 1.7 + z * 0.9), wet = y < 1.5 ? 0.45 : 1, moss = Math.sin(y * 0.55 + z * 0.13) > 0.8 && y > 4 ? 1 : 0;
+        const k2 = band * streak * wet; col = moss ? [0.22 * k2, 0.3 * k2, 0.15 * k2] : [0.76 * k2, 0.69 * k2, 0.55 * k2]; }
+      if (d > 1) y = -5;
+      p.setXYZ(i, X, y, Z); const k = 0.9 + Math.random() * 0.2; c[i * 3] = col[0] * k; c[i * 3 + 1] = col[1] * k; c[i * 3 + 2] = col[2] * k;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); geo.computeVertexNormals();
+    g.add(new THREE.Mesh(geo, landMaterial()));
+    // boulders at the foot, where the sea breaks on the rock
+    for (let k = 0; k < 16; k++) { const z = 22 + k * 7 + Math.random() * 4, side = k % 2 ? 1 : -1, r = 1.2 + Math.random() * 2;
+      const rock = new THREE.Mesh(tint(new THREE.DodecahedronGeometry(r, 0), [0.42, 0.39, 0.33], 0.2), landMaterial()); rock.position.set(cx(z) + side * hw(z) * 1.02, 0, z); rock.rotation.set(k, k * 2, 0); g.add(rock); }
+  }
 
-  // the viewing deck at the front-right corner, over the cliff edge: teak planks, glass balustrade on steel posts
-  const dx0 = -126, dx1 = -110, dz0 = V.z0 - 3, dz1 = 234;                  // (cantilevered 3 m past the terrace)
-  for (let z = dz0 + 0.1; z < dz1; z += 0.18) box(dx1 - dx0, 0.08, 0.16, (Math.round(z * 5.5) % 2) ? TEAK : TEAK_L, (dx0 + dx1) / 2, Y + 0.02, z, 0.05);
-  box(dx1 - dx0, 0.6, dz1 - dz0, TEAK, (dx0 + dx1) / 2, Y - 0.35, (dz0 + dz1) / 2);   // (the deck's frame)
-  for (const k of [0.2, 0.5, 0.8]) box(0.3, 8, 0.3, STONE_D, dx0 + (dx1 - dx0) * k, Y - 4.3, dz0 + 0.4);   // posts down into the cliff
-  const glass = new THREE.MeshStandardMaterial({ color: 0xcfe8ee, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, depthWrite: false });
-  const rail = (x0, x1, z0, z1) => { const len = Math.hypot(x1 - x0, z1 - z0), m = new THREE.Mesh(new THREE.BoxGeometry(len, 1.05, 0.03), glass);
-    m.position.set((x0 + x1) / 2, Y + 0.55, (z0 + z1) / 2); m.rotation.y = -Math.atan2(z1 - z0, x1 - x0); g.add(m);
-    box(len, 0.05, 0.08, [0.75, 0.76, 0.78], (x0 + x1) / 2, Y + 1.1, (z0 + z1) / 2).rotation.y = -Math.atan2(z1 - z0, x1 - x0); };
-  rail(dx0, dx1, dz0, dz0); rail(dx1, dx1, dz0, dz1); rail(dx0, dx0, dz0, V.z0);
-  // two daybeds with white cushions and a big canvas umbrella, a low teak side table
-  for (const x of [-122, -117]) { box(2.1, 0.35, 1.0, TEAK, x, Y + 0.18, dz0 + 2.3); box(2.0, 0.18, 0.95, LINEN, x, Y + 0.44, dz0 + 2.3); box(0.5, 0.25, 0.9, LINEN, x - 0.8, Y + 0.62, dz0 + 2.3); block(x - 1.1, x + 1.1, dz0 + 1.75, dz0 + 2.85); }
-  cyl(0.05, 0.05, 2.6, [0.4, 0.3, 0.2], -119.5, Y + 1.3, dz0 + 3.5); { const u = new THREE.Mesh(tint(new THREE.ConeGeometry(1.8, 0.7, 8), [0.93, 0.9, 0.82]), mat); u.position.set(-119.5, Y + 2.7, dz0 + 3.5); g.add(u); }
-  box(0.6, 0.4, 0.6, TEAK_L, -119.5, Y + 0.2, dz0 + 1.6);
+  // ---- the house: stone footing, floorboards, plank walls between dark posts
+  box(V.x1 - V.x0 + 0.4, 1.2, V.z1 - V.z0 + 0.4, [0.45, 0.42, 0.37], xm, Y - 0.7, zm, 0.12);
+  for (let x = V.x0 + 0.15; x < V.x1; x += 0.3) box(0.29, 0.1, V.z1 - V.z0, (Math.round(x * 3.33) % 2) ? FLOOR : FLOOR_L, x, Y - 0.05, zm, 0.04);
+  const planksX = (x, z0, z1, y0 = 0, y1 = H) => { for (let y = y0 + 0.1; y < y1; y += 0.22) box(0.12, 0.235, z1 - z0, (Math.round(y * 4.5) % 3) ? PLANK : PLANK_L, x, Y + y, (z0 + z1) / 2, 0.05); if (y0 < 1) block(x - 0.12, x + 0.12, z0, z1); };
+  const planksZ = (z, x0, x1, y0 = 0, y1 = H) => { for (let y = y0 + 0.1; y < y1; y += 0.22) box(x1 - x0, 0.235, 0.12, (Math.round(y * 4.5) % 3) ? PLANK : PLANK_L, (x0 + x1) / 2, Y + y, z, 0.05); if (y0 < 1) block(x0, x1, z - 0.12, z + 0.12); };
+  planksX(V.x0, V.z0, V.z1);                                     // west wall (the board rack)
+  planksZ(V.z1, V.x0, V.x1);                                     // back wall, to the land
+  planksX(xL, V.z0, 35.4); planksX(xL, 37.6, V.z1); planksX(xL, 35.4, 37.6, 2.3, H);   // board room | living room, a doorway between
+  planksZ(V.z0, V.x0, xL, 0, 0.9); planksZ(V.z0, V.x0, xL, 2.5, H);                    // board room's window to the sea
+  planksZ(V.z0, xL, V.x1, 2.6, H); planksX(V.x1, V.z0, V.z1, 2.6, H);                  // over the glass
+  for (const [x, z] of [[V.x0, V.z0], [V.x1, V.z0], [V.x0, V.z1], [V.x1, V.z1], [xL, V.z0], [xL, V.z1]]) box(0.26, H + 0.2, 0.26, POST, x, Y + (H + 0.2) / 2, z);
+  // glass: tall sliding doors on both sea sides, slid open in the middle; the board room window
+  const glass = new THREE.MeshStandardMaterial({ color: 0xd9ecf0, transparent: true, opacity: 0.14, roughness: 0.05, depthWrite: false });
+  const pane = (w, h, x, y, z, alongZ) => { const m = new THREE.Mesh(new THREE.BoxGeometry(alongZ ? 0.03 : w, h, alongZ ? w : 0.03), glass); m.position.set(x, y, z); g.add(m);
+    const bx = (ww, hh, xx, yy, zz) => box(alongZ ? 0.07 : ww, hh, alongZ ? ww : 0.07, POST, xx, yy, zz);
+    bx(w, 0.07, x, y + h / 2, z); bx(w, 0.07, x, y - h / 2, z);
+    if (alongZ) { bx(0.07, h, x, y, z - w / 2); bx(0.07, h, x, y, z + w / 2); } else { bx(0.07, h, x - w / 2, y, z); bx(0.07, h, x + w / 2, y, z); } };
+  const GH = 2.5;
+  pane(2.2, GH, -93.8, Y + GH / 2, V.z0 + 0.06); pane(2.2, GH, -92.7, Y + GH / 2, V.z0 - 0.06); block(xL, -91.6, V.z0 - 0.15, V.z0 + 0.15);   // south: two panes stacked open at the west end...
+  pane(3.7, GH, -87.85, Y + GH / 2, V.z0); block(-89.7, V.x1, V.z0 - 0.15, V.z0 + 0.15);                                                   // ...a fixed one at the east end
+  pane(3.4, GH, V.x1, Y + GH / 2, 32.2, true); pane(3.4, GH, V.x1 + 0.1, Y + GH / 2, 42.2, true); block(V.x1 - 0.15, V.x1 + 0.15, V.z0, 33.9); block(V.x1 - 0.15, V.x1 + 0.15, 40.5, V.z1);   // east: open in the middle
+  pane((xL - V.x0) / 2, 1.6, V.x0 + (xL - V.x0) * 0.25, Y + 1.7, V.z0); pane((xL - V.x0) / 2, 1.6, V.x0 + (xL - V.x0) * 0.75, Y + 1.7, V.z0);
+  box(xL - V.x0, 0.08, 0.35, PLANK_D, (V.x0 + xL) / 2, Y + 0.93, V.z0 + 0.12);   // window sill
 
-  // the infinity pool along the cliff edge, to the left of the deck: stone rim, pale mosaic inside, water brimming over
-  const px0 = PX0, px1 = PX1, pz0 = PZ0, pz1 = PZ1;
-  box(px1 - px0 + 0.8, 0.12, 0.4, STONE, (px0 + px1) / 2, Y + 0.06, pz1 + 0.2); box(0.4, 0.12, pz1 - pz0, STONE, px0 - 0.2, Y + 0.06, (pz0 + pz1) / 2); box(0.4, 0.12, pz1 - pz0, STONE, px1 + 0.2, Y + 0.06, (pz0 + pz1) / 2);
-  box(px1 - px0, 0.1, pz1 - pz0, [0.35, 0.7, 0.76], (px0 + px1) / 2, Y - 1.2, (pz0 + pz1) / 2);   // pool floor
-  for (const [w, d, x, z] of [[px1 - px0, 0.1, (px0 + px1) / 2, pz1], [px1 - px0, 0.1, (px0 + px1) / 2, pz0], [0.1, pz1 - pz0, px0, (pz0 + pz1) / 2], [0.1, pz1 - pz0, px1, (pz0 + pz1) / 2]]) box(w, 1.15, d, [0.4, 0.72, 0.78], x, Y - 0.62, z, 0.08);   // mosaic walls
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(px1 - px0, pz1 - pz0), new THREE.MeshStandardMaterial({ color: 0x1fb6c8, emissive: 0x0b5f6e, emissiveIntensity: 0.55, transparent: true, opacity: 0.9, roughness: 0.18, metalness: 0 }));
-  water.rotation.x = -Math.PI / 2; water.position.set((px0 + px1) / 2, Y - 0.08, (pz0 + pz1) / 2); g.add(water);
-  block(px0 - 0.1, px1 + 0.1, pz0 - 3, pz1 + 0.05);
+  // the roof: ridge running east-west, a boarded ceiling on dark rafters inside, shingles outside, deep eaves
+  const roofD = V.z1 - V.z0 + 2.4, slope = Math.atan2(RIDGE - H, roofD / 2), rl = Math.hypot(RIDGE - H, roofD / 2);
+  for (const side of [-1, 1]) {
+    const zc = zm + side * roofD / 4, yc = Y + (H + RIDGE) / 2;
+    box(V.x1 - V.x0 + 2, 0.06, rl, PLANK_L, xm, yc - 0.06, zc, 0.06).rotation.x = side * slope;
+    box(V.x1 - V.x0 + 2.4, 0.16, rl + 0.2, [0.26, 0.19, 0.12], xm, yc + 0.12, zc, 0.15).rotation.x = side * slope;
+    for (let x = V.x0 + 0.7; x < V.x1; x += 1.3) box(0.12, 0.2, rl, POST, x, yc - 0.19, zc).rotation.x = side * slope;
+  }
+  box(V.x1 - V.x0 + 2.4, 0.3, 0.3, POST, xm, Y + RIDGE - 0.12, zm);
+  for (const x of [V.x0, xL, V.x1]) for (let y = H + 0.1; y < RIDGE; y += 0.22) { const half = (RIDGE - y) / (RIDGE - H) * (V.z1 - V.z0 + 0.2) / 2; if (half > 0.1) box(0.12, 0.235, half * 2, PLANK, x, Y + y, zm, 0.05); }   // gables
+  for (let x = V.x0 + 2.3; x < V.x1 - 1; x += 3.5) box(0.2, 0.24, V.z1 - V.z0, POST, x, Y + H + 0.02, zm);   // tie beams
 
-  // the living bale: a raised teak platform, six posts, a steep hipped thatch roof; low sofas round a coffee table
-  const bx = -133, bz = 243, bw = 12, bd = 9, bh = 0.45;
-  box(bw, bh, bd, TEAK, bx, Y + bh / 2, bz, 0.05);
-  box(3, 0.22, 0.8, TEAK_L, bx, Y + 0.11, bz - bd / 2 - 0.4);   // step
-  for (const [ox, oz] of [[-1, -1], [0, -1], [1, -1], [-1, 1], [0, 1], [1, 1]]) { const px = bx + ox * (bw / 2 - 0.4), pz = bz + oz * (bd / 2 - 0.4); cyl(0.15, 0.17, 3.4, TEAK, px, Y + bh + 1.7, pz); block(px - 0.2, px + 0.2, pz - 0.2, pz + 0.2); }
-  thatch(bw * 0.8, bd * 0.82, 4.4, bx, Y + bh + 3.4 + 2.0, bz);
-  // sofas: an L of low teak frames with linen cushions and a few coloured pillows; a rug and a coffee table
-  const sy = Y + bh;
-  box(6, 0.4, 1.0, TEAK, bx - 1, sy + 0.2, bz + 3.2); box(5.9, 0.25, 0.95, LINEN, bx - 1, sy + 0.52, bz + 3.2); box(5.9, 0.55, 0.25, LINEN, bx - 1, sy + 0.72, bz + 3.6); block(bx - 4, bx + 2, bz + 2.6, bz + 3.8);
-  box(1.0, 0.4, 3.4, TEAK, bx - 4.5, sy + 0.2, bz + 1.2); box(0.95, 0.25, 3.3, LINEN, bx - 4.5, sy + 0.52, bz + 1.2); block(bx - 5, bx - 4, bz - 0.5, bz + 3);
-  for (const [x, z, c] of [[bx - 3, bz + 3.3, [0.78, 0.45, 0.25]], [bx + 0.5, bz + 3.3, [0.2, 0.45, 0.45]], [bx - 4.4, bz, [0.82, 0.7, 0.35]]]) box(0.5, 0.45, 0.2, c, x, sy + 0.8, z);
-  box(4.5, 0.02, 3.2, [0.72, 0.64, 0.5], bx - 1.5, sy + 0.01, bz + 1.2, 0.15);   // woven rug
-  box(1.8, 0.35, 1.0, TEAK_L, bx - 1.5, sy + 0.18, bz + 1.2); block(bx - 2.4, bx - 0.6, bz + 0.7, bz + 1.7);
-  box(0.9, 0.08, 0.5, [0.25, 0.35, 0.3], bx - 1.3, sy + 0.4, bz + 1.1);   // a surf book on the table
+  // ---- the living room: a linen sofa facing the sea, a rattan armchair, a teak coffee table on a woven rug, a
+  // daybed, a shelf of books and shells, surf prints, plants, rattan pendant lamps
+  const sx = -90.2, sz = 41.8;
+  box(4.6, 0.42, 1.0, PLANK_D, sx, Y + 0.21, sz); box(4.5, 0.22, 0.92, LINEN, sx, Y + 0.52, sz); box(4.5, 0.6, 0.25, LINEN, sx, Y + 0.72, sz + 0.4);
+  for (const [x, cc] of [[-91.9, [0.78, 0.46, 0.26]], [-90.3, TEAL], [-88.6, [0.86, 0.74, 0.44]]]) box(0.55, 0.45, 0.18, cc, x, Y + 0.8, sz + 0.2);
+  block(sx - 2.35, sx + 2.35, sz - 0.55, V.z1);
+  box(3.4, 0.02, 2.4, [0.74, 0.64, 0.48], sx, Y + 0.01, sz - 2.3, 0.2);
+  box(1.8, 0.1, 0.9, PLANK_D, sx, Y + 0.42, sz - 2.2); for (const [ox, oz] of [[-0.75, -0.35], [0.75, -0.35], [-0.75, 0.35], [0.75, 0.35]]) box(0.08, 0.38, 0.08, POST, sx + ox, Y + 0.19, sz - 2.2 + oz);
+  block(sx - 0.95, sx + 0.95, sz - 2.7, sz - 1.7);
+  box(0.9, 0.06, 0.5, [0.2, 0.36, 0.34], sx + 0.3, Y + 0.5, sz - 2.2); cyl(0.12, 0.16, 0.2, [0.9, 0.86, 0.78], sx - 0.5, Y + 0.57, sz - 2.2);
+  const ax = -93.6, az = 38.6; cyl(0.45, 0.4, 0.42, RATTAN, ax, Y + 0.21, az, 14); cyl(0.42, 0.42, 0.12, LINEN, ax, Y + 0.48, az, 14);
+  { const back = new THREE.Mesh(tint(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 14, 1, true, 0, Math.PI * 1.1), RATTAN), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }));
+    back.position.set(ax, Y + 0.8, az); back.rotation.y = Math.PI * 1.25; g.add(back); }
+  block(ax - 0.55, ax + 0.55, az - 0.55, az + 0.55);
+  box(2.2, 0.35, 1.0, PLANK_D, -92.8, Y + 0.18, 31.1); box(2.1, 0.2, 0.95, LINEN, -92.8, Y + 0.45, 31.1); box(0.35, 0.35, 0.9, TEAL, -93.7, Y + 0.65, 31.1); block(-93.95, -91.65, V.z0, 31.7);   // daybed under the south glass
+  box(0.35, 0.06, 2.6, PLANK_D, xL + 0.25, Y + 1.5, 41.5); box(0.35, 0.06, 2.6, PLANK_D, xL + 0.25, Y + 2.1, 41.5);   // shelf by the doorway
+  for (let k = 0; k < 9; k++) box(0.22, 0.3 + (k % 3) * 0.05, 0.08, [[0.55, 0.2, 0.15], [0.2, 0.3, 0.45], [0.85, 0.75, 0.55]][k % 3], xL + 0.3, Y + 1.7, 40.4 + k * 0.11);
+  cyl(0.02, 0.14, 0.3, [0.95, 0.85, 0.78], xL + 0.3, Y + 2.3, 42.3, 8);
+  const PRINT = [[0.13, 0.48, 0.58], [0.93, 0.62, 0.33], [0.17, 0.35, 0.52]];
+  for (let k = 0; k < 3; k++) { const x = -92.1 + k * 1.9; box(1.2, 0.85, 0.05, POST, x, Y + 1.95, V.z1 - 0.1); box(1.05, 0.7, 0.06, PRINT[k], x, Y + 1.95, V.z1 - 0.12, 0.25); box(1.05, 0.12, 0.065, [0.95, 0.95, 0.92], x, Y + 1.76, V.z1 - 0.12); }
+  const leafGeo = (() => { const geo = new THREE.SphereGeometry(1, 8, 4); geo.scale(0.35, 0.05, 0.6); geo.translate(0, 0, 0.55); return geo; })();
+  const plant = (x, z, s) => { cyl(0.28 * s, 0.2 * s, 0.5 * s, [0.66, 0.38, 0.25], x, Y + 0.25 * s, z);
+    for (let k = 0; k < 10; k++) { const m = new THREE.Mesh(tint(leafGeo.clone(), LEAF, 0.3), mat); m.position.set(x, Y + (0.6 + k * 0.1) * s, z); m.rotation.set(0, k * 2.4, 0); m.rotateX(-0.6 - (k % 3) * 0.2); m.scale.setScalar(s); g.add(m); }
+    block(x - 0.35 * s, x + 0.35 * s, z - 0.35 * s, z + 0.35 * s); };
+  plant(-86.7, 43.3, 1.2); plant(-96, 43.2, 1.0); plant(-94.4, 30.9, 0.9);
+  const glow = new THREE.MeshBasicMaterial({ color: 0xffd9a4 }), shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
+  for (const [x, z] of [[-91.5, 39], [-88.8, 39], [-97.5, 37]]) {
+    const shade = new THREE.Mesh(tint(new THREE.SphereGeometry(0.35, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.6), RATTAN), shadeMat); shade.position.set(x, Y + 2.7, z); shade.rotation.x = Math.PI; g.add(shade);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), glow); bulb.position.set(x, Y + 2.62, z); g.add(bulb);
+    cyl(0.01, 0.01, 2, [0.15, 0.15, 0.15], x, Y + 3.7, z, 4);
+    const L = new THREE.PointLight(0xffc98f, 5, 8, 1.6); L.position.set(x, Y + 2.5, z); g.add(L);
+  }
 
-  // the surf room: a whitewashed room open to the garden, a teak rack along the back wall with your four boards
-  const rx0 = -119, rx1 = -111, rz0 = 245, rz1 = 257, rh = 3.4;
-  box(0.3, rh, rz1 - rz0, RENDER, rx1, Y + rh / 2, (rz0 + rz1) / 2); block(rx1 - 0.2, rx1 + 0.3, rz0, rz1);          // back wall (east)
-  box(rx1 - rx0, rh, 0.3, RENDER, (rx0 + rx1) / 2, Y + rh / 2, rz1); block(rx0, rx1, rz1 - 0.2, rz1 + 0.3);          // north wall
-  box(rx1 - rx0, rh, 0.3, RENDER, (rx0 + rx1) / 2, Y + rh / 2, rz0); block(rx0, rx1, rz0 - 0.3, rz0 + 0.2);          // south wall
-  box(rx1 - rx0 + 1.2, 0.35, rz1 - rz0 + 1.2, TEAK, (rx0 + rx1) / 2, Y + rh + 0.18, (rz0 + rz1) / 2);               // flat teak roof
-  thatch((rx1 - rx0) * 0.85, (rz1 - rz0) * 0.78, 2.8, (rx0 + rx1) / 2, Y + rh + 1.7, (rz0 + rz1) / 2);
-  box(rx1 - rx0, 0.06, rz1 - rz0, TERRAZZO, (rx0 + rx1) / 2, Y + 0.08, (rz0 + rz1) / 2, 0.03);   // the room's floor (over the lawn)
-  box(0.2, 0.12, rz1 - rz0 - 1.2, TEAK_L, rx1 - 0.3, Y + 0.3, (rz0 + rz1) / 2); box(0.2, 0.12, rz1 - rz0 - 1.2, TEAK_L, rx1 - 0.3, Y + 2.2, (rz0 + rz1) / 2);   // the rack rails
+  // ---- the board room: whitewashed wall with a teak rack and your four boards, a wax bench, a wetsuit on a hook
+  for (let y = 0.1; y < H; y += 0.22) box(0.04, 0.235, V.z1 - V.z0 - 0.3, [0.9, 0.87, 0.8], V.x0 + 0.08, Y + y, zm, 0.03);
+  box(0.2, 0.1, 11, PLANK_D, V.x0 + 0.2, Y + 0.3, 37); box(0.2, 0.1, 11, PLANK_D, V.x0 + 0.2, Y + 2.2, 37);
+  const holder = new THREE.Group(); holder.position.set(V.x0, Y, 37); holder.rotation.y = Math.PI; g.add(holder);   // (mirrored: boards stand against the west wall, decks to the room)
   const rack = [];
   ['short', 'fish', 'long', 'gun'].forEach((type, i) => {
-    const b = makeBoard(type); b.rotation.set(-Math.PI / 2 + 0.12, 0, Math.PI / 2);   // standing on its tail (fins down), deck toward the room, leaning on the wall
-    const L = b.userData.length; b.position.set(rx1 - 0.55, Y + L / 2 + 0.05, rz0 + 1.8 + i * 2.7);
-    b.userData.type = type; b.traverse((o) => { o.userData.type = type; }); g.add(b); rack.push(b);
+    const b = makeBoard(type); b.rotation.set(-Math.PI / 2 + 0.12, 0, Math.PI / 2);
+    b.position.set(-0.55, b.userData.length / 2 + 0.05, -3.9 + i * 2.6);
+    b.userData.type = type; b.traverse((o) => { o.userData.type = type; }); holder.add(b); rack.push(b);
   });
-  block(rx1 - 1.1, rx1, rz0 + 0.6, rz1 - 0.6);
-  // a wax bench and a hanging lamp
-  box(1.6, 0.45, 0.5, TEAK_L, rx0 + 1.4, Y + 0.23, rz1 - 0.7); block(rx0 + 0.5, rx0 + 2.3, rz1 - 1, rz1 - 0.4);
+  block(V.x0, V.x0 + 1.05, 32.5, 41.5);
+  box(1.6, 0.45, 0.5, PLANK_L, -97.5, Y + 0.23, V.z1 - 0.45); block(-98.4, -96.6, V.z1 - 0.75, V.z1);
+  cyl(0.04, 0.04, 0.15, POST, -96.4, Y + 2.3, V.z1 - 0.12, 6); box(0.55, 1.3, 0.1, [0.1, 0.1, 0.12], -96.4, Y + 1.6, V.z1 - 0.2);
 
-  // garden: frangipani trees (grey forked trunks, clusters of leaves with white-and-yellow flowers), two coconut palms,
-  // stepping stones, a low stone wall and a split gate (candi bentar) at the back
-  const tree = (x, z, s) => {
-    cyl(0.12 * s, 0.18 * s, 1.6 * s, [0.5, 0.48, 0.44], x, Y + 0.8 * s, z);
-    for (let k = 0; k < 4; k++) { const a = k * 1.6 + x, r = 0.9 * s, lx = x + Math.cos(a) * r, lz = z + Math.sin(a) * r;
-      const br = cyl(0.07 * s, 0.1 * s, 1.4 * s, [0.5, 0.48, 0.44], (x + lx) / 2, Y + 1.9 * s, (z + lz) / 2); br.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6);
-      const leaf = new THREE.Mesh(tint(new THREE.IcosahedronGeometry(0.7 * s, 0), LEAF, 0.3), mat); leaf.position.set(lx, Y + 2.5 * s, lz); leaf.scale.set(1, 0.55, 1); g.add(leaf);
-      for (let f = 0; f < 5; f++) { const fl = new THREE.Mesh(tint(new THREE.SphereGeometry(0.09 * s, 5, 3), f % 3 ? [0.98, 0.97, 0.92] : [0.98, 0.85, 0.45]), mat);
-        fl.position.set(lx + (Math.random() - 0.5) * 0.9 * s, Y + 2.75 * s + Math.random() * 0.15, lz + (Math.random() - 0.5) * 0.9 * s); g.add(fl); } }
-    block(x - 0.3, x + 0.3, z - 0.3, z + 0.3);
-  };
-  tree(-141, 239, 1.1); tree(-124, 257, 1.0); tree(-143, 257, 1.15); tree(-121, 238.5, 0.8);
-  const palm = (x, z, h) => { const t = cyl(0.14, 0.22, h, [0.42, 0.36, 0.28], x, Y + h / 2, z, 6); t.rotation.z = 0.08;
-    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, f = new THREE.Mesh(tint(new THREE.ConeGeometry(0.35, 3.2, 3), LEAF, 0.2), mat); f.position.set(x + Math.cos(a) * 1.3 + 0.3, Y + h - 0.2, z + Math.sin(a) * 1.3); f.rotation.set(Math.sin(a) * 1.6, 0, -Math.cos(a) * 1.6); g.add(f); }
-    block(x - 0.3, x + 0.3, z - 0.3, z + 0.3); };
-  palm(-145, 249, 9); palm(-112, 240, 10.5);
-  for (let k = 0; k < 7; k++) box(0.9, 0.06, 0.6, STONE, -128 + Math.sin(k) * 0.4, Y + 0.04, 250 + k * 1.6, 0.05);   // path to the gate
-  // the wall: waist-high volcanic stone round the back and sides (the front is the cliff), a split gate at the back
-  const WALLC = [0.34, 0.31, 0.28];
-  box(0.5, 1.2, D, WALLC, V.x0 + 0.25, Y + 0.6, cz); block(V.x0, V.x0 + 0.5, V.z0, V.z1);
-  box(0.5, 1.2, D - 12, WALLC, V.x1 - 0.25, Y + 0.6, cz - 6 + 12); block(V.x1 - 0.5, V.x1, V.z0 + 6, V.z1);   // (open on the deck side)
-  box(W / 2 - 2, 1.2, 0.5, WALLC, V.x0 + (W / 2 - 2) / 2, Y + 0.6, V.z1 - 0.25); box(W / 2 - 2, 1.2, 0.5, WALLC, V.x1 - (W / 2 - 2) / 2, Y + 0.6, V.z1 - 0.25); block(V.x0, V.x1, V.z1 - 0.5, V.z1);
-  for (const gs of [-1, 1]) for (let k = 0; k < 4; k++) box(1.6 - k * 0.3, 1.2, 1.2 - k * 0.2, STONE, cx + gs * 1.9, Y + 0.6 + k * 1.2, V.z1 - 0.3);
-  // lanterns on posts along the path (warm glow, they light up when the sun goes down)
-  const glow = new THREE.MeshBasicMaterial({ color: 0xffd28a });
-  for (const [x, z] of [[-130, 251], [-126, 255], [-130, 259], [-137, 236], [-127, 236]]) { cyl(0.04, 0.04, 1.0, [0.2, 0.18, 0.16], x, Y + 0.5, z, 5); const l = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.22), glow); l.position.set(x, Y + 1.12, z); g.add(l); }
+  // ---- the balcony: a teak deck wrapping the two sea sides, a slatted rail, two loungers and a bench to watch from
+  const deck = (x0, x1, z0, z1) => { for (let x = x0 + 0.15; x < x1; x += 0.3) box(0.29, 0.1, z1 - z0, (Math.round(x * 3.33) % 2) ? FLOOR : FLOOR_L, x, Y - 0.05, (z0 + z1) / 2, 0.04);
+    box(x1 - x0, 0.35, z1 - z0, PLANK_D, (x0 + x1) / 2, Y - 0.28, (z0 + z1) / 2); };
+  deck(B.x0, B.x1, B.z0, V.z0); deck(V.x1, B.x1, V.z0, B.z1);
+  for (const [x, z] of [[B.x0 + 0.3, B.z0 + 0.3], [-93, B.z0 + 0.3], [-86, B.z0 + 0.3], [B.x1 - 0.3, B.z0 + 0.3], [B.x1 - 0.3, 37], [B.x1 - 0.3, B.z1 - 0.3]]) box(0.22, 5, 0.22, POST, x, Y - 2.8, z);   // stilts down onto the rock
+  const railZ = (z, x0, x1) => { box(x1 - x0, 0.09, 0.16, POST, (x0 + x1) / 2, Y + 1.05, z); for (let x = x0; x <= x1 + 0.01; x += 0.22) box(0.045, 1.0, 0.045, PLANK_D, x, Y + 0.5, z); };
+  const railX = (x, z0, z1) => { box(0.16, 0.09, z1 - z0, POST, x, Y + 1.05, (z0 + z1) / 2); for (let z = z0; z <= z1 + 0.01; z += 0.22) box(0.045, 1.0, 0.045, PLANK_D, x, Y + 0.5, z); };
+  railZ(B.z0, B.x0, B.x1); railX(B.x1, B.z0, B.z1); railX(B.x0, B.z0, V.z0); railZ(B.z1, V.x1, B.x1);
+  for (const z of [34.4, 39.6]) { box(1.6, 0.3, 0.8, PLANK_D, -84.8, Y + 0.15, z); box(1.1, 0.12, 0.75, LINEN, -84.6, Y + 0.36, z); const bk = box(0.65, 0.1, 0.75, LINEN, -85.4, Y + 0.58, z); bk.rotation.z = -0.7; block(-85.6, -84.0, z - 0.45, z + 0.45); }   // loungers facing the waves
+  box(0.5, 0.4, 0.5, PLANK_L, -85.2, Y + 0.2, 37); block(-85.5, -84.9, 36.7, 37.3);
+  box(3, 0.45, 0.45, PLANK_L, -97, Y + 0.23, B.z0 + 0.5); block(-98.5, -95.5, B.z0, B.z0 + 0.8);   // bench along the south rail
 
-  block(V.x0, dx0 - 0.05, dz0 - 1, V.z0);   // (left of the deck the terrace ends at the cliff)
-  // three white sun loungers along the pool, a stack of rolled towels
-  for (let k = 0; k < 3; k++) { const x = -141 + k * 3.2, z = 236.4; box(0.8, 0.28, 2.0, TEAK, x, Y + 0.14, z); box(0.75, 0.12, 1.4, LINEN, x, Y + 0.34, z + 0.3); const back = box(0.75, 0.1, 0.7, LINEN, x, Y + 0.55, z - 0.62); back.rotation.x = 0.7; block(x - 0.45, x + 0.45, z - 1.05, z + 1.05); }
-  for (let k = 0; k < 3; k++) cyl(0.12, 0.12, 0.5, [0.95, 0.94, 0.9], -131.2, Y + 0.12 + k * 0.001, 236 + k * 0.26, 8).rotation.z = Math.PI / 2;
-  // stone coping round the terrace edge and a band of carved stone under it (the villa seen from the sea)
-  box(W + 0.4, 0.2, 0.5, STONE, cx, Y + 0.05, V.z0 - 0.1); box(W + 0.4, 0.5, 0.2, [0.55, 0.49, 0.42], cx, Y - 0.6, V.z0 - 0.3);
-  // lush planting: along the walls, in the corners, round the bale, and bougainvillea over the side walls
-  for (const [x, z, sc] of [[-144.5, 244, 1.3], [-144.5, 247.5, 1.1], [-144.5, 253, 1.4], [-144, 259.5, 1.2], [-139, 260.5, 1.1], [-134, 260.8, 0.9], [-121, 260.5, 1.2],
-    [-116.5, 260.5, 1.0], [-112, 236.5, 1.0], [-125.5, 237, 0.8], [-126, 248, 1.0], [-140.5, 248.5, 0.9], [-113, 243, 1.1]]) { plant(x, z, sc); block(x - 0.5 * sc, x + 0.5 * sc, z - 0.5 * sc, z + 0.5 * sc); }
-  bougain(V.x0 + 0.2, Y + 1.25, 238, 10); bougain(V.x0 + 0.2, Y + 1.25, 252, 8); bougain(V.x1 - 0.2, Y + 1.25, 241, 4);
-  // a big terracotta pot with a young palm by the bale steps, and lanterns hanging in the bale
-  cyl(0.45, 0.32, 0.8, [0.62, 0.36, 0.24], -129, Y + 0.4, 238.2, 10); plant(-129, 238.2, 0.8, 7); block(-129.5, -128.5, 237.7, 238.7);
-  for (const lx of [-136, -130]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.25, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd9a0 })); l.position.set(lx, Y + 2.9, 243); g.add(l); cyl(0.01, 0.01, 1.2, [0.2, 0.2, 0.2], lx, Y + 3.6, 243, 4); }
+  // join the static timber into one mesh (a phone draws it in one go instead of hundreds)
+  { const parts = g.children.filter((m) => m.isMesh && m.material === mat);
+    const geos = parts.map((m) => { m.updateMatrix(); const q = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
+      for (const k of Object.keys(q.attributes)) if (!['position', 'normal', 'color'].includes(k)) q.deleteAttribute(k); return q; });
+    const merged = mergeGeometries(geos);
+    if (merged) { for (const m of parts) { g.remove(m); m.geometry.dispose(); } g.add(new THREE.Mesh(merged, mat)); } }
 
-  // where you can walk: the terrace (and out onto the deck), minus everything solid
-  const walk = { x0: V.x0 + 0.6, x1: V.x1 - 0.4, z0: dz0 + 0.35, z1: V.z1 - 0.8 };
-  const floorAt = (x, z) => (x > bx - bw / 2 && x < bx + bw / 2 && z > bz - bd / 2 && z < bz + bd / 2) ? Y + bh : Y;   // up on the bale's platform
-  return { group: g, rack, colliders, walk, floorAt, spawn: { x: -128, z: 259, yaw: -Math.PI / 2 }, deck: { x: -118, z: dz0 + 1 } };
+  const floorAt = () => Y;
+  // (the game walks you around in the coast frame)
+  for (const c of colliders) { c[0] += OX; c[1] += OX; c[2] += OZ; c[3] += OZ; }
+  const walk = { x0: B.x0 + 0.35 + OX, x1: B.x1 - 0.35 + OX, z0: B.z0 + 0.35 + OZ, z1: B.z1 - 0.35 + OZ };
+  return { group: root, rack, colliders, walk, floorAt, spawn: { x: -91 + OX, z: 37.5 + OZ, yaw: -0.75 }, rackAt: { x: V.x0 + 0.6 + OX, z: 37 + OZ } };
 }

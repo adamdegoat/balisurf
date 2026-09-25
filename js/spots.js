@@ -9,7 +9,7 @@ export const SPOTS = {
   // beginners: a wide white-sand bay, low green points, calm turquoise over a pale reef, a village of beach huts
   easy: { name: 'Pantai Kuda', dz: 110, xEnd: 200, reefTint: [1.25, 1.2, 1.1], look: { sandWet: [0.62, 0.6, 0.52], sandDry: [0.33, 0.33, 0.3], land: [0.16, 0.27, 0.12], palms: 1, cliffH: 0.12, cliffGreen: 1, temple: false, mountain: [0.3, 0.38, 0.32], mountainScale: 0.55, jungle: 0.8 } },
   // the classic: limestone cliffs, the temple on the edge, golden sand (the original coast)
-  medium: { name: 'Tanjung Uma', dz: 60, xEnd: 200, reefTint: [1, 1, 1], look: { clear: { x0: -150, x1: -104, z0: 214, z1: 268, y: 55 } } },   // (the villa's plot on the clifftop)
+  medium: { name: 'Tanjung Uma', dz: 60, xEnd: 200, reefTint: [1, 1, 1], look: {} },
   // advanced: a black volcanic slab, basalt cliffs, black sand, a lighthouse on the point
   hard: { name: 'Batu Hitam', dz: 110, xEnd: 290, reefTint: [0.55, 0.62, 0.6], look: { sandWet: [0.1, 0.1, 0.11], sandDry: [0.1, 0.1, 0.1], land: [0.1, 0.16, 0.09], palms: 0.35, cliffH: 1.25, rock: [0.15, 0.15, 0.16], cliffGreen: 0.3, temple: false, mountain: [0.18, 0.2, 0.22], mountainScale: 1.15, jungle: 0.7 } },
   // experts: a giant outer reef far off a towering coast, sea stacks, a storm

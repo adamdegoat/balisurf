@@ -7,8 +7,8 @@ import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=1
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
 import { SurfAudio } from './audio.js?v=8';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=9';
-import { villa, VILLA } from './villa.js?v=7';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
+import { villa, VILLA } from './villa.js?v=11';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -408,7 +408,7 @@ function toMenu() {
   underK = 0; underEl.style.opacity = 0; underEl.style.display = 'none'; setText(ui.speed, ''); setText(ui.score, ''); setText(ui.hint, ''); ui.tube.style.opacity = 0;
   input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
   keys.clear(); steerF = stickY = 0; ui.paddle.classList.remove('down'); ui.stall.classList.remove('down');
-  document.body.classList.remove('playing', 'riding', 'ranch-wait', 'villa'); ui.msg.style.display = 'none'; walker = null; vPick(null);
+  document.body.classList.remove('playing', 'riding', 'ranch-wait', 'villa'); ui.msg.style.display = 'none'; walker = null; vPick(null); setHfov(50);
   ui.start.style.display = ''; showBests();
 }
 document.getElementById('menu').addEventListener('touchstart', (e) => { e.preventDefault(); toMenu(); }, { passive: false });
@@ -1176,6 +1176,7 @@ function startVilla() {
   setSpot('villa');
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
   if (surfer) endWipe(); rider = null; rig.visible = false;
+  document.getElementById('vZoom').classList.remove('on'); document.getElementById('vZoom').textContent = 'ZOOM';
   walker = { x: villaW.spawn.x, z: villaW.spawn.z, yaw: villaW.spawn.yaw, pitch: -0.08, y: VILLA.Y + 1.65, mx: 0, mz: 0 };
   ui.start.style.display = 'none'; document.body.classList.add('playing', 'villa'); ui.cond.textContent = 'Your villa';
   document.getElementById('vTip').style.opacity = 1; setTimeout(() => { document.getElementById('vTip').style.opacity = 0; }, 7000);
@@ -1183,6 +1184,8 @@ function startVilla() {
 document.getElementById('goVilla').addEventListener('click', startVilla);
 document.getElementById('goVilla').addEventListener('touchend', (e) => { e.preventDefault(); startVilla(); }, { passive: false });
 document.getElementById('vGo').addEventListener('click', (e) => { e.stopPropagation(); toMenu(); });
+{ const zb = document.getElementById('vZoom'), zt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.zoom = !walker.zoom; zb.classList.toggle('on', walker.zoom); zb.textContent = walker.zoom ? 'ZOOM OUT' : 'ZOOM'; };
+  zb.addEventListener('click', zt); zb.addEventListener('touchstart', zt, { passive: false }); }
 document.getElementById('vGo').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); toMenu(); }, { passive: false });
 // the board panel: what it is and how it feels, and a button to take it
 function vPick(type) {
@@ -1209,7 +1212,7 @@ const vmEnd = (e) => { e.preventDefault(); for (const t of e.changedTouches) if 
   vMoveT = null; if (walker) walker.mx = walker.mz = 0; vStick.classList.remove('live'); vStick.querySelector('b').style.transform = ''; } };
 vm.addEventListener('touchend', vmEnd, { passive: false }); vm.addEventListener('touchcancel', vmEnd, { passive: false });
 const lookStart = (id, x, y) => { vLookT = { id, x, y, x0: x, y0: y, t0: performance.now() }; };
-const lookMove = (id, x, y) => { if (!vLookT || vLookT.id !== id || !walker) return; walker.yaw += (x - vLookT.x) * 0.0055; walker.pitch = Math.max(-1.1, Math.min(0.9, walker.pitch - (y - vLookT.y) * 0.0045)); vLookT.x = x; vLookT.y = y; };
+const lookMove = (id, x, y) => { if (!vLookT || vLookT.id !== id || !walker) return; const zs = hfovHalf / 50; walker.yaw += (x - vLookT.x) * 0.0055 * zs; walker.pitch = Math.max(-1.1, Math.min(0.9, walker.pitch - (y - vLookT.y) * 0.0045 * zs)); vLookT.x = x; vLookT.y = y; };   // (zoomed in, the look slows to match)
 const lookEnd = (id, x, y) => { if (!vLookT || vLookT.id !== id) return; if (Math.hypot(x - vLookT.x0, y - vLookT.y0) < 10 && performance.now() - vLookT.t0 < 350) vTap(x, y); vLookT = null; };
 vl.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); const t = e.changedTouches[0]; lookStart(t.identifier, t.clientX, t.clientY); }, { passive: false });
 vl.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) lookMove(t.identifier, t.clientX, t.clientY); }, { passive: false });
@@ -1238,12 +1241,12 @@ function villaTick(dt) {
   W_.gazeT = (W_.gazeT || 0) - dt;
   if (W_.gazeT <= 0) { W_.gazeT = 0.2; _vp.set(0, -0.1); _vr.setFromCamera(_vp, camera); _vr.far = 4.5;
     const hit = _vr.intersectObjects(V.rack, true)[0], t = hit ? hit.object.userData.type : null;
-    if (t) { W_.gazeOff = 0; if (t !== vPickType) vPick(t); } else if (vPickType && (W_.gazeOff = (W_.gazeOff || 0) + 0.2) > 1.2 && Math.hypot(W_.x - (-113), W_.z - 251) > 5) vPick(null); }
+    if (t) { W_.gazeOff = 0; if (t !== vPickType) vPick(t); } else if (vPickType && (W_.gazeOff = (W_.gazeOff || 0) + 0.2) > 1.2 && Math.hypot(W_.x - V.rackAt.x, W_.z - V.rackAt.z) > 5) vPick(null); }
   const moving = Math.hypot(mx, mz) > 0.1; W_.bob = (W_.bob || 0) + (moving ? dt * 8 : 0);
   W_.y += (V.floorAt(W_.x, W_.z) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
   camera.position.set(W_.x, W_.y, W_.z + SPOTS.medium.dz);
   _pe.set(W_.pitch, -W_.yaw - Math.PI / 2, 0); camera.quaternion.setFromEuler(_pe);
-  if (hfovHalf !== 50) setHfov(50);
+  { const tgt = W_.zoom ? 12 : 50; if (Math.abs(hfovHalf - tgt) > 0.05) setHfov(hfovHalf + (tgt - hfovHalf) * Math.min(1, dt * 6)); else if (hfovHalf !== tgt) setHfov(tgt); }   // binoculars: about 5x
   sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   audio.update({ H: 4.5, near: 0.15, barrel: false, riding: false, v: 0, turn: 0, lean: 0, slide: 0, stall: false, storm: 0, rain: 0, underwater: false, dt, chop: 1 });
 }
