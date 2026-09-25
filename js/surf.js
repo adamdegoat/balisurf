@@ -290,7 +290,9 @@ export class Rider {
     // too high while it's throwing
     // (only a wave that pitches can throw you; a soft, crumbly one just breaks around you and the whitewater rule decides)
     if (C.hollow > 0.5 && onFront && y > Math.min(0.97, 0.86 / Math.sqrt(C.forgive || 1)) * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
-    this.inBarrel = lipDown && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
+    // covered: the lip is out in front of you and over your head (on a small wave that's while it's still coming down, at
+    // about half the wave's height: the landing rules above keep the stricter 'lip is down' test)
+    this.inBarrel = C.hollow > 0.5 && sl.lipY < 0.62 * H && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;
     // too deep: fall behind the curl and the foam ball (the broken wave churning inside the tube) catches you. You have
     // to keep your speed matched to the peel to stay in (pump, or come off the stall in time)
     if (this.inBarrel && s < -2.0 * H) { this.foamT = (this.foamT || 0) + h; if (this.foamT > 2.5 || s < -3.6 * H) return this.wipe('Too deep: the foam ball swallowed you'); }   // (the instant line is well behind: a section surge alone can't drop you past it without warning) }
@@ -364,7 +366,7 @@ export class Rider {
   wipe(why) { this.why = why; this.set('WIPE'); this.ride.score = this.ride.t > 0 ? this.liveScore(true) : 0; }
   out(why) {
     this.why = why;
-    if (this.ride.tubeT > 0.5 && this.wave && !this.inBarrel) this.move('BARREL', 0.8, this.ride.tubeT);   // came out of the barrel just as the ride ended: that counts
+    if (this.ride.tubeT > 0.5 && this.wave) this.move('BARREL', 0.8, this.ride.tubeT);   // the ride ended cleanly with you in (or just out of) the barrel, riding it into the sand included: that counts
     this.ride.tubeT = 0; this.set('OUT'); this.ride.score = this.ride.t > 0 ? this.liveScore() : 0;
   }
 

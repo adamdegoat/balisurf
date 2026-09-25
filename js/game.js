@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=87';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=98';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=89';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=100';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 
@@ -385,8 +385,9 @@ function povCamera(dt) {
   const dh = Math.atan2(Math.sin(rider.th - travel), Math.cos(rider.th - travel));
   let yawT = travel + dh * (standing ? 0.7 : 0.8);
   // in the barrel look down the tube toward the exit (along the line), not out through the open side at the beach
-  tubeLook += ((rider.inBarrel && standing ? 1 : 0) - tubeLook) * Math.min(1, dt * 5);
-  if (tubeLook > 0.01) yawT += Math.atan2(Math.sin(-0.15 - yawT), Math.cos(-0.15 - yawT)) * 0.9 * tubeLook;   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
+  tubeLook += ((rider.inBarrel && standing ? 1 : 0) - tubeLook) * Math.min(1, dt * 1.5);
+  // (no automatic turn in the barrel: the view swinging on its own as you went in felt like losing control; your view
+  // follows your line as always, and the tube wraps around it)   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
   // popping up, the head drives forward over the board (the eye ahead of the shoulders, which stay out of view), easing back as you rise
   const popFwd = st === 'POP' ? 0.15 : st === 'RIDE' ? 0.15 * Math.max(0, 1 - rider.stateT / 0.8) : 0;
   const sK = standing ? (st === 'POP' ? Math.min(1, rider.stateT / 0.25) : 1) : 0;   // (lying -> standing eye point blended over the start of the pop, not switched in a frame)
@@ -425,7 +426,7 @@ function povCamera(dt) {
     }
   }
   if (pitchLook > pitchT) pitchT = pitchLook;
-  pitchT += 0.14 * tubeLook;   // and up a little: the lip over your head
+  pitchT += 0.05 * tubeLook;   // (a slight, slow lift of the eyes toward the lip overhead)   // and up a little: the lip over your head
   pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * (st === 'POP' ? 4 + 20 * Math.min(1, rider.stateT / 0.3) : 5));   // (the pop: eyes snap down to the board between your hands)
   pov.roll += ((standing ? -rider.lean * 0.2 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve (less than the board: people hold their head nearer level)
   // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
@@ -538,7 +539,8 @@ function updateRig(dt, t) {
   rig.position.y += 0.1 * sitTilt;                                     // the rider's weight sinks the tail
   if (standing || (rider.state === 'WIPE' && rider.stateT < 0.1)) {
     // the rider stands on the deck, leaning into the turn and a little toward the wave
-    const lean = 0.15 + (rider.inBarrel ? 0.12 : 0);
+    barrelK += ((rider.inBarrel ? 1 : 0) - barrelK) * Math.min(1, dt * 2.5);   // eased: going in or out of the tube never snaps the body (or your eyes with it)
+    const lean = 0.15 + 0.12 * barrelK;
     // stand over the board but closer to upright than the deck (legs absorb the tilt), leaning into the wave
     bodyUp.copy(pose.up).lerp(WORLD_UP, 0.4).addScaledVector(INTO_WAVE, Math.tan(lean * 0.6)).normalize();
     bodyFwd.set(pose.fwd.x, 0, pose.fwd.z).normalize();
@@ -574,7 +576,7 @@ function updateRig(dt, t) {
     // pumping is a rhythm, not a held squat: compress onto the board on the way down, spring up light, ~1.4 times a second
     pumpA += ((input.paddle ? 1 : 0) - pumpA) * Math.min(1, dt * 5); if (pumpA > 0.01) pumpPh += dt * Math.PI * 2 * 1.4;
     // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
-    const deep = Math.min(0.7, (rider.inBarrel ? 0.45 : 0.14 + 0.06 * Math.min(1, rider.v / 10)) + 0.22 * pumpA * (0.5 + 0.5 * Math.sin(pumpPh)) + 0.25 * gLoad + 0.22 * Math.min(1, Math.abs(rider.lean) / RIDE.leanMax) + 0.2 * (rider.stalling || 0));   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
+    const deep = Math.min(0.7, (0.14 + 0.06 * Math.min(1, rider.v / 10) + (0.31 - 0.06 * Math.min(1, rider.v / 10)) * barrelK) + 0.22 * pumpA * (0.5 + 0.5 * Math.sin(pumpPh)) + 0.25 * gLoad + 0.22 * Math.min(1, Math.abs(rider.lean) / RIDE.leanMax) + 0.2 * (rider.stalling || 0));   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     // rising out of the pop-up's deep squat over half a second (not snapping up: that jerks your eyes up 16 cm in a frame)
     const up_ = Math.min(1, rider.stateT / 0.6), rise = up_ * up_ * (3 - 2 * up_);
@@ -837,7 +839,7 @@ function swingBone(bone, end, sgn, ang) {
   bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));
   bone.updateMatrixWorld(true);
 }
-let stanceW = 0, pumpC = 0, pumpA = 0, pumpPh = 0, sitting = false, sitTilt = 0;
+let stanceW = 0, pumpC = 0, pumpA = 0, pumpPh = 0, barrelK = 0, sitting = false, sitTilt = 0;
 const rigQ = new THREE.Quaternion();
 function straddle() { straddleFor(bones, rig, surfer); }
 // the same straddle for any sitting body B (bone map) on its board frame R (the locals use it too)
@@ -887,7 +889,7 @@ function surfStance() {
   // which way along the board each side of the body sits
   bones.thigh_l.getWorldPosition(_a); bones.thigh_r.getWorldPosition(_b);
   const side = Math.sign(_d.subVectors(_a, _b).dot(bodyFwd)) || 1;
-  const w = stanceW, deep = rider.inBarrel ? 1 : 0;
+  const w = stanceW, deep = barrelK;
   // how hard the turn is loading the legs (sideways g), smoothed; which way is the inside of the turn
   gLoad += (Math.min(1.4, Math.abs(rider.turn) * rider.v / 9.8) - gLoad) * (1 - Math.exp(-10 * dtArm));
   const leanN = Math.max(-1, Math.min(1, rider.lean / RIDE.leanMax));

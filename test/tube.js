@@ -4,7 +4,7 @@
 import { moment } from './shots.js';
 const G = () => window.__g;
 
-export async function tubeTry(mode, seed, { targetY = 0.35, verbose = false } = {}) {
+export async function tubeTry(mode, seed, { targetY = 0.35, verbose = false, wobble = 0 } = {}) {
   const g = G();
   const r0 = await moment(mode, 'trim', seed);
   if (!r0.includes(': ok')) return `${mode} seed${seed} no ride`;
@@ -16,7 +16,7 @@ export async function tubeTry(mode, seed, { targetY = 0.35, verbose = false } = 
     const w = r.wave, H = w.cond.H, sH = r.s / H, yH = r.y / H;
     // hold a height on the face: above it, turn down toward the beach; below it, turn back up (+steer raises th, and
     // a heading with sin(th) > 0 points down the face); aim a little down while stalling, since a stalled board rises
-    const dir = 1, err = yH - targetY + (r.stalling ? 0.12 : 0);
+    const dir = 1, err = yH - targetY - wobble * Math.sin(t * 1.3 + seed) + (r.stalling ? 0.12 : 0);   // wobble: a human thumb drifting the line up and down the face
     // keep the board pointed along the line (down the tube), angled a little down or up to hold the height
     // (the wave itself runs at the beach at its own speed: holding a height means matching that, so 'along the line' is
     // angled toward the beach by asin(wave speed / your speed))
@@ -34,8 +34,8 @@ export async function tubeTry(mode, seed, { targetY = 0.35, verbose = false } = 
   return `${mode} seed${seed} longest ${longest.toFixed(1)}s total ${total.toFixed(1)}s ${out ? 'CAME OUT' : ''} end: ${why}` + (verbose ? '\n' + log.slice(-30).join('\n') : '');
 }
 
-export async function all(seeds = [3, 7, 11]) {
+export async function all(seeds = [3, 7, 11], opts = {}) {
   const out = [];
-  for (const m of ['easy', 'medium', 'hard', 'extreme']) for (const s of seeds) out.push(await tubeTry(m, s));
+  for (const m of ['easy', 'medium', 'hard', 'extreme']) for (const s of seeds) out.push(await tubeTry(m, s, opts));
   return out.join('\n');
 }
