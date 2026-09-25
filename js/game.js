@@ -6,7 +6,7 @@ import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=100';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
-import { ranch, POOL } from './ranch.js?v=3';
+import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=4';
 
 const Q = new URLSearchParams(location.search);
@@ -232,7 +232,8 @@ function updateWaves(dt) {
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
     w.peelRate = rate;   // the physics uses the peel speed right now (not the average), so the wave's push matches what you see
     w.place(w.px, C.speed * t);
-    w.fade = (w.size || 1) * Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40)) * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));   // far out it's a small swell; past the end of the reef it backs off
+    w.fade = (w.size || 1) * Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40)) * Math.min(1, Math.max(0.15, 1 + (w.zW + 160) / 60));
+    if (isRanch()) w.fade = Math.min(1, Math.max(0.02, (w.zW - POOL.z0) / 22)) * Math.min(1, Math.max(0, 1 - (w.peelX - REEF.xEnd) / 40));   // the pool wave rises out of the machine wall   // far out it's a small swell; past the end of the reef it backs off
     w.update(dt);
     if (w.zW > REEF.zBeach + 40 || w.peelX > REEF.xEnd + 45) { w.dispose(scene); waves.splice(i, 1); }
   }
@@ -265,7 +266,10 @@ function spawnRider() {
 const ranchWaiting = () => isRanch() && rider && !rider.standing && rider.state === 'LIE' && !waves.some((w) => w.zW < rider.z + 4);
 function ranchSend(kind) {
   if (!ranchWaiting()) return;
-  ranchKind = kind; const w = addWave(T + 6); w.size = 1;   // (every pool wave is the full size: no sets)
+  ranchKind = kind;
+  // the wave leaves the machine wall 1.5 s after you order it (the lights pulse first), then runs down the pool to you
+  const C = CONDITIONS[kind], zStart = POOL.z0 + 1;
+  const w = addWave(T + 1.5 - zStart / C.speed); w.size = 1; w.ranchT0 = T;   // (every pool wave is the full size: no sets)
 }
 for (const b of document.querySelectorAll('#ranch button')) {
   const go = (e) => { e.preventDefault(); e.stopPropagation(); ranchSend(b.dataset.wave); };
@@ -274,13 +278,23 @@ for (const b of document.querySelectorAll('#ranch button')) {
 // the machine rides its rail at the breaking point of the wave it's pulling; with no wave it waits at the start
 function updateRanch(dt) {
   if (!isRanch()) return;
-  const w = waves[waves.length - 1], car = ranchW.car;
-  const tx = w ? Math.min(POOL.x1 - 8, Math.max(POOL.x0 + 8, w.peelX)) : POOL.x0 + 10;
-  car.position.x += (tx - car.position.x) * Math.min(1, dt * (w ? 8 : 0.6));
+  const w = waves[waves.length - 1], L = ranchW.lights;
+  // the machine's lights: dim teal when idle, all pulsing while it charges (the 1.5 s after you order), then a bright
+  // band sweeping along the wall with the breaking point as the wave is made
+  const charging = w && T - w.ranchT0 < 1.5, pulse = 0.5 + 0.5 * Math.sin(T * 14);
+  for (let i = 0; i < ranchW.NC; i++) {
+    const x = POOL.x0 + ranchW.CH / 2 + i * ranchW.CH;
+    let k = 0;
+    if (charging) k = 0.35 + 0.5 * pulse;
+    else if (w && w.zW < POOL.z0 + 60) { const d = x - w.peelX; k = d < 6 && d > -30 ? (1 - Math.max(0, -d) / 30) : 0; }   // lit where the wave is leaving the wall
+    _rc.setRGB(0.1 + 0.9 * k, 0.3 + 0.62 * k, 0.36 + 0.5 * k); L.setColorAt(i, _rc);
+  }
+  L.instanceColor.needsUpdate = true;
   document.body.classList.toggle('ranch-wait', !!ranchWaiting());
   // the pool walls: you can't paddle through them
   if (rider) { const m = 3; rider.x = Math.min(POOL.x1 - m, Math.max(POOL.x0 + m, rider.x)); rider.z = Math.min(POOL.z1 - m, Math.max(POOL.z0 + m, rider.z)); }
 }
+const _rc = new THREE.Color();
 
 // ---------- controls: PADDLE/PUMP (hold, left) and a thumb pad (right half). Keyboard for testing.
 const input = { paddle: false, steer: 0 };
@@ -467,6 +481,7 @@ function povCamera(dt) {
     }
   }
   if (pitchLook > pitchT) pitchT = pitchLook;
+  if (!standing && isRanch()) pitchT = Math.max(pitchT, -0.2);   // at the Surf Ranch, eyes up on the machine wall where your wave comes from
   pitchT += 0.05 * tubeLook;   // (a slight, slow lift of the eyes toward the lip overhead)   // and up a little: the lip over your head
   pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * (st === 'POP' ? 4 + 20 * Math.min(1, rider.stateT / 0.3) : 5));   // (the pop: eyes snap down to the board between your hands)
   pov.roll += ((standing ? -rider.lean * 0.2 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve (less than the board: people hold their head nearer level)
@@ -1029,7 +1044,7 @@ function updateHUD(dt) {
   const lbl = rider.standing ? 'PUMP' : 'PADDLE'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
   // coaching for the first few waves: read the sea like a surfer would
   let hint = '';
-  if (st === 'LIE' && ranchWaiting()) hint = session.waves < 3 ? 'Order a wave: it comes down the pool to you in a few seconds' : '';
+  if (st === 'LIE' && ranchWaiting()) hint = session.waves < 3 ? 'Order a wave: it comes out of the machine wall in front of you' : '';
   else if (st === 'LIE') {
     const inc = incoming(), facingIn = Math.sin(rider.th) > 0.5;
     const onWave = rider.y > 0.3 && rider.onFace;

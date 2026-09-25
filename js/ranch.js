@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 
 // the pool, in the same world coordinates the waves use: waves run toward +z (the shallow end) and peel toward +x
-export const POOL = { x0: -90, x1: 470, z0: -75, z1: 250, deck: 1.6 };
+export const POOL = { x0: -90, x1: 470, z0: -45, z1: 250, deck: 1.6 };   // (the machine wall is ~37 m in front of where you wait)
 
 export function ranch(scene) {
   const g = new THREE.Group(); g.visible = false; scene.add(g);
@@ -30,16 +30,28 @@ export function ranch(scene) {
   box(P.x1 - P.x0, 0.35, 0.05, LINE, (P.x0 + P.x1) / 2, 0.1, P.z0 + 0.03); box(P.x1 - P.x0, 0.35, 0.05, LINE, (P.x0 + P.x1) / 2, 0.1, P.z1 - 0.03);
   box(0.05, 0.35, P.z1 - P.z0, LINE, P.x0 + 0.03, 0.1, (P.z0 + P.z1) / 2); box(0.05, 0.35, P.z1 - P.z0, LINE, P.x1 - 0.03, 0.1, (P.z0 + P.z1) / 2);
 
-  // the machine: a steel rail on pylons along the deep wall, and the car that runs on it pulling the wave
-  const STEEL = 0x7d8489, RZ = P.z0 - 5, RY = D + 3.2;
-  box(P.x1 - P.x0 + 20, 0.7, 1.2, STEEL, (P.x0 + P.x1) / 2, RY, RZ);
-  for (let x = P.x0; x <= P.x1; x += 20) box(0.7, RY - D, 0.7, STEEL, x, D + (RY - D) / 2, RZ);
-  const car = new THREE.Group(); g.add(car);
-  box(7, 3, 4.2, 0xf1b31c, 0, 1.8, 0, car); box(7.1, 0.5, 4.3, 0x2b2f33, 0, 0.5, 0, car);
-  box(2.4, 1.2, 4.25, 0x1d2a33, 2.1, 2.3, 0, car);                                              // cab windows
-  box(7.2, 0.25, 4.4, 0x2b2f33, 0, 3.4, 0, car);                                                // roof
-  box(0.4, 0.4, 4.5, 0xff5a36, -3.2, 3.7, 0, car);                                              // warning beacon bar
-  car.position.set(P.x0 + 10, RY - 0.2, RZ + 1.5);
+  // the wave machine: a wall of generator chambers along the deep end, right in front of you while you wait. Each
+  // chamber is a tall housing with a light panel facing the pool; the lights show the machine working (they pulse
+  // when you order a wave, then sweep along the wall with the breaking point as it makes the wave).
+  const CH = 5, NC = Math.floor((P.x1 - P.x0) / CH), cz = P.z0 - 2.2;
+  const hou = new THREE.InstancedMesh(new THREE.BoxGeometry(CH - 0.35, 7, 4.2), lam(0x3c4a57), NC);
+  const cap = new THREE.InstancedMesh(new THREE.BoxGeometry(CH - 0.2, 0.5, 4.6), lam(0xe9e6de), NC);
+  const lights = new THREE.InstancedMesh(new THREE.BoxGeometry(CH - 1.2, 1.1, 0.12), new THREE.MeshBasicMaterial({ color: 0xffffff }), NC);
+  const mm = new THREE.Matrix4();
+  for (let i = 0; i < NC; i++) { const x = P.x0 + CH / 2 + i * CH;
+    hou.setMatrixAt(i, mm.makeTranslation(x, D + 1.5, cz)); cap.setMatrixAt(i, mm.makeTranslation(x, D + 5.25, cz));
+    lights.setMatrixAt(i, mm.makeTranslation(x, D + 3.4, P.z0 - 0.02)); lights.setColorAt(i, new THREE.Color(0x1b4d5c)); }
+  g.add(hou, cap, lights);
+  box(P.x1 - P.x0, 1.2, 0.3, 0x2b3640, (P.x0 + P.x1) / 2, D + 1.4, P.z0 - 0.05);   // the wall face below the lights
+  // big lettering on the machine roof you can read from the pool: a painted band
+  box(60, 1.6, 0.2, 0xf2b705, P.x0 + 60, D + 6.3, P.z0 - 0.1);
+  // the shallow end: a sandy beach the waves run up onto, so you can see which way they're going
+  { const bw = 28, geo = new THREE.PlaneGeometry(P.x1 - P.x0, bw, 40, 6); geo.rotateX(-Math.PI / 2);
+    const pp = geo.attributes.position, c = new Float32Array(pp.count * 3);
+    for (let i = 0; i < pp.count; i++) { const t = (pp.getZ(i) + bw / 2) / bw; pp.setY(i, -0.9 + 2.6 * t); const k = 0.92 + Math.random() * 0.1, dry = Math.min(1, t * 1.6);
+      c[i * 3] = (0.62 + 0.24 * dry) * k; c[i * 3 + 1] = (0.56 + 0.24 * dry) * k; c[i * 3 + 2] = (0.44 + 0.22 * dry) * k; }
+    geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); geo.computeVertexNormals();
+    const beach = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })); beach.position.set((P.x0 + P.x1) / 2, 0, P.z1 - bw / 2); g.add(beach); }
 
   // light towers along both long sides
   const tower = (x, z) => { box(0.7, 24, 0.7, 0x8e959a, x, D + 12, z); box(4, 1.4, 1, 0xe9e7df, x, D + 24.5, z); };
@@ -83,11 +95,5 @@ export function ranch(scene) {
   const COP = 0xf4f2ec, cw = 0.6;
   box(P.x1 - P.x0 + 2 * cw, 0.25, cw, COP, (P.x0 + P.x1) / 2, D + 0.12, P.z0 - cw / 2); box(P.x1 - P.x0 + 2 * cw, 0.25, cw, COP, (P.x0 + P.x1) / 2, D + 0.12, P.z1 + cw / 2);
   box(cw, 0.25, P.z1 - P.z0, COP, P.x0 - cw / 2, D + 0.12, (P.z0 + P.z1) / 2); box(cw, 0.25, P.z1 - P.z0, COP, P.x1 + cw / 2, D + 0.12, (P.z0 + P.z1) / 2);
-  // lane buoys: a string of red and white floats marking the surf zone off from the deep end where the waves start
-  { const bm = [new THREE.MeshLambertMaterial({ color: 0xe8432e }), new THREE.MeshLambertMaterial({ color: 0xf4f2ec })], bg = new THREE.SphereGeometry(0.28, 8, 6);
-    const n = Math.floor((P.x1 - P.x0 - 4) / 2.4), im = [new THREE.InstancedMesh(bg, bm[0], Math.ceil(n / 2)), new THREE.InstancedMesh(bg, bm[1], Math.ceil(n / 2))], k = [0, 0], mm = new THREE.Matrix4();
-    for (let i = 0; i < n; i++) { mm.makeTranslation(P.x0 + 2 + i * 2.4, 0.12, P.z0 + 14); im[i % 2].setMatrixAt(k[i % 2]++, mm); }   // (two batches, not 230 separate floats: a phone draws them in two calls)
-    im[0].count = k[0]; im[1].count = k[1]; g.add(im[0], im[1]); }
-
-  return { group: g, car };
+  return { group: g, lights, NC, CH };
 }
