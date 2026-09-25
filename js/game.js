@@ -8,9 +8,9 @@ import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
 import { SurfAudio } from './audio.js?v=16';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=39';
-import { villa, VILLA } from './villa.js?v=87';
+import { villa, VILLA } from './villa.js?v=89';
 import { makeBirds } from './birds.js?v=1';
-import { friends } from './friends.js?v=8';
+import { friends } from './friends.js?v=13';
 import { crew } from './crew.js?v=8';
 import { wildlife } from './wildlife.js?v=11';
 

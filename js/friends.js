@@ -1,11 +1,14 @@
 // Your friends at the villa: surfers staying with you, each doing their own thing. Kai plays guitar by the fire,
 // nodding along to the music; Wayan waxes a board on the stands in the garden; Nando is up on the tree deck with
 // binoculars, watching the sets. In the living room, Coach Rudi stands at the open doors with his clipboard and gives
-// you tips on how to surf here, and Putu sits on the sofa with a map, talking up the other breaks. Same body as yours (their own skin, hair and boardshorts), posed bone by bone every
+// you tips on how to surf here, and Putu sits on the sofa with a map, talking up the other breaks. Belle, over from
+// Singapore, lazes in the infinity pool, her back to the end wall and her arms along the edge, watching the sea. Same body as yours (their own skin, hair and boardshorts), posed bone by bone every
 // frame. Walk up and they look round and say something; Nando calls out the barrels he sees.
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
+const HM = new THREE.Matrix4(), HX = new THREE.Vector3();
+const L2 = (F) => (LOOK[F.id] && LOOK[F.id].scale) || 1;   // (a friend's size, for what they wear)
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _pq = new THREE.Quaternion();
 // turn a bone so the line from it to its child points along dir (world), by weight w
 function aim(bone, child, dir, w = 1) {
@@ -34,6 +37,7 @@ const LOOK = {
   nando: { skin: 0xc79a7a, hair: 0x6b4a2a, shorts: 0x1f2f4f },
   rudi: { skin: 0x8a5c40, hair: 0x9a958c, shorts: 0x3d4a2c },   // (the old coach: grey hair, olive shorts)
   putu: { skin: 0xa8765a, hair: 0x16110e, shorts: 0xb8862c },
+  belle: { skin: 0xe8c2a2, hair: 0x100c0b, shorts: 0xd6405c, scale: 0.93 },   // (a coral swimsuit)
 };
 const LINES = {
   kai: ['Pull up a log, bro. Swell keeps building all evening.', 'This one is for the barrel you just got.', 'Fire is warm, waves are firing. Life is good.', 'Dawn patrol tomorrow? I am in.'],
@@ -55,6 +59,8 @@ const LINES = {
     'Going to Gunung Laut? Only the gun. It paddles in early, before those giants stand up.',
     'Goofy faces the wave on the lefts, regular faces it on the rights. Backside is a bit harder. Try both.',
     'Boards are in the board room, next door. Walk up to one and it is yours.'],
+  belle: ['Eh hi! Come in lah, the water is super shiok.', 'Flew in from Singapore just for this view. So worth it.', 'You surfing later? I watch from here, can?',
+    'Sunset from this pool, confirm the best in Sumba.', 'Careful ah, don\'t splash my hair.', 'Singapore got no waves like this one leh.', 'That last set was huge! You saw or not?'],
   // the local: every break in the book, told like he loves them
   putu: ['Pantai Kuda means horse beach. We ride horses on that sand at sunset. Slow, friendly barrels. Where everybody starts.',
     'You are sleeping on top of Tanjung Uma, bro. Clean four and a half metre lefts under the cliffs. Look out the window, that is her.',
@@ -78,6 +84,8 @@ export function friends(scene, src, spots) {
     body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.frustumCulled = false; o.material = o.material.clone(); o.material.side = THREE.FrontSide;
       const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
     const B = {}; body.traverse((o) => { if (o.isBone) B[o.name] = o; });
+    if (L.scale) body.scale.setScalar(L.scale);
+    if (S.id === 'belle') body.traverse((o) => { if (o.isMesh && o.material.name === 'hair') o.visible = false; });   // (her own long hair instead of the lads' crop)
     const skins = []; body.traverse((o) => { if (o.isSkinnedMesh) skins.push(o); });
     root.position.set(S.x, S.y, S.z); root.rotation.y = S.yaw;
     const F = { id: S.id, name: S.name, root, body, B, skins, S, props: {}, look: 0, lineI: 0, talkT: 0, cool: 0, head: new THREE.Vector3() };
@@ -108,6 +116,16 @@ export function friends(scene, src, spots) {
       const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.01, 14, 1, false, -Math.PI / 2, Math.PI), cm); brim.position.set(0, 0.005, 0.07); brim.scale.set(1, 1, 0.9); cap.add(brim);
       group.add(cap); F.props.cap = cap;
       const wh = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.02, 0.05), new THREE.MeshStandardMaterial({ color: 0xd8b04a, metalness: 0.5, roughness: 0.4 })); group.add(wh); F.props.whistle = wh;
+    }
+    if (S.id === 'belle') {   // long black hair (wet ends down her back) and a coral bandeau top
+      const hm = new THREE.MeshStandardMaterial({ color: 0x100c0b, roughness: 0.45 }), sw = new THREE.MeshStandardMaterial({ color: 0xd6405c, roughness: 0.55 });
+      // (the hair: a crown over the top down to a hairline on the forehead, and a shell round the sides and back; the face left open)
+      const hair = new THREE.Group(), hs = THREE.DoubleSide; hm.side = hs;
+      const crown = new THREE.Mesh(new THREE.SphereGeometry(0.118, 18, 6, 0, Math.PI * 2, 0, 0.78), hm); crown.scale.set(1.04, 1.05, 1.1); crown.position.set(0, 0.04, -0.012); hair.add(crown);
+      const back = new THREE.Mesh(new THREE.SphereGeometry(0.12, 18, 10, Math.PI / 2 + 1.0, Math.PI * 2 - 2.0, 0, Math.PI * 0.66), hm); back.scale.set(1.05, 1.08, 1.1); back.position.set(0, 0.025, -0.018); hair.add(back);
+      const fall = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 0.42, 12, 1, true), hm); fall.material = hm.clone(); fall.material.side = THREE.DoubleSide; fall.scale.set(1, 1, 0.45); fall.position.set(0, -0.17, -0.085); fall.rotation.x = 0.12; hair.add(fall);
+      group.add(hair); F.props.hair = hair;
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.148, 0.12, 20, 1, true), sw); top.material.side = THREE.DoubleSide; group.add(top); F.props.top = top;
     }
     if (S.id === 'putu') {   // a folded paper map of the island, spots marked
       const cv = document.createElement('canvas'); cv.width = 256; cv.height = 176; const c = cv.getContext('2d');
@@ -219,6 +237,21 @@ export function friends(scene, src, spots) {
         reach(B.upperarm_l, B.lowerarm_l, B.hand_l, TA.copy(mp.position).addScaledVector(side, -0.22), pole.copy(up).multiplyScalar(-1).addScaledVector(side, -0.6));
         if (talk) { B.spine_03.getWorldPosition(TB); reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.addScaledVector(fw, 0.5).addScaledVector(rt, 0.3).addScaledVector(up, 0.15 + 0.04 * Math.sin(t * 3)), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, 0.5)); }   // (pointing out to sea)
         else reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(mp.position).addScaledVector(side, 0.22), pole.copy(up).multiplyScalar(-1).addScaledVector(side, 0.6));
+      } else if (S.pose === 'pool') {
+        // standing in the pool with her back to the end wall, arms spread along the coping behind her, the water at
+        // her shoulders; she looks out to sea, and round at you when you come by
+        B.spine_03.scale.set(0.9, 1, 0.92);   // (narrower shoulders than the lads)
+        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, 0.12).addScaledVector(rt, sg * 0.08).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, -0.05).normalize()); }
+        aim(B.spine_02, B.spine_03, tgt.copy(up).addScaledVector(fw, -0.1).normalize());   // (leaning back on the wall)
+        const lookOut = near ? 0 : 0.9 + 0.25 * Math.sin(t * 0.2);   // (out to sea, which is her left)
+        aim(B.neck_01, B.head, tgt.copy(up).addScaledVector(fw, 0.55).applyAxisAngle(up, F.look + lookOut).normalize());
+        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; B['upperarm_' + sd].getWorldPosition(W);
+          reach(B['upperarm_' + sd], B['lowerarm_' + sd], B['hand_' + sd], TA.set(S.x, 0, S.z).addScaledVector(rt, sg * 0.5).addScaledVector(fw, -0.34).setY(S.edgeY), pole.copy(up).multiplyScalar(-0.5).addScaledVector(fw, -1)); }
+        // (a frame for the head from world directions: up along the neck, forward where she looks; the bone's own axes aren't upright)
+        B.neck_01.getWorldPosition(TA); B.head.getWorldPosition(W); const hu = TB.subVectors(W, TA).normalize(), hf = SD.copy(fw).applyAxisAngle(up, F.look + lookOut); hf.addScaledVector(hu, -hf.dot(hu)).normalize();
+        HM.makeBasis(HX.crossVectors(hu, hf), hu, hf); const k = L2(F);
+        const hr = F.props.hair; hr.position.copy(W); hr.quaternion.setFromRotationMatrix(HM); hr.scale.setScalar(k);
+        B.spine_03.getWorldPosition(W); const tp = F.props.top; tp.position.copy(W).addScaledVector(up, 0.075).addScaledVector(fw, 0.015); tp.quaternion.setFromUnitVectors(_a.set(0, 1, 0), up); tp.rotateY(Math.atan2(fw.x, fw.z)); tp.scale.set(1, 1, 0.74);
       }
       if (F.talkT > 0) F.talkT -= dt;
     }

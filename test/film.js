@@ -4,6 +4,7 @@
 //   const f = await import('./test/film.js'); f.setup(); await f.run('ride')  (repeat until it says done)
 import * as THREE from 'three';
 import { brain, carveBrain } from './sim2.js';
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const G = () => window.__g;
 let W = 1080, H = 1920; const FPS = 30;
 const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const cx = cv.getContext('2d');
@@ -32,6 +33,9 @@ function draw(fov, body, crop) {
   if (mir) { g.flipProj(c); if (body) g.flipProj(a); }
   if (crop !== undefined) { c.clearViewOffset(); a.clearViewOffset(); }
   cx.drawImage(r.domElement, 0, 0, W, H);   // (copied in the same task, before the browser clears the drawing buffer)
+  if (CALL.text && CALL.a > 0.01) {   // the game's own callout (#tube in index.html: 22% down, bold condensed, wide letter spacing)
+    const fs = Math.round(H * 0.056); cx.save(); cx.globalAlpha = CALL.a; cx.font = `700 ${fs}px "Barlow Condensed", "Helvetica Neue", sans-serif`; cx.letterSpacing = `${(fs * 0.3).toFixed(1)}px`;
+    cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.shadowColor = 'rgba(0,0,0,.45)'; cx.shadowBlur = fs * 0.25; cx.fillStyle = '#f4efe6'; cx.fillText(CALL.text, W / 2 + fs * 0.15, H * 0.22 + fs * 0.5); cx.restore(); }
 }
 // frames are encoded on the spot and sent in batches (one request per dozen frames: a hidden tab throttles every
 // awaited callback to about one a second, which made one-request-per-frame crawl)
@@ -40,6 +44,13 @@ async function flush() { if (!batch.length) return; const b = batch; batch = [];
 async function grab(shot, i) {
   if (batchShot !== shot) { await flush(); batchShot = shot; }
   batch.push([i, cv.toDataURL('image/jpeg', 0.92)]); if (batch.length >= 12) await flush();
+}
+// the callout state, driven like the game's (BARREL held 0.4 s after the tube, else the move just landed; fades .25 s)
+const CALL = { text: '', a: 0, tubeT: 0, last: '' };
+function callout(r, dt) {
+  CALL.tubeT = r.inBarrel ? 0.4 : Math.max(0, CALL.tubeT - dt);
+  const t = r.state !== 'RIDE' ? '' : CALL.tubeT > 0 ? 'BARREL' : r.trick && !r.trick.name.endsWith('TURN') ? r.trick.name : '';
+  if (t) CALL.text = t; CALL.a += ((t ? 1 : 0) - CALL.a) * Math.min(1, dt / 0.12);
 }
 const seeded = (seed) => { let st = seed >>> 0; return () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296); };
 
@@ -81,6 +92,51 @@ T.rHard = rideTake('hard', 11, 300, 'short', true); T.rHiu = rideTake('hiu', 5, 
 T.rUma = rideTake('medium', 3, 480, 'short', true); T.rGiant = rideTake('extreme', 7, 330, 'gun', true);
 T.rHard.keep = [[120, 300]]; T.rHiu.keep = [[125, 250]]; T.rKanan.keep = [[150, 360]]; T.rEasy.keep = [[170, 380]]; T.rUma.keep = [[100, 480]]; T.rGiant.keep = [[100, 330]];
 T.giant = rideTake('extreme', 7, 300, 'gun'); T.giant.keep = [[110, 300]];
+// the landscape trailer: a pro in the game's own first-person view (your arms and board, the game's lens), paddling
+// in and riding like a pro: 'carve' (snaps off the top), 'cut' (cutbacks), 'barrel' (sets up and pulls in), 'air'
+const LOG = {}; window.__filmLog = LOG;
+export function addPro(name, mode, seed, n, boardT, plan, cbo, keep) { T[name] = proTake(name, mode, seed, n, boardT, plan, cbo); if (keep) T[name].keep = keep; return name; }
+function proTake(name, mode, seed, n, boardT, plan, cbo) {
+  let br, cb, rnd0, armK = 0, cut = 0, lastCut = -9, i0 = 0;
+  const gameFov = (asp) => THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(50)) / Math.min(asp, 2)));
+  return { n, init() { const g = G(); rnd0 = Math.random; Math.random = seeded(seed); g.setMode(mode); document.getElementById('start').style.display = 'none'; document.body.classList.add('playing');
+      g.useBoard(boardT); g.spawnRider(); br = brain({}); cb = carveBrain(cbo || (plan === 'air' ? { hi: 0.97, lo: 0.12, gain: 4 } : { hi: 0.8, lo: 0.16, gain: 3.4 })); const r = g.rider; LOG[name] = []; CALL.a = 0; CALL.tubeT = 0;
+      for (let i = 0; i < 60 * 90; i++) { const o = br(r); g.input.test = o.steer; g.input.paddleBtn = r.standing ? !!o.pump : !!o.paddle; g.step(1 / 60, 1 / 60, false); if (r.state === 'LIE' && g.incoming().t < 3.4) break; } },
+    frame(i) { const g = G(), r = g.rider;
+      for (let k = 0; k < 2; k++) {
+        let o = br(r), stick = null;
+        if (r.state === 'RIDE' && r.wave && r.stateT > 1.0) {
+          const w = r.wave, Hh = w.cond.H, sH = r.s / Hh, yH = r.y / Hh;
+          if (plan === 'barrel' && r.stateT > 2.5) {   // set up in the pocket, stall till it covers you, then hold the line
+            const err = yH - 0.35 + (r.stalling ? 0.12 : 0), sn = Math.max(-0.6, Math.min(0.97, w.cond.speed / Math.max(r.v, 1) + err * 0.9)), a0 = Math.asin(sn);
+            const steer = Math.max(-1, Math.min(1, wrapA(a0 - r.th) * 3)), stall = !r.inBarrel && sH > -0.2 && !(r.spitOut > 0);
+            o = { steer: stall ? null : steer, pump: !stall && sH < -1.2 }; if (stall) stick = { x: steer, y: 1 };
+          } else if (plan === 'cut' && (cut || (r.stateT > 2.5 && r.stateT - lastCut > 4 && sH > 0.7 && r.v > w.cond.speed * 0.75))) {   // out on the shoulder with speed: swing back round to the curl
+            if (!cut) cut = 1;
+            if (cut === 1) { o = { steer: -1, pump: false }; if (Math.cos(r.th) < -0.5) cut = 2; }
+            else { o = { steer: 1, pump: false }; if (Math.cos(r.th) > 0.35) { cut = 0; lastCut = r.stateT; } }
+          } else if (plan === 'snap') {   // bottom turn, drive hard up to the lip, whip it back down at full lock, again
+            const sl = w.prof.slice(r.s), hT = r.y / Math.max(sl.top, 0.3), c = w.cond.speed, relVz = r.vz - c;
+            const aim = (vz) => wrapA(Math.asin(Math.max(-0.95, Math.min(0.97, vz / Math.max(r.v, 0.5)))) - r.th);
+            if (!r._ph) r._ph = 'up';
+            if (r._ph === 'up' && hT > (cbo && cbo.top || 0.74)) r._ph = 'snap'; else if (r._ph === 'snap' && relVz > 1.2) r._ph = 'down'; else if (r._ph === 'down' && hT < 0.22) r._ph = 'up';
+            const d = r._ph === 'up' ? aim(c - 0.8 * c) : aim(c + 0.7 * c);
+            o = { steer: r._ph === 'snap' ? Math.sign(d) : Math.max(-1, Math.min(1, d * 3)), pump: r._ph !== 'snap' && r.v < c * 0.95 };
+          } else { o = cb(r); o.pump = r.v < w.cond.speed * 0.85; }
+        }
+        g.input.stick = stick; g.input.test = stick ? null : o.steer; g.input.paddleBtn = r.standing ? !!o.pump : !!o.paddle;
+        g.step(1 / 60, 1 / 60, false);
+      }
+      callout(r, 1 / FPS);
+      LOG[name].push([i, r.state, r.inBarrel ? 1 : 0, r.trick && r.trick.t < 0.05 ? r.trick.name : '', r.air ? 1 : 0]);
+      armK += ((r.standing ? 1 : 0) - armK) * Math.min(1, 4 / FPS);
+      const fov = gameFov(W / H); return { fov, body: fov + (62 - fov) * armK }; },
+    done() { const g = G(); Math.random = rnd0; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; if (boardT !== 'short') g.useBoard('short'); CALL.a = 0; } };
+}
+T.pUma = proTake('pUma', 'medium', 3, 900, 'short', 'barrel'); T.pUmaC = proTake('pUmaC', 'medium', 9, 900, 'short', 'carve');
+T.pHard = proTake('pHard', 'hard', 11, 800, 'short', 'carve'); T.pHardB = proTake('pHardB', 'hard', 11, 700, 'short', 'barrel');
+T.pKanan = proTake('pKanan', 'kanan', 8, 800, 'short', 'cut'); T.pHiu = proTake('pHiu', 'hiu', 5, 700, 'short', 'barrel');
+T.pEasy = proTake('pEasy', 'easy', 4, 900, 'fish', 'air'); T.pCut = proTake('pCut', 'medium', 7, 900, 'short', 'cut'); T.pGiant = proTake('pGiant', 'extreme', 7, 600, 'gun', 'carve');
 // the villa and the view from it: free cameras in the villa's world (it keeps living: waves, crew, whale, dolphins)
 const V = { ok: false };
 function villaInit() { const g = G(); if (!document.body.classList.contains('villa')) { g.startVilla(); } g.step(0.5, 1 / 30, false); V.ok = true; }
