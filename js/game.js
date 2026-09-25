@@ -5,10 +5,10 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=95';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
-import { SurfAudio } from './audio.js?v=9';
+import { SurfAudio } from './audio.js?v=11';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
-import { villa, VILLA } from './villa.js?v=29';
+import { villa, VILLA } from './villa.js?v=32';
 import { crew } from './crew.js?v=3';
 
 const Q = new URLSearchParams(location.search);
@@ -32,7 +32,7 @@ const ranchW = ranch(scene);
 const fx = new WeatherFX(scene);
 const audio = new SurfAudio();
 fx.onFlash = () => audio.thunder(Math.random());
-addEventListener('visibilitychange', () => audio.pause(document.hidden || !document.body.classList.contains('playing')));
+addEventListener('visibilitychange', () => { audio.pause(document.hidden); audio.quiet(!document.body.classList.contains('playing')); });
 const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x3a4a48, 1.3); scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xfff0dd, 2.0); scene.add(sunLight); scene.add(sunLight.target);
 hemi.layers.enableAll(); sunLight.layers.enableAll();
@@ -65,14 +65,29 @@ const BOARD_INFO = {
   long: ['Longboard', "9'2\" single fin. Smooth and relaxed: paddles fast and catches waves early, rock steady, glides forever. Turns are slow, wide arcs, like steering a boat, and it can't do snaps or airs. Clumsy in steep barrels.", 'Pantai Kuda (learning)', [5, 3, 1, 5, 0]],
   gun: ['Gun', "9'6\" big-wave board with a pointed nose and pin tail. Paddles into giant waves early, before they get too steep, and holds its line at high speed with lots of grip. Stiff, long turns; sluggish on small waves.", 'Gunung Laut', [5, 4, 2, 5, 2]],
 };
+// the board picker in the menu: each board's outline in its own colours, the one you're riding lit up
+const BOARD_SVG = {
+  short: ['M20 17 C20 11 40 8 62 8 C84 8 98 13 102 17 C98 21 84 26 62 26 C40 26 20 23 20 17Z', '#f4f1ea', '#e8715a'],
+  fish: ['M22 9 L28 17 L22 25 C40 29 70 28 86 24 C94 21 97 18 97 17 C97 16 94 13 86 10 C70 6 40 5 22 9Z', '#e0b23a', '#1f8a8a'],
+  long: ['M4 17 C4 11 22 8 60 8 C100 8 116 12 116 17 C116 22 100 26 60 26 C22 26 4 23 4 17Z', '#efe4c8', '#2f5d8a'],
+  gun: ['M3 17 C18 12 48 9 70 9 C94 9 110 14 118 17 C110 20 94 25 70 25 C48 25 18 22 3 17Z', '#c8322a', '#f4f1ea'] };
+function boardPicker() {
+  const box = document.getElementById('boards'); if (!box || box.childElementCount) return;
+  for (const t of ['short', 'fish', 'long', 'gun']) { const [d, fill, rail] = BOARD_SVG[t], b = document.createElement('button'); b.dataset.board = t;
+    b.innerHTML = `<svg viewBox="0 0 120 34"><path d="${d}" fill="${fill}" stroke="${rail}" stroke-width="2.5"/><path d="M${t === 'gun' ? 8 : 26} 17 H${t === 'long' ? 112 : 96}" stroke="${rail}" stroke-width="1" opacity=".6"/></svg><span>${BOARD_INFO[t][0]}</span><small>${BOARD_INFO[t][2]}</small>`;
+    const pick = (e) => { e.preventDefault(); e.stopPropagation(); useBoard(t); }; b.addEventListener('click', pick); b.addEventListener('touchend', pick, { passive: false }); box.appendChild(b); }
+  for (const b of box.children) b.classList.toggle('on', b.dataset.board === boardType); document.getElementById('boardName').textContent = BOARD_INFO[boardType][0];
+}
 function useBoard(t) {
   boardType = t; try { localStorage.setItem('sumbasurf.board', t); } catch (e) {}
   rig.remove(board); board.geometry.dispose(); board = makeBoard(t); board.position.z = Math.max(0, (BOARD_LENGTH(t) - 1.88) * 0.33); rig.add(board);
   boardTail = board.position.z - BOARD_LENGTH(t) / 2 + 0.04; setBoard(t);
   for (const b of document.querySelectorAll('[data-board]')) b.classList.toggle('on', b.dataset.board === t);
+  document.getElementById('boardName').textContent = BOARD_INFO[t][0]; if (document.body.classList.contains('playing') && mode !== 'villa') ui.cond.textContent = modeName(mode) + '  \u00b7  ' + BOARD_INFO[t][0];
 
 }
 try { const t = localStorage.getItem('sumbasurf.board'); if (t && t !== 'short') setTimeout(() => useBoard(t), 0); } catch (e) {}
+setTimeout(boardPicker, 0);
 // a jukung (Balinese outrigger fishing boat) anchored in the channel up-reef of the peak, bobbing on the swell, and a
 // few frigate birds wheeling high over the lineup
 const jukung = (() => {
@@ -402,7 +417,7 @@ for (const b of document.querySelectorAll('[data-board]')) b.addEventListener('c
 let starting = false;
 // back to the level select: stop the game behind the menu (you pick a level again to restart)
 function toMenu() {
-  starting = false; audio.pause(true);
+  starting = false; audio.quiet(true);
   // clear the session: the menu gets its slow drifting wave behind it again (and nothing of the old ride keeps running)
   if (surfer) endWipe(); rider = null; rig.visible = false; endT = -1;
   for (const w of waves) w.dispose(scene); waves = [];
@@ -417,7 +432,7 @@ document.getElementById('menu').addEventListener('touchstart', (e) => { e.preven
 document.getElementById('menu').addEventListener('click', toMenu);
 async function start(m) {
   if (starting) return; starting = true; if (window.__g) window.__g.paused = false;
-  mode = m; setWeather(m); setSpot(m); audio.start();
+  mode = m; setWeather(m); setSpot(m); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
   // fullscreen + landscape lock must be asked for inside the tap, before any waiting (Android); iOS ignores both safely
   try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {}); } catch (e) {}
   ui.load.textContent = surfer ? '' : 'Loading...';
@@ -428,7 +443,7 @@ async function start(m) {
   setLeft = 0; setPos = 0;
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15;   // a calm start: time to look around and find the set
   updateWaves(0); spawnRider();
-  ui.cond.textContent = modeName(mode);
+  ui.cond.textContent = modeName(mode) + '  \u00b7  ' + BOARD_INFO[boardType][0];   // (the spot, and the board you're on)
 }
 if (Q.get('mode')) start(Q.get('mode'));
 
@@ -1171,15 +1186,42 @@ let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = nu
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
 const _wl = new THREE.Vector3();
 const vSitB = document.getElementById('vSit');
-function vSit() { const W_ = walker; if (!W_ || !W_.near) return; W_.sit = W_.near; W_.stand = [W_.x, W_.z]; W_.sitT = 1.2; W_.mx = W_.mz = 0; vSitB.textContent = 'STAND UP'; }
-function vStand() { const W_ = walker; if (!W_ || !W_.sit) return; [W_.x, W_.z] = W_.stand; W_.sit = null; W_.near = null; W_.seatT = 0.5; vSitB.classList.remove('on'); }
+// music: ten reggae tracks, shuffled. From the villa radio (quieter and duller the further you are from it), under the
+// menu, loud at the Surf Ranch like a pool speaker; never on the reef
+const SONGS = { 'we-dub-a-long-way': ['We Dub A Long Way', 'Brotheration Records'], 'reggae-dub-1': ['Reggae Dub One', 'Pietix'], 'dreaming-of-reggae': ['Dreaming of Reggae', 'Figaro Reggae Music'],
+  'roots-reggae': ['Roots Reggae', 'MrBAS Music Labs'], 'roots-guitare-tamtam': ['Roots Guitare Tamtam', 'Acoostika Beat'], 'feel-the-vibe': ['Feel the Vibe in Here', 'Figaro Reggae Music'],
+  'barefoot-in-the-breeze': ['Barefoot in the Breeze', 'OpenMindAudio'], 'island-vibes': ['Reggae Island Vibes', 'Alex Morgan'], 'everyday-is-a-holiday': ['Everyday Is a Holiday', 'Brotheration Records'],
+  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'] };
+const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] || ['Island radio', ''];
+audio.onTrack = (src) => { const [t, a] = songOf(src); if (villaW) villaW.setSong(t, a); document.getElementById('vSongT').textContent = t; document.getElementById('vSongA').textContent = a ? 'by ' + a : ''; };
+const MUSIC = ['we-dub-a-long-way', 'reggae-dub-1', 'dreaming-of-reggae', 'roots-reggae', 'roots-guitare-tamtam', 'feel-the-vibe', 'barefoot-in-the-breeze', 'island-vibes', 'everyday-is-a-holiday', 'stand-firm-like-a-tree'].map((n) => 'music/' + n + '.mp3');
+let radioOn = true;   // (the villa's speakers, all together)
+function musicTick() {
+  if (!audio.mel) return;
+  const playing = document.body.classList.contains('playing');
+  if (!playing) return audio.musicLevel(0.45);
+  if (mode === 'villa' && walker && villaW) { if (!radioOn) { document.getElementById('vSong').classList.remove('on'); return audio.musicLevel(0); } let d = 1e9; for (const R of villaW.sounds.speakers) d = Math.min(d, Math.hypot(R[0] - walker.x, R[1] - walker.z, R[2] - (walker.y - 1.2)));   // (the nearest speaker)
+    document.getElementById('vSong').classList.toggle('on', d < 7 && !walker.watch);
+    const k = Math.max(0, 1 - d / 22);
+    return audio.musicLevel(0.04 + 0.5 * k * k, 1800 + 12000 * k * k); }
+  if (isRanch()) return audio.musicLevel(0.38, 14000);
+  audio.musicLevel(0);   // (on the reef, only the sea: the sound of the wave is how you surf)
+}
+// the first touch anywhere wakes the sound (a phone won't play anything before that), and the music starts
+{ const first = () => { audio.start(); audio.musicStart(MUSIC); if (!document.body.classList.contains('playing')) audio.quiet(true); removeEventListener('pointerdown', first, true); removeEventListener('touchend', first, true); };
+  addEventListener('pointerdown', first, true); addEventListener('touchend', first, true); }
+function vSit() { const W_ = walker; if (!W_ || !W_.near) return;
+  if (W_.near.radio) { radioOn = !radioOn; vSitB.textContent = radioOn ? 'MUSIC OFF' : 'MUSIC ON'; return; }   // (the radio: a switch, not a seat)
+  W_.sit = W_.near; W_.stand = [W_.x, W_.z, W_.y]; W_.sitT = 1.2; W_.mx = W_.mz = 0; vSitB.textContent = 'STAND UP'; }
+function vStand() { const W_ = walker; if (!W_ || !W_.sit) return; [W_.x, W_.z, W_.y] = W_.stand;   // (feet back where they were: standing up on the tree deck, you're still on the deck)
+  W_.sit = null; W_.near = null; W_.seatT = 0.5; vSitB.classList.remove('on'); }
 { const t = (e) => { e.preventDefault(); e.stopPropagation(); if (walker && walker.sit) vStand(); else vSit(); }; vSitB.addEventListener('click', t); vSitB.addEventListener('touchstart', t, { passive: false }); }
 let villaW = null, crewW = null, walker = null, vMoveT = null, vLookT = null, vPickType = null;
 const vStick = document.getElementById('vStick'), vPanel = document.getElementById('vPanel');
 function startVilla() {
   if (starting) return;
-  mode = 'villa'; setWeather('villa'); audio.start();
-  if (!villaW) { villaW = villa(scene); villaW.group.position.z = SPOTS.medium.dz; crewW = crew(scene); }
+  mode = 'villa'; setWeather('villa'); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
+  if (!villaW) { villaW = villa(scene); villaW.group.position.z = SPOTS.medium.dz; crewW = crew(scene); if (audio.now) villaW.setSong(...songOf(audio.now)); }
   setSpot('villa');
   if (!startVilla.compiled) { startVilla.compiled = true; crewW.group.visible = true; renderer.compile(scene, camera); }   // (build every villa shader now, not in a stall the first time each thing comes into view)
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
@@ -1233,7 +1275,7 @@ vm.addEventListener('mousedown', (e) => lookStart('m', e.clientX, e.clientY));  
 addEventListener('mousemove', (e) => lookMove('m', e.clientX, e.clientY));
 addEventListener('mouseup', (e) => lookEnd('m', e.clientX, e.clientY));
 function villaTick(dt) {
-  updateWaves(dt); crewW.update(dt, waves, T); if (villaW.tick) villaW.tick(dt);
+  updateWaves(dt); crewW.update(dt, waves, T); if (villaW.tick) villaW.tick(dt, radioOn ? audio.musicBeat() : 0);
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
@@ -1253,14 +1295,14 @@ function villaTick(dt) {
     }
   }
   if (V.fix) { const f = V.fix(nx, nz, foot); if (f) [nx, nz] = f; }
-  if (V.solid && V.solid(nx, nz, foot)) { if (!V.solid(nx, W_.z, foot)) nz = W_.z; else if (!V.solid(W_.x, nz, foot)) nx = W_.x; else { nx = W_.x; nz = W_.z; } }   // (the stair, the deck, the tree)
+  if (V.solid && V.solid(nx, nz, foot) && !V.solid(W_.x, W_.z, foot)) { if (!V.solid(nx, W_.z, foot)) nz = W_.z; else if (!V.solid(W_.x, nz, foot)) nx = W_.x; else { nx = W_.x; nz = W_.z; } }   // (the stair, the deck, the tree)   // (and if you're ever somewhere you shouldn't be, you can always walk out: never trapped)
   }
   W_.x = nx; W_.z = nz;
   // look at a board in the rack and its card comes up by itself (no need to tap); look away and it goes
   // a seat within reach (at your level): offer it
   W_.seatT = (W_.seatT || 0) - dt;
   if (W_.seatT <= 0 && !W_.sit) { W_.seatT = 0.2; let best = null, bd = 2.1; for (const S of V.seats) { const d = Math.hypot(S.x - W_.x, S.z - W_.z); if (d < bd && Math.abs(S.eye - 1.1 - foot) < 1.3) { bd = d; best = S; } }
-    if (best !== W_.near) { W_.near = best; vSitB.classList.toggle('on', !!best); if (best) vSitB.textContent = best.name; } }
+    if (best !== W_.near) { W_.near = best; vSitB.classList.toggle('on', !!best); if (best) vSitB.textContent = best.radio ? (radioOn ? 'MUSIC OFF' : 'MUSIC ON') : best.name; } }
   // the sounds of the place: the fire, the wind chimes, birds, and the lineup hooting a good barrel
   { const d3 = (p) => Math.hypot(p[0] - W_.x, p[1] - W_.z, p[2] - (W_.y - 1.2));
     const df = d3(V.sounds.fire); if (df < 14 && (W_.fireT = (W_.fireT || 0) - dt) <= 0) { W_.fireT = 0.06 + Math.random() * 0.22; audio.crackle(Math.pow(1 - df / 14, 2)); }
@@ -1375,6 +1417,6 @@ renderer.setAnimationLoop(() => {
     armCam.aspect = camera.aspect; armCam.fov = camera.fov + (62 - camera.fov) * armK; armCam.updateProjectionMatrix();
     renderer.autoClear = false; renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(scene, armCam); renderer.autoClear = true;
   }
-  autoQuality(dt);
+  autoQuality(dt); musicTick();
 });
 window.__g = { get walker() { return walker; }, get crew() { return crewW; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };

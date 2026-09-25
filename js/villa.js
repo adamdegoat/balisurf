@@ -36,6 +36,7 @@ export function villa(scene) {
   const H = 3.2, RIDGE = 5.4, xm = (V.x0 + V.x1) / 2, zm = (V.z0 + V.z1) / 2;
   const xL = -95;                                  // the wall between the board room (west) and the living room (east)
   const B = { x0: V.x0, x1: V.x1 + 3.4, z0: V.z0 - 3.4, z1: V.z1 };   // the balcony wraps the two sea sides (south and east)
+  const GY0 = Y - 0.2, fire0 = { x: -94.5, z: 49.5 };                 // the garden's grass level and the fire pit (behind the house)
   const LZ = 46.6;                                                   // ...and runs on past the house to the tree
   const TX = -83.5, TZ = 48.5, R0 = 1.05, R1 = 2.1, RD = 3.6, DH = 8, TURN = 3 * Math.PI, A0 = -Math.PI / 2;   // the banyan: trunk, stair ring, deck radius and height, stair turns and start angle
 
@@ -202,7 +203,42 @@ export function villa(scene) {
   // canang sari: little palm-leaf trays of flowers, set out each morning (by the doors, on the shelf, at the stair)
   const canang = (x, y, z) => { box(0.16, 0.03, 0.16, [0.55, 0.7, 0.3], x, y + 0.015, z);
     for (const [dx, dz, cc] of [[-0.04, -0.04, [0.95, 0.9, 0.85]], [0.04, -0.04, [0.9, 0.2, 0.15]], [-0.04, 0.04, [0.98, 0.75, 0.1]], [0.04, 0.04, [0.6, 0.2, 0.6]]]) box(0.05, 0.03, 0.05, cc, x + dx, y + 0.045, z + dz); };
-  canang(-91.2, Y, 30.35); canang(-85.6, Y, 36.1); canang(xL + 0.3, Y + 1.53, 42.6); canang(-83.3, Y, 46.4);
+  canang(-91.2, Y, 30.35); canang(-85.6, Y, 36.1); canang(xL + 0.3, Y + 1.53, 42.3); canang(-83.3, Y, 46.4);
+  // speakers for the music: an old teak valve radio on the balcony table between the loungers (where you watch the
+  // surf), and wooden speakers by the fire and up on the tree deck. Walk up to any of them to switch the music off
+  const speakersL = [], woofers = [];
+  // the song on every speaker's little amber screen (one canvas, shared)
+  const songCv = document.createElement('canvas'); songCv.width = 512; songCv.height = 128; const songTex = new THREE.CanvasTexture(songCv); songTex.colorSpace = THREE.SRGBColorSpace;
+  const dispMat = new THREE.MeshBasicMaterial({ map: songTex, toneMapped: false });
+  const setSong = (title, artist) => { const c = songCv.getContext('2d'); c.fillStyle = '#140a04'; c.fillRect(0, 0, 512, 128);
+    c.fillStyle = '#b8732a'; c.font = 'bold 20px Helvetica, Arial, sans-serif'; c.fillText('NOW PLAYING', 18, 30);
+    c.fillStyle = '#ffc266'; c.font = 'bold 40px Helvetica, Arial, sans-serif'; let t = title; while (c.measureText(t).width > 480 && t.length > 4) t = t.slice(0, -2); c.fillText(t === title ? t : t + '...', 18, 76);
+    c.fillStyle = '#d99a4a'; c.font = '26px Helvetica, Arial, sans-serif'; c.fillText(artist, 18, 112); songTex.needsUpdate = true; };
+  setSong('Island radio', 'Tap MUSIC near a speaker');
+  const weave = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d'); c.fillStyle = '#6e5230'; c.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 128; y += 8) for (let x = 0; x < 128; x += 8) { c.fillStyle = ((x + y) / 8) % 2 ? '#c9a468' : '#a8844c'; c.fillRect(x + 1, y + 1, 6, 6); }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 5); return t; })();
+  const grilleMat = new THREE.MeshStandardMaterial({ map: weave, roughness: 0.9 }), coneMat = new THREE.MeshStandardMaterial({ color: 0x1c1a18, roughness: 0.8 }), rimMat = new THREE.MeshStandardMaterial({ color: 0xb08850, metalness: 0.5, roughness: 0.35 });
+  const display = (rg, w, h, x, y, z) => { const d = new THREE.Mesh(new THREE.PlaneGeometry(w, h), dispMat); d.position.set(x, y, z); d.scale.x = -1; rg.add(d); };   // (flipped back: the house is mirrored)
+  const cone = (rg, r, x, y, z) => { const ring = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.12, 6, 20), rimMat); ring.position.set(x, y, z); rg.add(ring);
+    const c = new THREE.Mesh(new THREE.ConeGeometry(r * 0.95, r * 0.5, 20, 1, true), coneMat); c.rotation.x = -Math.PI / 2; c.position.set(x, y, z - r * 0.2); c.userData.z0 = z - r * 0.2; rg.add(c); woofers.push(c);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(r * 0.25, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), coneMat); cap.rotation.x = Math.PI / 2; cap.position.set(x, y, z - r * 0.05); rg.add(cap); cap.userData.z0 = z - r * 0.05; woofers.push(cap); };
+  // a floor-standing teak speaker: rattan-woven front, a big cone that pumps with the bass, the song on a screen
+  const tall = (x, y, z, ry) => { const rg = new THREE.Group(); rg.position.set(x, y, z); rg.rotation.y = ry; g.add(rg); speakersL.push([x, z, y + 0.6]);
+    const rb = (w, h, d, c, px, py, pz) => { const q = new THREE.Mesh(tint(new THREE.BoxGeometry(w, h, d), c, 0.05), mat); q.position.set(px, py, pz); rg.add(q); };
+    rb(0.5, 1.0, 0.38, [0.34, 0.18, 0.08], 0, 0.62, 0); for (const [lx, lz] of [[-0.2, -0.14], [0.2, -0.14], [-0.2, 0.14], [0.2, 0.14]]) rb(0.05, 0.12, 0.05, POST, lx, 0.06, lz);
+    const gr = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.62), grilleMat); gr.position.set(0, 0.55, 0.191); rg.add(gr);
+    cone(rg, 0.15, 0, 0.48, 0.205); cone(rg, 0.055, 0, 0.76, 0.2); display(rg, 0.42, 0.105, 0, 1.03, 0.192); };
+  // the old teak valve radio on the balcony table, with the song on its dial
+  const radio = (x, y, z, ry) => { const rg = new THREE.Group(); rg.position.set(x, y, z); rg.rotation.y = ry; g.add(rg); speakersL.push([x, z, y + 0.2]);
+    const rb = (w, h, d, c, px, py, pz) => { const q = new THREE.Mesh(tint(new THREE.BoxGeometry(w, h, d), c, 0.04), mat); q.position.set(px, py, pz); rg.add(q); };
+    rb(0.62, 0.38, 0.26, [0.4, 0.22, 0.1], 0, 0.19, 0); rb(0.66, 0.04, 0.3, POST, 0, 0.39, 0);
+    const gr = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.26), grilleMat); gr.position.set(-0.13, 0.18, 0.131); rg.add(gr); cone(rg, 0.1, -0.13, 0.18, 0.14);
+    display(rg, 0.24, 0.06, 0.16, 0.26, 0.132); rb(0.04, 0.04, 0.03, [0.2, 0.15, 0.1], 0.1, 0.1, 0.14); rb(0.04, 0.04, 0.03, [0.2, 0.15, 0.1], 0.22, 0.1, 0.14); };
+  radio(-85.2, Y + 0.4, 37, Math.PI / 2);                                                   // on the balcony table between the loungers
+  tall(-85.65, Y, 33.45, Math.PI / 2); tall(-85.65, Y, 40.95, Math.PI / 2); block(-86, -85.3, 33.1, 33.8); block(-86, -85.3, 40.6, 41.3);   // either side of the open doors, facing the waves
+  { const sx = fire0.x + Math.cos(5.4) * 2.4, sz = fire0.z + Math.sin(5.4) * 2.4; tall(sx, GY0, sz, -5.4 - Math.PI / 2); block(sx - 0.35, sx + 0.35, sz - 0.35, sz + 0.35); }   // by the fire, facing it
+  tall(TX - 2.55, Y + DH, TZ + 1.9, Math.atan2(-1.9, 2.55) + Math.PI / 2);                  // up on the tree deck
 
   // ---- the board room: whitewashed wall with a teak rack and your four boards, a wax bench, a wetsuit on a hook
   for (let y = 0.1; y < H; y += 0.22) box(0.04, 0.235, V.z1 - V.z0 - 0.3, (Math.round(y * 4.5) % 2) ? [0.8, 0.64, 0.42] : [0.74, 0.58, 0.37], V.x0 + 0.08, Y + y, zm, 0.05);   // (woven bamboo panelling behind the rack)
@@ -303,8 +339,8 @@ export function villa(scene) {
 
   // ---- the garden behind the house, on the grass of the point: a fire pit with log seats, a hammock slung between
   // two coconut palms, frangipani. One step down off the end of the balcony
-  const GY = Y - 0.2, G = { x0: -103, x1: -86.3, z0: 44.4, z1: 53.5 };
-  const fire = { x: -94.5, z: 49.5 };
+  const GY = GY0, G = { x0: -103, x1: -86.3, z0: 44.4, z1: 53.5 };
+  const fire = fire0;
   {
     const STONE = [0.5, 0.47, 0.42];
     for (let k = 0; k < 11; k++) { const an = k / 11 * Math.PI * 2, st = new THREE.Mesh(tint(new THREE.DodecahedronGeometry(0.2, 0), STONE, 0.25), mat); st.position.set(fire.x + Math.cos(an) * 0.62, GY + 0.1, fire.z + Math.sin(an) * 0.62); st.scale.set(1.2, 0.8, 1); st.rotation.y = k; g.add(st); }
@@ -349,8 +385,9 @@ export function villa(scene) {
   const BD = Array.from({ length: 6 }, (_, i) => ({ r: 25 + i * 9, h: 45 + (i % 3) * 12, w: (i % 2 ? 1 : -1) * (0.12 + i * 0.015), a: i * 1.3, f: i }));
   const bm = new THREE.Matrix4(), bq = new THREE.Quaternion(), bs = new THREE.Vector3(), bp = new THREE.Vector3(), be = new THREE.Euler();
   let fT = 0;
-  function tick(dt) {
+  function tick(dt, beat = 0) {
     fT += dt;
+    for (const w of woofers) { w.position.z = w.userData.z0 + beat * 0.02; }   // (the cones pump with the bass)
     const fl = 1 + 0.18 * Math.sin(fT * 13) + 0.1 * Math.sin(fT * 23 + 1); flame.scale.set(1, fl, 1); flame2.scale.set(1, 2 - fl, 1);
     BD.forEach((b, i) => { b.a += b.w * dt; const flap = Math.sin(fT * 2.2 + b.f) > 0.6 ? Math.sin(fT * 9 + b.f) : 0.25;
       bp.set(OX + 93 + Math.cos(b.a) * b.r, b.h + Math.sin(fT * 0.3 + i) * 3, 37 + OZ + 60 + Math.sin(b.a) * b.r);   // (in the coast frame's world: root sits at the spot's dz)
@@ -389,7 +426,7 @@ export function villa(scene) {
       return !(inRect(x, z, B.x0 + 0.35, B.x1 - 0.35, B.z0 + 0.35, V.z1) || inRect(x, z, V.x1 - 0.2, B.x1 - 0.35, V.z1 - 1, LZ - 0.3) || inRect(x, z, G.x0 + 0.3, G.x1 + 0.3, V.z1 + 0.4, G.z1 - 0.3)); }
     if (foot > Y + DH - 0.4) {                                                         // up on the deck
       if (r > RD - 0.35) return true;
-      if (inRect(x, z, TX + 2.55, TX + 3.25, TZ - 1.2, TZ + 0.6) || inRect(x, z, TX - 1.2, TX + 0.6, TZ - 3.25, TZ - 2.55)) return true;   // (the benches)
+      if (inRect(x, z, TX + 2.55, TX + 3.25, TZ - 1.2, TZ + 0.6) || inRect(x, z, TX - 1.2, TX + 0.6, TZ - 3.25, TZ - 2.55) || inRect(x, z, TX - 2.85, TX - 2.25, TZ + 1.6, TZ + 2.2)) return true;   // (the benches, the speaker)
       if (r < R1 - 0.05) { const d = wrap(an - AE_); return !(d > -0.7 && d < 0.15); }  // (the stairwell, except where the stair arrives)
       return false; }
     return r > R1 + 0.15;                                                              // on the stair: stay on the treads (fixL eases you in off the edge)
@@ -418,10 +455,11 @@ export function villa(scene) {
     [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'],
     ...[0.5, 2.2, 3.9].map((an) => [fire.x + Math.cos(an) * 2.1, fire.z + Math.sin(an) * 2.1, GY + 1.0, an + Math.PI, -0.25, 'SIT BY THE FIRE'])];
   const seats = seatL.map(([x, z, eye, a, pitch, name]) => ({ x: OX - x, z: z + OZ, eye, yaw: Math.PI - a, pitch, name }));
-  const sounds = { fire: [OX - fire.x, fire.z + OZ, GY], chime: [OX + 85, 28.8 + OZ, Y + 2.2], tub: [OX - tub.x, tub.z + OZ, Y] };
+  for (const [x, z, y] of speakersL) seats.push({ x: OX - x, z: z + OZ, eye: y + 1.1, radio: true, name: 'MUSIC' });
+  const sounds = { speakers: speakersL.map(([x, z, y]) => [OX - x, z + OZ, y + 0.3]), fire: [OX - fire.x, fire.z + OZ, GY], chime: [OX + 85, 28.8 + OZ, Y + 2.2], tub: [OX - tub.x, tub.z + OZ, Y] };
   { const ch = new THREE.Group(); ch.position.set(-85, Y + 2.62, 28.8); g.add(ch);   // bamboo wind chimes under the eave, swaying
     const bm = new THREE.MeshStandardMaterial({ color: 0xb89a62, roughness: 0.6 }); const top = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12), bm); ch.add(top);
     for (let k = 0; k < 6; k++) { const an = k / 6 * Math.PI * 2, L = 0.28 + (k % 3) * 0.1, c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, L, 6), bm); c.position.set(Math.cos(an) * 0.12, -0.12 - L / 2, Math.sin(an) * 0.12); ch.add(c); }
     root.userData.chime = ch; }
-  return { group: root, rack, colliders, walk, floorAt, solid, fix, tick, seats, sounds, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.75 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
+  return { group: root, rack, colliders, walk, floorAt, solid, fix, tick, seats, sounds, setSong, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.75 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
 }

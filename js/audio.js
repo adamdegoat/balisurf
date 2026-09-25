@@ -19,7 +19,7 @@ export class SurfAudio {
     lim.threshold.value = -8; lim.knee.value = 8; lim.ratio.value = 8; lim.attack.value = 0.004; lim.release.value = 0.25;
     // cut the rumble under ~40 Hz: nobody hears it (least of all through a phone speaker) but it ate the limiter's headroom
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 40; hp.Q.value = 0.7;
-    this.master.connect(this.under).connect(hp).connect(lim).connect(ctx.destination);
+    this.master.connect(this.under).connect(hp).connect(lim).connect(ctx.destination); this.lim = lim;
     const layer = (type, f, q) => {
       const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = Math.random() * 3;
       src.playbackRate.value = 0.8 + Math.random() * 0.4;
@@ -114,6 +114,33 @@ export class SurfAudio {
   chime(k) { const P = [523, 587, 659, 784, 880, 1047], f = P[Math.random() * P.length | 0]; this.tone(f, 0.06 * k, 2.8); this.tone(f * 2.76, 0.018 * k, 1.1); }   // bamboo/metal chime: fundamental and its bell overtone
   bird(k) { const f = 2400 + Math.random() * 1400, n = 2 + (Math.random() * 3 | 0); for (let i = 0; i < n; i++) this.tone(f, 0.035 * k, 0.11, { delay: i * 0.16, to: f * (1.25 + Math.random() * 0.2) }); }
   hoot(k) { for (let i = 0; i < 3; i++) { const f = 230 + Math.random() * 120; this.tone(f, 0.05 * k, 0.55 + Math.random() * 0.3, { type: 'sawtooth', delay: i * 0.25 + Math.random() * 0.2, to: f * 1.4, band: 900 }); } }   // someone in the lineup hooting a barrel
+  // music: a shuffled playlist of reggae tracks, streamed one at a time through its own level and tone (a lowpass
+  // makes it sound like it's coming from the radio in the next room). It keeps going under everything else.
+  musicStart(tracks) {
+    if (!this.ok || this.mel) return; this.tracks = tracks; this.order = [];
+    const el = this.mel = new Audio(); el.preload = 'auto'; el.setAttribute('playsinline', '');
+    this.mLP = this.ctx.createBiquadFilter(); this.mLP.type = 'lowpass'; this.mLP.frequency.value = 20000; this.mLP.Q.value = 0.5;
+    this.mGain = this.ctx.createGain(); this.mGain.gain.value = 0;
+    this.ctx.createMediaElementSource(el).connect(this.mLP).connect(this.mGain).connect(this.lim);
+    this.mAn = this.ctx.createAnalyser(); this.mAn.fftSize = 256; this.mAn.smoothingTimeConstant = 0.5; this.mLP.connect(this.mAn); this.mBins = new Uint8Array(this.mAn.frequencyBinCount);   // (listens for the bass, for the speaker cones)
+    el.addEventListener('ended', () => this.musicNext()); el.addEventListener('error', () => setTimeout(() => this.musicNext(), 1000));
+    this.musicNext();
+  }
+  musicNext() {
+    if (!this.order.length) { const o = this.tracks.slice(); for (let i = o.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [o[i], o[j]] = [o[j], o[i]]; }
+      if (o[0] === this.now && o.length > 1) o.push(o.shift()); this.order = o; }   // (never the same song twice in a row)
+    this.now = this.order.shift(); this.mel.src = this.now; if (this.mWant > 0) this.mel.play().catch(() => {}); if (this.onTrack) this.onTrack(this.now);
+  }
+  // how loud the music should be now, and how far off it sounds (lowpass Hz); silent for a while and it pauses (saves battery)
+  musicLevel(v, lp = 20000) {
+    if (!this.mel) return; this.mWant = v;
+    this.set(this.mGain.gain, v, 0.7); this.set(this.mLP.frequency, lp, 0.4);
+    if (v > 0.001) { clearTimeout(this.mStop); this.mStop = 0; if (this.mel.paused && this.ctx.state === 'running') this.mel.play().catch(() => {}); }
+    else if (!this.mel.paused && !this.mStop) this.mStop = setTimeout(() => { this.mStop = 0; if (!(this.mWant > 0.001)) this.mel.pause(); }, 3000);
+  }
+  // how hard the bass is hitting right now, 0..1 (the kick and the bass line)
+  musicBeat() { if (!this.mAn || this.mel.paused) return 0; this.mAn.getByteFrequencyData(this.mBins); let e = 0; for (let i = 1; i < 6; i++) e += this.mBins[i]; e /= 5 * 255; this.mB = Math.max(e, (this.mB || 0) * 0.9); return Math.max(0, (e - this.mB * 0.7) * 3.3); }
+  quiet(on) { if (this.ok) this.set(this.master.gain, on ? 0 : 0.55, 0.3); }   // the game's own sounds off (in the menu), the music carries on
   wake() { if (this.ok && this.ctx.state !== 'running') this.ctx.resume(); }
-  pause(on) { if (!this.ok) return; on ? this.ctx.suspend() : this.ctx.resume(); }
+  pause(on) { if (!this.ok) return; on ? this.ctx.suspend() : this.ctx.resume(); if (this.mel) { if (on) this.mel.pause(); else if (this.mWant > 0.001) this.mel.play().catch(() => {}); } }
 }

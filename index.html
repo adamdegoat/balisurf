@@ -75,6 +75,20 @@
   #start button { font: 600 13px "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); background: rgba(8,14,20,.35); border: 1.5px solid rgba(253,247,238,.6); padding: 12px 16px; border-radius: 3px; min-width: 104px; text-align: left; }
   #start button small { display: block; font-weight: 400; color: var(--dim); margin-top: 3px; font-size: 11px; }
   #start button small i { display: block; font-style: normal; font-weight: 700; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #9fe3d6; margin-bottom: 2px; }
+  #start .boardrow { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #start .blabel { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+  #start .boards { display: flex; gap: 6px; flex-wrap: wrap; }
+  #start .boards button { display: inline-flex; align-items: center; gap: 7px; min-width: 0; padding: 5px 11px 5px 8px; border-radius: 999px; border: 1px solid rgba(253,247,238,.3); font-size: 12px; font-weight: 600; }
+  #start .boards button.on { border-color: #ffcf8a; color: #ffcf8a; background: rgba(255,207,138,.1); }
+  #start .boards svg { width: 34px; height: 11px; flex: none; }
+  #start .boards small { display: none; }
+  @media (max-height: 520px) {   /* a phone on its side: everything on one screen */
+    #start { justify-content: flex-start; padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: 10px; overflow-y: auto; }
+    #start h1 { font-size: 30px; } #start > p { margin: 4px 0 8px; font-size: 11px; line-height: 1.35; max-width: 48em; }
+    #start .row button { padding: 7px 9px; } #start button small { font-size: 10px; margin-top: 1px; }
+    #start .boardrow { margin-top: 6px; }
+    #start .villarow { margin-top: 6px; } #start .villarow button { padding: 7px 12px; } #homeTip { display: none; }
+  }
   #start .villarow { display: flex; gap: 12px; margin-top: 10px; align-items: center; }
   #start .villarow button { flex: 0 0 auto; min-width: 250px; border-color: #9fe3d6; }
   #start .villarow span { color: var(--dim); font-size: 12px; }
@@ -94,6 +108,9 @@
   #vSit { position: fixed; right: max(16px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); z-index: 9; display: none; font: 700 13px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em;
     color: #0d1720; background: #ffcf8a; border: 0; border-radius: 3px; padding: 13px 18px; touch-action: none; }
   #vSit.on { display: block; }
+  #vSong { position: fixed; left: max(16px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 46px); z-index: 8; pointer-events: none; opacity: 0; transition: opacity .6s;
+    background: rgba(20,10,4,.72); border: 1px solid rgba(255,194,102,.45); border-radius: 3px; padding: 7px 12px; color: #ffc266; font: 12px "Helvetica Neue", Helvetica, Arial, sans-serif; max-width: 60vw; }
+  #vSong.on { opacity: 1; } #vSong i { display: block; font-style: normal; font-size: 10px; letter-spacing: .12em; color: #b8732a; text-transform: uppercase; } #vSong b { display: block; font-size: 14px; } #vSong span { color: #d99a4a; }
   #vWatch.on { background: #9fe3d6; color: #0d1720; border-color: #9fe3d6; }
   #vZoom.on { background: #ffcf8a; color: #0d1720; border-color: #ffcf8a; }
   #vPanel { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: none; min-width: 300px; max-width: 80vw;
@@ -142,6 +159,7 @@
 <button class="vui" id="vZoom">ZOOM</button>
 <button class="vui" id="vWatch">WATCH A RIDE</button>
 <button class="vui" id="vSit">SIT</button>
+<div class="vui" id="vSong"><i>Now playing</i><b id="vSongT"></b><span id="vSongA"></span></div>
 <div class="vui" id="vPanel"><b id="vName"></b><span id="vDesc"></span><div id="vStats"></div><button id="vTake">TAKE THIS BOARD</button></div>
 <div class="ctl" id="ranch"><span>ORDER A WAVE</span><button data-wave="easy">MELLOW<small>3.5 m, slow</small></button><button data-wave="medium">BARREL<small>4.5 m, hollow</small></button><button data-wave="hard">HEAVY<small>6 m, fast</small></button></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
@@ -155,15 +173,16 @@
     <button data-mode="extreme">Gunung Laut<small><i>Experts only</i>15 m in a storm</small></button>
     <button data-mode="ranch">Surf Ranch<small><i>Wave pool</i>Order the wave you want</small></button>
   </div>
-  <div class="villarow"><button id="goVilla">Your villa<small><i>Home base</i>Walk around, pick your board, watch the surf from the cliff</small></button></div>
+  <div class="boardrow"><div class="blabel">Board<b id="boardName" hidden></b></div><div class="boards" id="boards"></div></div>
+  <div class="villarow"><button id="goVilla">Your villa<small><i>Home base</i>Walk around, chill, watch the surf from the cliff</small></button></div>
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1555</small>
+<small id="build">build 260925-1615</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=453"></script>
+<script type="module" src="js/game.js?v=459"></script>
 </body>
 </html>
