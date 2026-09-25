@@ -5,7 +5,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=95';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
-import { SurfAudio } from './audio.js?v=12';
+import { SurfAudio } from './audio.js?v=13';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
 import { villa, VILLA } from './villa.js?v=32';
@@ -292,7 +292,7 @@ function incoming() {
   return { w: best, t: tBest };
 }
 function spawnRider() {
-  if (surfer) endWipe(); rig.visible = true; for (const b of birds) b.visible = !isRanch();
+  if (surfer) endWipe(); rig.visible = true; board.visible = true; for (const b of birds) b.visible = !isRanch();
   pumpC = 0; pumpA = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
   rider = rider || new Rider();
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
@@ -409,7 +409,7 @@ function showBests() {
   for (const b of document.querySelectorAll('[data-mode]')) {
     let el = b.querySelector('.best'); const v = bestFor(b.dataset.mode);
     if (!el) { el = document.createElement('em'); el.className = 'best'; b.appendChild(el); }
-    el.textContent = v ? `Best wave ${v.toFixed(1)}` : '';
+    el.innerHTML = v ? `<b>${v.toFixed(1)}</b>best wave` : '';
   }
 }
 showBests();
@@ -426,14 +426,14 @@ function toMenu() {
   underK = 0; underEl.style.opacity = 0; underEl.style.display = 'none'; setText(ui.speed, ''); setText(ui.score, ''); setText(ui.hint, ''); ui.tube.style.opacity = 0;
   input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
   keys.clear(); steerF = stickY = 0; ui.paddle.classList.remove('down'); ui.stall.classList.remove('down');
-  document.body.classList.remove('playing', 'riding', 'ranch-wait', 'villa'); ui.msg.style.display = 'none'; walker = null; vPick(null); setHfov(50);
+  document.body.classList.remove('playing', 'riding', 'ranch-wait', 'villa', 'reef'); ui.msg.style.display = 'none'; walker = null; vPick(null); setHfov(50);
   ui.start.style.display = ''; showBests();
 }
 document.getElementById('menu').addEventListener('touchstart', (e) => { e.preventDefault(); toMenu(); }, { passive: false });
 document.getElementById('menu').addEventListener('click', toMenu);
 async function start(m) {
   if (starting) return; starting = true; if (window.__g) window.__g.paused = false;
-  mode = m; setWeather(m); setSpot(m); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
+  mode = m; setWeather(m); setSpot(m); audio.start(); audio.quiet(false); audio.musicStart(MUSIC); document.body.classList.toggle('reef', m !== 'ranch');
   // fullscreen + landscape lock must be asked for inside the tap, before any waiting (Android); iOS ignores both safely
   try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {}); } catch (e) {}
   ui.load.textContent = surfer ? '' : 'Loading...';
@@ -1197,16 +1197,22 @@ const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] 
 audio.onTrack = (src) => { const [t, a] = songOf(src); if (villaW) villaW.setSong(t, a); document.getElementById('vSongT').textContent = t; document.getElementById('vSongA').textContent = a ? 'by ' + a : ''; };
 const MUSIC = ['we-dub-a-long-way', 'reggae-dub-1', 'dreaming-of-reggae', 'roots-reggae', 'roots-guitare-tamtam', 'feel-the-vibe', 'barefoot-in-the-breeze', 'island-vibes', 'everyday-is-a-holiday', 'stand-firm-like-a-tree'].map((n) => 'music/' + n + '.mp3');
 let radioOn = true;   // (the villa's speakers, all together)
+let earOn = false; try { earOn = localStorage.getItem('sumbasurf.ear') === '1'; } catch (e) {}   // an earpiece while you surf: your call, remembered
+{ const eb = document.getElementById('ear'), show = () => { eb.classList.toggle('on', earOn); eb.querySelector('span').textContent = earOn ? 'EARPIECE ON' : 'EARPIECE'; };
+  show(); const t = (e) => { e.preventDefault(); e.stopPropagation(); earOn = !earOn; try { localStorage.setItem('sumbasurf.ear', earOn ? '1' : '0'); } catch (err) {} show(); audio.musicKick(); };
+  eb.addEventListener('touchstart', t, { passive: false }); eb.addEventListener('click', t); }
 function musicTick() {
   if (!audio.mel) return;
   const playing = document.body.classList.contains('playing');
   if (!playing) return audio.musicLevel(0.45);
+  if (mode === 'villa' || isRanch()) audio.gameLevel(1);
   if (mode === 'villa' && walker && villaW) { if (!radioOn) { document.getElementById('vSong').classList.remove('on'); return audio.musicLevel(0); } let d = 1e9; for (const R of villaW.sounds.speakers) d = Math.min(d, Math.hypot(R[0] - walker.x, R[1] - walker.z, R[2] - (walker.y - 1.2)));   // (the nearest speaker)
     document.getElementById('vSong').classList.toggle('on', d < 7 && !walker.watch);
     const k = Math.max(0, 1 - d / 22);
     return audio.musicLevel(0.04 + 0.5 * k * k, 1800 + 12000 * k * k); }
   if (isRanch()) return audio.musicLevel(0.38, 14000);
-  audio.musicLevel(0);   // (on the reef, only the sea: the sound of the wave is how you surf)
+  if (earOn) { audio.musicLevel(0.34, 20000); audio.gameLevel(0.3); }   // earpiece in: the music in your ears, the sea turned down behind it
+  else { audio.musicLevel(0); audio.gameLevel(1); }   // (otherwise on the reef, only the sea: the sound of the wave is how you surf)
 }
 // sound can only start from a tap (a phone plays nothing before one, and an iPhone only counts the END of a tap, not
 // the finger going down). Every tap tries until the sound and the music are really running, then it stops listening
@@ -1235,7 +1241,7 @@ function startVilla() {
   if (!startVilla.compiled) { startVilla.compiled = true; crewW.group.visible = true; renderer.compile(scene, camera); }   // (build every villa shader now, not in a stall the first time each thing comes into view)
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
   if (surfer) endWipe(); rider = null; rig.visible = false;
-  document.getElementById('vZoom').classList.remove('on'); document.getElementById('vZoom').textContent = 'ZOOM'; document.getElementById('vWatch').classList.remove('on'); document.getElementById('vWatch').textContent = 'WATCH A RIDE'; vSitB.classList.remove('on');
+  document.getElementById('vZoom').classList.remove('on'); document.querySelector('#vZoom span').textContent = 'ZOOM'; document.getElementById('vWatch').classList.remove('on'); document.querySelector('#vWatch span').textContent = 'WATCH A RIDE'; vSitB.classList.remove('on');
   walker = { x: villaW.spawn.x, z: villaW.spawn.z, yaw: villaW.spawn.yaw, pitch: -0.08, y: VILLA.Y + 1.65, mx: 0, mz: 0 };
   ui.start.style.display = 'none'; document.body.classList.add('playing', 'villa'); ui.cond.textContent = 'Your villa';
   document.getElementById('vTip').style.opacity = 1; setTimeout(() => { document.getElementById('vTip').style.opacity = 0; }, 7000);
@@ -1243,9 +1249,9 @@ function startVilla() {
 document.getElementById('goVilla').addEventListener('click', startVilla);
 document.getElementById('goVilla').addEventListener('touchend', (e) => { e.preventDefault(); startVilla(); }, { passive: false });
 document.getElementById('vGo').addEventListener('click', (e) => { e.stopPropagation(); toMenu(); });
-{ const zb = document.getElementById('vZoom'), zt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.zoom = !walker.zoom; zb.classList.toggle('on', walker.zoom); zb.textContent = walker.zoom ? 'ZOOM OUT' : 'ZOOM'; };
+{ const zb = document.getElementById('vZoom'), zt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.zoom = !walker.zoom; zb.classList.toggle('on', walker.zoom); zb.querySelector('span').textContent = walker.zoom ? 'ZOOM OUT' : 'ZOOM'; };
   zb.addEventListener('click', zt); zb.addEventListener('touchstart', zt, { passive: false });
-  const wb = document.getElementById('vWatch'), wt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.watch = !walker.watch; walker.watchI = -1; wb.classList.toggle('on', walker.watch); wb.textContent = walker.watch ? 'STOP WATCHING' : 'WATCH A RIDE'; };
+  const wb = document.getElementById('vWatch'), wt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.watch = !walker.watch; walker.watchI = -1; wb.classList.toggle('on', walker.watch); wb.querySelector('span').textContent = walker.watch ? 'STOP WATCHING' : 'WATCH A RIDE'; };
   wb.addEventListener('click', wt); wb.addEventListener('touchstart', wt, { passive: false }); }
 document.getElementById('vGo').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); toMenu(); }, { passive: false });
 // the board panel: what it is and how it feels, and a button to take it
@@ -1340,6 +1346,39 @@ function villaTick(dt) {
   { const tgt = W_.watch ? W_.watchH : W_.zoom ? 8 : 50; if (Math.abs(hfovHalf - tgt) > 0.05) setHfov(hfovHalf + (tgt - hfovHalf) * Math.min(1, dt * 6)); else if (hfovHalf !== tgt) setHfov(tgt); }   // binoculars: about 5x
   sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   audio.update({ H: 4.5, near: 0.15, barrel: false, riding: false, v: 0, turn: 0, lean: 0, slide: 0, stall: false, storm: 0, rain: 0, underwater: false, dt, chop: 1 });
+  villaBody(dt, moving);
+}
+// your own body in the villa, as a head-mounted camera sees it: standing tall, legs stepping and arms swinging opposite
+// as you walk (look down and there they are), and a hand going out toward whatever you walk up to: a board in the rack,
+// a speaker, a seat. Hidden while you sit, zoom or watch a ride.
+const _vb = { fw: new THREE.Vector3(), rt: new THREE.Vector3(), sh: new THREE.Vector3(), T: new THREE.Vector3(), P: new THREE.Vector3(), h: new THREE.Vector3(), reach: 0, rT: new THREE.Vector3() };
+function villaBody(dt, moving) {
+  const W_ = walker; if (!surfer || !W_) return;
+  const show = !W_.sit && !W_.zoom && !W_.watch && hfovHalf > 40; rig.visible = show; board.visible = false; if (!show) return;
+  if (!bones.upperarm_l) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  if (mixer) mixer.stopAllAction(); curClip = null;
+  surfer.traverse((o) => { if (o.isSkinnedMesh && !o.userData.posed) { o.skeleton.pose(); } });
+  const B = _vb, fw = B.fw.set(Math.cos(W_.yaw), 0, Math.sin(W_.yaw)), rt = B.rt.set(-fw.z, 0, fw.x);
+  rig.quaternion.setFromAxisAngle(WORLD_UP, Math.atan2(fw.x, fw.z)); rig.position.set(W_.x, W_.y - 1.62, W_.z + SPOTS.medium.dz); rig.updateMatrixWorld(true);
+  const ph = (W_.bob || 0) / 2, mv = moving ? 1 : 0; B.mv = (B.mv || 0) + (mv - (B.mv || 0)) * Math.min(1, dt * 6); const k = B.mv;
+  // legs: a relaxed stride, the back leg's knee bending as it lifts
+  for (const [sd, sg] of [['l', 1], ['r', -1]]) { const th = bones['thigh_' + sd], ca = bones['calf_' + sd]; if (!th || !ca) continue;
+    const sw = Math.sin(ph) * sg * k;
+    aimBone(th, ca, B.T.set(0, -1, 0).addScaledVector(fw, 0.38 * sw).normalize(), 1);
+    aimBone(ca, bones['foot_' + sd], B.T.set(0, -1, 0).addScaledVector(fw, 0.38 * sw - 0.45 * Math.max(0, -sw)).normalize(), 1); }
+  // arms: hanging relaxed, elbows soft, swinging opposite to the legs; the right hand reaches out to what you're next to
+  let tgt = null;
+  if (W_.near) tgt = B.rT.set(W_.near.x, W_.near.eye - 0.55, W_.near.z + SPOTS.medium.dz);
+  else if (vPickType && villaW) { const b = villaW.rack.find((r) => r.userData.type === vPickType); if (b) { b.getWorldPosition(B.rT); B.rT.y = W_.y - 0.35; tgt = B.rT; } }
+  B.reach += ((tgt ? 1 : 0) - B.reach) * Math.min(1, dt * 3);
+  for (const [sd, sg] of [['l', -1], ['r', 1]]) { const ua = bones['upperarm_' + sd], la = bones['lowerarm_' + sd], hd = bones['hand_' + sd]; if (!ua || !la || !hd) continue;
+    ua.getWorldPosition(B.sh); const out = Math.sign(B.h.subVectors(B.sh, rig.position).dot(rt)) || 1;
+    B.T.copy(B.sh).addScaledVector(WORLD_UP, -0.56).addScaledVector(fw, 0.08 + 0.2 * Math.sin(ph) * sg * k).addScaledVector(rt, out * 0.07);
+    if (tgt && out === 1 || tgt && sd === 'r') { const d = B.h.subVectors(tgt, B.sh), L = Math.min(0.58, d.length()); B.P.copy(B.sh).addScaledVector(d.normalize(), L); B.T.lerp(B.P, B.reach * (sd === 'r' ? 1 : 0)); }
+    reachArm(ua, la, hd, B.T, B.P.copy(fw).negate().addScaledVector(rt, out * 0.4), 1); }
+  if (bones.head) bones.head.scale.setScalar(0.001);   // (your own head: not in your own eyes)
+  // line the body up under the camera: the eyes a little in front of the head's centre
+  if (bones.head) { bones.head.getWorldPosition(B.h); B.T.copy(camera.position).addScaledVector(fw, -0.1).addScaledVector(WORLD_UP, -0.06).sub(B.h); rig.position.add(B.T); rig.updateMatrixWorld(true); }
 }
 
 function tick(dt) {
@@ -1402,8 +1441,13 @@ function tick(dt) {
     tick.demo.update(dt);
     railSpray.update(dt); wake.update(dt);   // (let any spray left from the last ride fall and fade)
     rig.visible = false; leash.visible = false; jukung.visible = false; for (const L of locals) L.grp.visible = false; for (const b of birds) b.visible = false;   // the menu shows only the sea
-    const px = tick.demo.peelX;
-    camera.position.set(px + 14, 2.2, 13); camera.lookAt(px - 2, 1.2, 0);
+    // ...seen from inside the barrel: tucked in under the lip, looking out down the line through the opening
+    const w = tick.demo, H = w.cond.H, px = w.peelX, sw = Math.sin(T * 0.6);
+    if (!w.prof) w.prof = new Profile(w);
+    const ak = Math.min(1, Math.max(0, (camera.aspect - 1) / 1.2)), M = { s: -1.8, y: 0.3, off: 0.75, ahead: 2.5, ly: 0.8 + 0.55 * ak, lz: -2.0 - 1.8 * ak };   // (deep under the lip; the opening framed low right, clear of the menu, on a phone on its side and a squarer screen alike)
+    const s0 = M.s * H, y0 = M.y * H + 0.12 * sw, zl = w.prof.frontZAt(s0, y0) + M.off + 0.25 * Math.sin(T * 0.37);
+    camera.position.set(px + s0, y0, w.zW + w.bend(s0) + zl);
+    camera.lookAt(px + M.ahead * H, M.ly * H, w.zW + w.bend(M.ahead * H) + zl + M.lz);
   }
   if (rider && tick.demo) { tick.demo.dispose(scene); tick.demo = null; }
   fx.update(dt, camera.position);
@@ -1413,7 +1457,7 @@ renderer.setAnimationLoop(() => {
   if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
   if (portrait.matches !== lastPortrait) { lastPortrait = portrait.matches; if (document.body.classList.contains('playing')) audio.pause(portrait.matches); }   // (and so does the sound: no endless drone while it waits)
   // pass 1: the world; pass 2: your body through its own lens (skipped when a test view shows the body in the world cam)
-  HIDELEGS.value = camera.layers.isEnabled(1) ? 0 : 1;
+  HIDELEGS.value = camera.layers.isEnabled(1) || mode === 'villa' ? 0 : 1;   // (walking round the villa, your legs are yours again)
   // the ride's over (the score is up): your body settling back onto the board moves faster than your eyes follow, and
   // from just behind it you'd see your own back; it isn't drawn in your view until you're back in the lineup
   if (surfer && !W.on) surfer.visible = !(rider && rider.state === 'OUT' && !camera.layers.isEnabled(1));

@@ -9,6 +9,8 @@
 <meta name="apple-mobile-web-app-title" content="SumbaSurf">
 <meta name="theme-color" content="#0d1720">
 <meta name="format-detection" content="telephone=no">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
 <meta http-equiv="Cache-Control" content="no-cache">
@@ -28,6 +30,11 @@
     border-radius: 15px; border: 1px solid rgba(255,255,255,.45); background: rgba(10,30,40,.35); color: var(--ink); display: flex; align-items: center; gap: 6px;
     font: 600 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em; touch-action: none; }
   #menu svg { width: 14px; height: 14px; }
+  #ear { position: fixed; top: calc(max(8px, env(safe-area-inset-top)) + 38px); left: max(10px, env(safe-area-inset-left)); height: 28px; padding: 0 11px 0 8px;
+    border-radius: 14px; border: 1px solid rgba(255,255,255,.35); background: rgba(10,30,40,.3); color: var(--dim); display: flex; align-items: center; gap: 6px;
+    font: 600 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em; touch-action: none; }
+  #ear svg { width: 14px; height: 14px; } #ear.on { color: #ffcf8a; border-color: #ffcf8a; background: rgba(255,207,138,.12); }
+  body:not(.reef) #ear { display: none !important; }
   #cond { top: max(10px, env(safe-area-inset-top)); left: max(100px, calc(env(safe-area-inset-left) + 90px)); line-height: 26px; color: var(--dim); font-size: 12px; letter-spacing: .04em; }
   #speed { top: max(10px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
   #score { top: max(36px, calc(env(safe-area-inset-top) + 26px)); right: max(16px, env(safe-area-inset-right)); color: var(--dim); font-variant-numeric: tabular-nums; }
@@ -67,33 +74,52 @@
   #msg-s { margin-top: 10px; display: flex; gap: 18px; justify-content: center; font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
   #msg-s div { font-size: 16px; font-weight: 600; } #msg-s span { display: block; font-size: 10px; font-weight: 500; color: var(--dim); letter-spacing: .06em; }
   #sess { margin-top: 14px; color: var(--dim); font-size: 12px; }
-  #start { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; justify-content: center; padding: 0 max(7vw, env(safe-area-inset-left)); background: rgba(8,14,20,.35); }
-  #start h1 { margin: 0; font: 800 clamp(34px, 7vw, 64px)/0.95 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: -.02em; }
-  #start p { margin: 8px 0 20px; color: var(--dim); max-width: 32em; }
-  #start .row { display: flex; gap: 8px; flex-wrap: wrap; }
-  #start .row button { flex: 1 1 0; min-width: 0; padding: 12px 12px; }   /* five levels on one row on a phone */
-  #start button { font: 600 13px "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); background: rgba(8,14,20,.35); border: 1.5px solid rgba(253,247,238,.6); padding: 12px 16px; border-radius: 3px; min-width: 104px; text-align: left; }
-  #start button small { display: block; font-weight: 400; color: var(--dim); margin-top: 3px; font-size: 11px; }
-  #start button small i { display: block; font-style: normal; font-weight: 700; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #9fe3d6; margin-bottom: 2px; }
+  /* ---- the look: sun-bleached sand text, warm driftwood panels, one sunset-amber accent, a condensed surf-poster face */
+  :root { --amber: #ffc978; --sand: #f6ecdc; --sea: #9fe3d6; --line: rgba(246,236,220,.28);
+    --disp: "Barlow Condensed", "Helvetica Neue", Helvetica, Arial, sans-serif; --body: "Barlow", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  #start { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; justify-content: center; padding: 0 max(7vw, env(safe-area-inset-left)); background: rgba(14,11,8,.3); font-family: var(--body); }
+  #start h1 { margin: 0; font: 800 clamp(40px, 7vw, 72px)/.9 var(--disp); letter-spacing: -.01em; color: var(--sand); text-shadow: 0 2px 18px rgba(0,0,0,.25); }
+  #start .intro { margin: 8px 0 18px; color: rgba(246,236,220,.8); max-width: 34em; font-size: 14px; line-height: 1.4; }
+  #start button { font: inherit; color: var(--sand); cursor: pointer; touch-action: manipulation; text-align: left; }
+  #start .row { display: flex; gap: 10px; }
+  #start .row button { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; padding: 10px 12px 11px; border-radius: 14px; border: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(40,28,18,.62), rgba(24,17,11,.72)); box-shadow: inset 0 1px 0 rgba(255,236,200,.12); transition: transform .18s ease, border-color .18s, background .18s; }
+  #start .row button:hover, #start .row button:active { transform: translateY(-2px); border-color: var(--amber); background: linear-gradient(180deg, rgba(70,46,24,.7), rgba(32,22,13,.78)); }
+  #start .wg { width: 100%; height: 26px; color: var(--sea); margin-bottom: 6px; }
+  #start .nm { font: 700 21px/1 var(--disp); letter-spacing: .005em; }
+  #start .row small { display: block; margin-top: 4px; font: 400 12px/1.3 var(--body); color: rgba(246,236,220,.72); }
+  #start .row small i { display: block; font-style: normal; font: 600 13px/1.2 var(--disp); color: var(--amber); margin-bottom: 1px; }
+  #start .best { display: block; margin-top: 7px; font: 600 13px var(--disp); font-style: normal; color: var(--amber); min-height: 1em; }
+  #start .best b { font-weight: 700; margin-right: 4px; }
+  #start .boardrow { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  #start .blabel { font: 600 15px var(--disp); color: rgba(246,236,220,.75); margin-right: 2px; }
+  #start .boards { display: flex; gap: 6px; flex-wrap: wrap; }
+  #start .boards button { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px 5px 8px; border-radius: 999px; border: 1px solid var(--line); font: 600 14px var(--disp); color: rgba(246,236,220,.88); background: rgba(24,17,11,.55); }
+  #start .boards button.on { border-color: var(--amber); color: var(--amber); background: rgba(255,201,120,.14); }
+  #start .boards svg { width: 32px; height: 11px; flex: none; } #start .boards small { display: none; }
+  #start .villarow { margin-top: 12px; }
+  #goVilla { display: inline-flex; align-items: center; gap: 11px; padding: 8px 20px 8px 13px; border-radius: 999px; border: 1px solid var(--amber); background: linear-gradient(180deg, rgba(90,58,26,.72), rgba(44,29,14,.8)); box-shadow: inset 0 1px 0 rgba(255,236,200,.18); transition: transform .18s; }
+  #goVilla:hover, #goVilla:active { transform: translateY(-2px); }
+  #goVilla svg { width: 24px; height: 24px; color: var(--amber); flex: none; }
+  #goVilla span { font: 700 19px/1 var(--disp); } #goVilla small { display: block; font: 400 12px var(--body); color: rgba(246,236,220,.75); margin-top: 3px; }
+  #load { margin-top: 10px; min-height: 1.2em; color: var(--amber); font: 600 14px var(--disp); }
+  @media (max-height: 520px) {   /* a phone on its side: all on one screen */
+    #start { justify-content: flex-start; padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: 8px; overflow-y: auto; }
+    #start h1 { font-size: 34px; } #start .intro { margin: 3px 0 8px; font-size: 11.5px; line-height: 1.3; max-width: 52em; }
+    #start .row { gap: 7px; } #start .row button { padding: 7px 9px 8px; border-radius: 11px; } #start .wg { height: 18px; margin-bottom: 3px; }
+    #start .nm { font-size: 18px; } #start .row small { font-size: 10.5px; margin-top: 2px; } #start .row small i { font-size: 12px; } #start .best { margin-top: 3px; font-size: 12px; }
+    #start .boardrow { margin-top: 8px; } #start .villarow { margin-top: 7px; } #goVilla { padding: 5px 16px 5px 11px; } #goVilla span { font-size: 17px; } #goVilla small { font-size: 11px; }
+    #load { margin-top: 4px; } #homeTip { display: none; }
+  }
   #soundTip { position: fixed; right: max(16px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); margin: 0 !important; font-size: 12px; color: #ffcf8a !important; display: flex; align-items: center; gap: 6px; animation: tipPulse 2.4s ease-in-out infinite; }
   #soundTip[hidden] { display: none; } @keyframes tipPulse { 50% { opacity: .45; } }
-  #start .boardrow { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  #start .blabel { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
-  #start .boards { display: flex; gap: 6px; flex-wrap: wrap; }
-  #start .boards button { display: inline-flex; align-items: center; gap: 7px; min-width: 0; padding: 5px 11px 5px 8px; border-radius: 999px; border: 1px solid rgba(253,247,238,.3); font-size: 12px; font-weight: 600; }
-  #start .boards button.on { border-color: #ffcf8a; color: #ffcf8a; background: rgba(255,207,138,.1); }
-  #start .boards svg { width: 34px; height: 11px; flex: none; }
-  #start .boards small { display: none; }
   @media (max-height: 520px) {   /* a phone on its side: everything on one screen */
     #start { justify-content: flex-start; padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: 10px; overflow-y: auto; }
     #start h1 { font-size: 30px; } #start > p { margin: 4px 0 8px; font-size: 11px; line-height: 1.35; max-width: 48em; }
     #start .row button { padding: 7px 9px; } #start button small { font-size: 10px; margin-top: 1px; }
     #start .boardrow { margin-top: 6px; }
-    #start .villarow { margin-top: 6px; } #start .villarow button { padding: 7px 12px; } #homeTip { display: none; }
-  }
+    }
   #start .villarow { display: flex; gap: 12px; margin-top: 10px; align-items: center; }
-  #start .villarow button { flex: 0 0 auto; min-width: 250px; border-color: #9fe3d6; }
-  #start .villarow span { color: var(--dim); font-size: 12px; }
   /* the villa: walk (left thumb), look (right thumb), tap a board in the rack */
   body:not(.villa) .vui { display: none !important; }
   body.villa #paddle, body.villa #stall, body.villa #pad, body.villa #touch { display: none !important; }
@@ -128,9 +154,6 @@
   #vPanel button { font: 700 12px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .08em; color: #0d1720; background: #ffcf8a; border: 0; border-radius: 3px; padding: 9px 14px; touch-action: none; }
   #vPanel button.mine { background: rgba(255,255,255,.2); color: var(--ink); }
   #vTip { position: fixed; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 6; color: var(--ink); font-size: 13px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.6); pointer-events: none; text-align: center; white-space: nowrap; transition: opacity .6s; }
-  #load { margin-top: 12px; min-height: 1.3em; color: var(--dim); }
-  #start button .best { display: block; margin-top: 6px; font-style: normal; font-size: 11px; font-weight: 700; color: #ffcf8a; min-height: 1em; }
-  #start button:active { background: rgba(253,247,238,.18); }
   /* Surf Ranch: order a wave (shown while you wait in the pool) */
   #ranch { position: fixed; top: max(44px, calc(env(safe-area-inset-top) + 34px)); left: 50%; transform: translateX(-50%); display: none; gap: 8px; align-items: stretch; z-index: 7; }
   body.ranch-wait #ranch { display: flex; }
@@ -141,6 +164,40 @@
   #ranch button:active { background: rgba(255,255,255,.3); }
   #rotate { position: fixed; inset: 0; display: none; place-items: center; background: #0d1720; color: var(--dim); z-index: 10; text-align: center; padding: 30px; }
   @media (orientation: portrait) and (max-width: 900px) { #rotate { display: grid; } }
+  body:not(.villa) .vui, body:not(.playing) .ctl, body:not(.reef) #ear { display: none !important; }   /* (who shows where wins over the looks below) */
+  /* ---- in-game controls, same family as the menu: warm driftwood pills, the poster face, amber for what's active */
+  #menu, #ear, #vGo, #vZoom, #vWatch, #vSit, #vPanel button, #ranch button { font-family: var(--disp) !important; letter-spacing: .05em !important; }
+  #menu, #ear, #vZoom, #vWatch { border-radius: 999px !important; border: 1px solid var(--line) !important; background: linear-gradient(180deg, rgba(40,28,18,.66), rgba(24,17,11,.76)) !important;
+    box-shadow: inset 0 1px 0 rgba(255,236,200,.12), 0 2px 10px rgba(0,0,0,.18); color: var(--sand) !important; display: inline-flex; align-items: center; gap: 7px; }
+  #menu { height: 32px; font-weight: 700 !important; font-size: 13px !important; padding: 0 14px 0 11px !important; } #ear { font-size: 12px !important; font-weight: 600 !important; height: 30px; }
+  #ear.on { color: var(--amber) !important; border-color: var(--amber) !important; background: linear-gradient(180deg, rgba(90,58,26,.72), rgba(44,29,14,.8)) !important; }
+  #vGo, #vZoom, #vWatch { font-size: 14px !important; font-weight: 700 !important; padding: 8px 16px 8px 12px !important; }
+  #vGo svg, #vZoom svg, #vWatch svg { width: 18px; height: 18px; flex: none; }
+  #vGo { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px !important; color: #2a1a0c !important; background: linear-gradient(180deg, #ffd694, #f2ad52) !important;
+    border: 1px solid rgba(255,236,200,.7) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 3px 14px rgba(0,0,0,.22); }
+  #vZoom.on, #vWatch.on { color: var(--amber) !important; border-color: var(--amber) !important; background: linear-gradient(180deg, rgba(90,58,26,.72), rgba(44,29,14,.8)) !important; }
+  #vZoom { top: calc(max(10px, env(safe-area-inset-top)) + 52px) !important; } #vWatch { top: calc(max(10px, env(safe-area-inset-top)) + 96px) !important; }
+  #vSit { border-radius: 999px !important; font-size: 15px !important; font-weight: 700 !important; padding: 12px 20px !important; color: #2a1a0c !important; background: linear-gradient(180deg, #ffd694, #f2ad52) !important;
+    border: 1px solid rgba(255,236,200,.7) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 3px 14px rgba(0,0,0,.25); }
+  #vPanel { border-radius: 16px !important; border: 1px solid var(--line) !important; background: linear-gradient(180deg, rgba(40,28,18,.84), rgba(22,15,10,.9)) !important; box-shadow: inset 0 1px 0 rgba(255,236,200,.12), 0 6px 26px rgba(0,0,0,.3); padding: 14px 16px !important; font-family: var(--body); }
+  #vPanel b { font: 700 22px/1 var(--disp) !important; color: var(--sand); } #vPanel span { font-size: 12.5px !important; line-height: 1.4; color: rgba(246,236,220,.78) !important; }
+  #vStats div { font-family: var(--disp); font-size: 13px !important; color: rgba(246,236,220,.8) !important; } #vStats b { background: var(--amber) !important; border-radius: 3px !important; } #vStats b.o { background: rgba(246,236,220,.16) !important; } #vStats .best { font-family: var(--body) !important; color: var(--amber) !important; }
+  #vPanel button { border-radius: 999px !important; font-size: 14px !important; font-weight: 700 !important; padding: 9px 18px !important; color: #2a1a0c !important; background: linear-gradient(180deg, #ffd694, #f2ad52) !important; }
+  #vPanel button.mine { color: var(--amber) !important; background: rgba(255,201,120,.12) !important; border: 1px solid var(--amber) !important; }
+  #vSong, #vNote { border-radius: 14px !important; font-family: var(--body) !important; background: linear-gradient(180deg, rgba(40,28,18,.8), rgba(22,15,10,.86)) !important; }
+  #vSong b { font: 700 16px/1.1 var(--disp) !important; } #vSong i { font: 600 11px var(--disp) !important; letter-spacing: .06em !important; text-transform: none !important; color: var(--amber) !important; }
+  #vNote { font: 700 15px var(--disp) !important; color: var(--amber) !important; border-color: rgba(255,201,120,.6) !important; }
+  #vTip { font: 600 14px var(--disp) !important; letter-spacing: .02em; }
+  #paddle, #stall { font-family: var(--disp) !important; font-weight: 700 !important; font-size: 16px !important; letter-spacing: .06em !important; color: var(--sand) !important;
+    border: 2px solid rgba(246,236,220,.55) !important; background: radial-gradient(circle at 50% 35%, rgba(60,42,26,.55), rgba(24,17,11,.62)) !important; box-shadow: inset 0 1px 0 rgba(255,236,200,.15), 0 2px 12px rgba(0,0,0,.2); }
+  #paddle.down, #stall.down { border-color: var(--amber) !important; color: #2a1a0c !important; background: radial-gradient(circle at 50% 35%, #ffd694, #f2ad52) !important; }
+  #touch { border-color: rgba(246,236,220,.5) !important; } #touch b { background: rgba(255,214,148,.85) !important; }
+  #speed { font-family: var(--disp); font-size: 24px !important; font-weight: 700 !important; } #score { font-family: var(--disp); font-size: 15px; } #cond { font-family: var(--disp); font-size: 14px !important; }
+  #msg-t { font: 600 17px var(--disp) !important; letter-spacing: .02em; } #msg-n { font-family: var(--disp) !important; font-size: 68px !important; }
+  #msg-n small { font: 700 14px var(--disp) !important; letter-spacing: .06em !important; color: var(--amber) !important; } #msg-s div { font-family: var(--disp); font-size: 20px !important; } #msg-s span { font-family: var(--body); }
+  #ranch span { font: 700 14px var(--disp) !important; letter-spacing: .04em !important; }
+  #ranch button { border-radius: 14px !important; font-size: 15px !important; font-weight: 700 !important; padding: 8px 14px !important; border: 1px solid var(--line) !important; background: linear-gradient(180deg, rgba(40,28,18,.7), rgba(24,17,11,.78)) !important; box-shadow: inset 0 1px 0 rgba(255,236,200,.12); }
+  #ranch button small { font-family: var(--body); font-size: 11px !important; } #ranch button:active { border-color: var(--amber) !important; background: linear-gradient(180deg, rgba(90,58,26,.72), rgba(44,29,14,.8)) !important; }
 </style>
 </head>
 <body>
@@ -152,16 +209,17 @@
 <div class="hud" id="hint"></div>
 <div class="hud" id="fps"></div>
 <div class="ctl" id="menu"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>MENU</div>
+<div class="ctl" id="ear"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5.5 10.5c-1.8 0-3-1.3-3-3.2C2.5 4.6 4.4 3 6.6 3c2.5 0 4 1.7 4 3.8 0 1.6-.9 2.4-1.8 3.1-.8.6-1 1.2-1 2 0 .9-.7 1.6-1.6 1.6"/><path d="M6.7 6.8a.9.9 0 1 1 0 .1"/></svg><span>EARPIECE</span></div>
 <div class="ctl" id="paddle">PADDLE</div>
 <div class="ctl" id="stall">STALL</div>
 <div class="ctl" id="pad"></div>
 <!-- thumb: no slider drawn; where you touch appears as a faint ring, the dot shows how far you're leaning -->
 <div class="ctl" id="touch"><b></b></div>
 <div class="vui" id="vMove"></div><div class="vui" id="vLook"></div><div class="vui" id="vStick"><b></b></div>
-<button class="vui" id="vGo">GO SURFING</button>
+<button class="vui" id="vGo"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13c2-5 7-8 12-5-3 0-4.5 1.5-5 5"/><path d="M2 16.5c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1"/></svg><span>GO SURFING</span></button>
 <div class="vui" id="vTip">Left thumb walks, right thumb looks. Boards are in the board room.</div>
-<button class="vui" id="vZoom">ZOOM</button>
-<button class="vui" id="vWatch">WATCH A RIDE</button>
+<button class="vui" id="vZoom"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="3.2"/><circle cx="14.5" cy="12.5" r="3.2"/><path d="M8.7 12.5h2.6M3.5 9.5 5 4.5h2.5l1 4M16.5 9.5 15 4.5h-2.5l-1 4"/></svg><span>ZOOM</span></button>
+<button class="vui" id="vWatch"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 10S5 4.5 10 4.5 18.5 10 18.5 10 15 15.5 10 15.5 1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.6"/></svg><span>WATCH A RIDE</span></button>
 <button class="vui" id="vSit">SIT</button>
 <div class="vui" id="vNote"></div>
 <div class="vui" id="vSong"><i>Now playing</i><b id="vSongT"></b><span id="vSongA"></span></div>
@@ -170,25 +228,25 @@
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
   <h1>SumbaSurf</h1>
-  <p>Pick a spot. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: slide left and right to carve, like a steering wheel. On the left, hold PUMP for speed and STALL to brake and get barrelled.</p>
+  <p class="intro">Pick a spot. Sit in the lineup, turn and paddle for a wave, and ride it with your right thumb: slide left and right to carve, like a steering wheel. On the left, hold PUMP for speed and STALL to brake and get barrelled.</p>
   <div class="row">
-    <button data-mode="easy">Pantai Kuda<small><i>Beginners</i>3.5 m, slow, friendly barrels</small></button>
-    <button data-mode="medium">Tanjung Uma<small><i>Intermediate</i>4.5 m clean barrels under the cliffs</small></button>
-    <button data-mode="hard">Batu Hitam<small><i>Advanced</i>6 m, fast and heavy</small></button>
-    <button data-mode="extreme">Gunung Laut<small><i>Experts only</i>15 m in a storm</small></button>
-    <button data-mode="ranch">Surf Ranch<small><i>Wave pool</i>Order the wave you want</small></button>
+    <button data-mode="easy"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C8.2 28 9.4 24.7 11.4 21.9 C13.6 21.4 16.0 22.8 15.8 24.7 C14.3 23.6 12.9 25.0 13.6 28.0 Z" fill="currentColor"/></svg><span class="nm">Pantai Kuda</span><small><i>Beginners</i>3.5 m, slow, friendly barrels</small></button>
+    <button data-mode="medium"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C8.2 28 9.4 23.7 11.5 20.2 C13.7 19.6 16.1 21.4 15.8 23.7 C14.4 22.4 12.9 24.1 13.7 28.0 Z" fill="currentColor"/></svg><span class="nm">Tanjung Uma</span><small><i>Intermediate</i>4.5 m clean barrels under the cliffs</small></button>
+    <button data-mode="hard"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C9.6 28 11.3 22.3 14.0 17.6 C16.9 16.8 20.1 19.2 19.8 22.3 C17.9 20.5 15.9 22.8 16.9 28.0 Z" fill="currentColor"/></svg><span class="nm">Batu Hitam</span><small><i>Advanced</i>6 m, fast and heavy</small></button>
+    <button data-mode="extreme"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h100" stroke="currentColor" stroke-width="1" opacity=".3"/><path d="M4.0 28 C18.1 28 22.1 13.7 29.0 2.0 C36.2 -0.1 44.3 5.9 43.5 13.7 C38.7 9.3 33.8 15.0 36.2 28.0 Z" fill="currentColor"/></svg><span class="nm">Gunung Laut</span><small><i>Experts only</i>15 m in a storm</small></button>
+    <button data-mode="ranch"><svg class="wg" viewBox="0 0 100 30" preserveAspectRatio="xMinYMax meet" aria-hidden="true"><path d="M0 28h60M0 18v10M60 18v10" stroke="currentColor" stroke-width="1" opacity=".45"/><path d="M4.0 28 C8.2 28 9.4 23.7 11.5 20.2 C13.7 19.6 16.1 21.4 15.8 23.7 C14.4 22.4 12.9 24.1 13.7 28.0 Z" fill="currentColor"/></svg><span class="nm">Surf Ranch</span><small><i>Wave pool</i>Order the wave you want</small></button>
   </div>
-  <div class="boardrow"><div class="blabel">Board<b id="boardName" hidden></b></div><div class="boards" id="boards"></div></div>
-  <div class="villarow"><button id="goVilla">Your villa<small><i>Home base</i>Walk around, chill, watch the surf from the cliff</small></button></div>
+  <div class="boardrow"><span class="blabel">Board</span><b id="boardName" hidden></b><div class="boards" id="boards"></div></div>
+  <div class="villarow"><button id="goVilla"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M2 9.5 10 3l8 6.5"/><path d="M4.5 8v9h11V8"/><path d="M8.5 17v-4.5h3V17"/></svg><span>Your villa<small>Walk around, chill, watch the surf from the cliff</small></span></button></div>
   <div id="load"></div>
   <p id="soundTip"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6 6 0 0 1 0 9"/></svg> Tap anywhere for music</p>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1627</small>
+<small id="build">build 260925-1640</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=466"></script>
+<script type="module" src="js/game.js?v=475"></script>
 </body>
 </html>
