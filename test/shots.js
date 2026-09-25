@@ -7,7 +7,8 @@ let saved = null;
 export async function moment(mode, what, seed = 7) {
   const g = G(); const rnd0 = Math.random; let st = seed >>> 0; Math.random = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296);
   g.paused = true; g.setMode(mode); document.getElementById('start').style.display = 'none'; document.body.classList.add('playing'); document.getElementById('hint').style.visibility = 'hidden';
-  g.spawnRider(); const br = what === 'carve' ? carveBrain() : brain({});
+  g.spawnRider(); if (mode === 'ranch') g.ranchSend(window.RANCH_KIND || 'medium');   // the pool only makes a wave when you order one
+  const br = what === 'carve' ? carveBrain() : brain({});
   const stop = { sit: (r) => r.state === 'LIE' && r.stateT > 2.5, sitwave: (r) => r.state === 'LIE' && g.incoming().t < 4, paddle: (r) => r.paddling && r.stateT > 1.5 && !r.onFace, pop: (r) => r.state === 'POP' && r.stateT > 0.2, pop0: (r) => r.state === 'POP' && r.stateT > 0.03,
     trim: (r) => r.state === 'RIDE' && r.stateT > 3, carve: (r) => r.state === 'RIDE' && r.stateT > 3 && Math.abs(r.lean) > 0.8, stall: (r) => r.state === 'RIDE' && r.stateT > 3,
     barrel: (r) => r.inBarrel && r.stateT > 3 }[what];

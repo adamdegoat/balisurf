@@ -77,6 +77,14 @@
   #load { margin-top: 12px; min-height: 1.3em; color: var(--dim); }
   #start button .best { display: block; margin-top: 6px; font-style: normal; font-size: 11px; font-weight: 700; color: #ffcf8a; min-height: 1em; }
   #start button:active { background: rgba(253,247,238,.18); }
+  /* Surf Ranch: order a wave (shown while you wait in the pool) */
+  #ranch { position: fixed; top: max(44px, calc(env(safe-area-inset-top) + 34px)); left: 50%; transform: translateX(-50%); display: none; gap: 8px; align-items: stretch; z-index: 7; }
+  body.ranch-wait #ranch { display: flex; }
+  #ranch span { align-self: center; color: var(--ink); font-weight: 700; font-size: 11px; letter-spacing: .08em; margin-right: 2px; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
+  #ranch button { font: 700 12px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .06em; color: var(--ink); background: rgba(10,30,40,.4); border: 1.5px solid rgba(255,255,255,.55);
+    border-radius: 3px; padding: 9px 14px; min-width: 84px; min-height: 44px; text-align: left; touch-action: none; }
+  #ranch button small { display: block; font-weight: 400; color: var(--dim); font-size: 10px; margin-top: 2px; letter-spacing: 0; }
+  #ranch button:active { background: rgba(255,255,255,.3); }
   #rotate { position: fixed; inset: 0; display: none; place-items: center; background: #0d1720; color: var(--dim); z-index: 10; text-align: center; padding: 30px; }
   @media (orientation: portrait) and (max-width: 900px) { #rotate { display: grid; } }
 </style>
@@ -95,6 +103,7 @@
 <div class="ctl" id="pad"></div>
 <!-- thumb: no slider drawn; where you touch appears as a faint ring, the dot shows how far you're leaning -->
 <div class="ctl" id="touch"><b></b></div>
+<div class="ctl" id="ranch"><span>ORDER A WAVE</span><button data-wave="easy">MELLOW<small>3.5 m, slow</small></button><button data-wave="medium">BARREL<small>4.5 m, hollow</small></button><button data-wave="hard">HEAVY<small>6 m, fast</small></button></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
 <div id="start">
   <h1>Bali Surf</h1>
@@ -104,16 +113,16 @@
     <button data-mode="medium">Medium<small>Sunny, clean barrels</small></button>
     <button data-mode="hard">Hard<small>Sunny, fast heavy barrels</small></button>
     <button data-mode="extreme">Extreme<small>Storm, 15 m monsters</small></button>
-    <button data-mode="random">Random<small>Any sunny day</small></button>
+    <button data-mode="ranch">Surf Ranch<small>Wave pool: order your wave</small></button>
   </div>
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1258</small>
+<small id="build">build 260925-1304</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=428"></script>
+<script type="module" src="js/game.js?v=429"></script>
 </body>
 </html>

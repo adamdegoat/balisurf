@@ -2,10 +2,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=90';
+import { Wave, CONDITIONS, skyDome, ocean, coast, setWeather, WeatherFX, ENV } from './wave.js?v=91';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=100';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
+import { ranch, POOL } from './ranch.js?v=3';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -22,7 +23,9 @@ let hfovHalf = 50;
 const fitFov = () => { camera.aspect = innerWidth / innerHeight; camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(hfovHalf)) / Math.min(camera.aspect, 2.0))); camera.updateProjectionMatrix(); };
 const setHfov = (h) => { if (h !== hfovHalf) { hfovHalf = h; fitFov(); } };
 fitFov();
-skyDome(scene); ocean(scene); coast(scene);
+skyDome(scene); ocean(scene);
+const coastObjs = (() => { const n0 = scene.children.length; coast(scene); return scene.children.slice(n0); })();   // the Bali coast (hidden at the Surf Ranch)
+const ranchW = ranch(scene);
 const fx = new WeatherFX(scene);
 const audio = new SurfAudio();
 fx.onFlash = () => audio.thunder(Math.random());
@@ -81,7 +84,7 @@ const birds = (() => {
 const locals = [], _lq = new THREE.Quaternion(), _le = new THREE.Euler(0, 0, 0, 'YXZ');
 function updateLocals(dt) {
   for (const L of locals) {
-    L.grp.visible = !!rider; if (!rider) continue;
+    L.grp.visible = !!rider && !isRanch(); if (!L.grp.visible) continue;
     const y = heightAt(waves, L.x, L.z);
     L.grp.position.set(L.x + Math.sin(T * 0.2 + L.ph) * 0.6, y + 0.05, L.z);
     L.grp.quaternion.setFromEuler(_le.set(-0.25 + Math.sin(T * 1.3 + L.ph) * 0.05, Math.PI + Math.sin(T * 0.15 + L.ph) * 0.3, Math.sin(T * 1.1 + L.ph) * 0.04));   // facing the sets, nose up (sitting on the tail)
@@ -89,7 +92,7 @@ function updateLocals(dt) {
   }
 }
 function updateScenery(dt) {
-  if (jukung.visible = !!rider) { const y = heightAt(waves, jukung.position.x, jukung.position.z); jukung.position.y += (y - 0.05 - jukung.position.y) * Math.min(1, dt * 3); jukung.rotation.x = Math.sin(T * 0.9) * 0.04; jukung.rotation.z = Math.sin(T * 0.7 + 1) * 0.03; }
+  if (jukung.visible = !!rider && !isRanch()) { const y = heightAt(waves, jukung.position.x, jukung.position.z); jukung.position.y += (y - 0.05 - jukung.position.y) * Math.min(1, dt * 3); jukung.rotation.x = Math.sin(T * 0.9) * 0.04; jukung.rotation.z = Math.sin(T * 0.7 + 1) * 0.03; }
   for (const b of birds) { const u = b.userData; u.a += u.w * dt; b.position.set(u.cx + Math.cos(u.a) * u.r, u.h + Math.sin(T * 0.3 + u.r) * 2, u.cz + Math.sin(u.a) * u.r); b.rotation.set(0, -u.a, Math.sin(T * 0.8 + u.r) * 0.25);
     const flap = Math.sin(T * 7 + u.r) * (Math.sin(T * 0.4 + u.r) > 0.6 ? 0.5 : 0.05); b.scale.set(1.8, 1.8 + flap, 1.8); }
 }
@@ -172,8 +175,21 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
 // ---------- the surf: a reef with the peak at x=0, z=0. Waves come in from the sea one swell period apart.
 // Each wave breaks at the peak when it gets there and peels off to the right. You sit in the lineup and pick your own.
 let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0, scores: [], barrels: 0 }, nextBreak = 0, setLeft = 0, setPos = 0;
-const REEF = { xEnd: 190, zBeach: 150 }, PROFILES = new Map();   // room for the bigger swells to run (the sand starts ~185 m in)
-function condFor(m) { return m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
+let REEF = { xEnd: 190, zBeach: 150 }; const PROFILES = new Map();   // room for the bigger swells to run (the sand starts ~185 m in)
+const OCEAN_REEF = REEF, RANCH_REEF = { xEnd: POOL.x1 - 60, zBeach: POOL.z1 - 20 };
+let ranchKind = 'medium';   // the wave you last ordered at the Surf Ranch
+const isRanch = () => mode === 'ranch';
+const modeName = (m) => m === 'ranch' ? 'Surf Ranch' : m === 'random' ? 'Random' : CONDITIONS[m].name;
+// which world you're in: the Bali coast, or the wave pool (same water and waves, clipped to the pool, no reef under it)
+function setSpot(m) {
+  const r = m === 'ranch';
+  for (const o of coastObjs) o.visible = !r;
+  ranchW.group.visible = r;
+  if (r) ENV.uPool.value.set(POOL.x0, POOL.x1, POOL.z0, POOL.z1); else ENV.uPool.value.set(-1e6, 1e6, -1e6, 1e6);
+  ENV.uReef.value = r ? 0 : 1;
+  REEF = r ? RANCH_REEF : OCEAN_REEF;
+}
+function condFor(m) { return m === 'ranch' ? ranchKind : m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {
   const cond = CONDITIONS[condFor(mode)];
   const w = new Wave(scene, cond);
@@ -186,7 +202,7 @@ function updateWaves(dt) {
   for (const pr of PROFILES.values()) pr.warm(24);
   // keep the next wave lined up out to sea; a swell period apart, give or take
   // swell arrives in sets: 3-4 waves one period apart, the bigger ones in the middle, then a lull (shortened for play)
-  while (nextBreak - T < 150 / 6) {
+  while (!isRanch() && nextBreak - T < 150 / 6) {   // (the Surf Ranch only makes a wave when you order one)
     const w = addWave(nextBreak);
     if (setLeft <= 0) { setLeft = 3 + (Math.random() < 0.5 ? 1 : 0); setPos = 0; }
     const n = setPos / Math.max(1, setLeft + setPos - 1);
@@ -228,7 +244,7 @@ function incoming() {
   return { w: best, t: tBest };
 }
 function spawnRider() {
-  if (surfer) endWipe(); rig.visible = true; for (const b of birds) b.visible = true;
+  if (surfer) endWipe(); rig.visible = true; for (const b of birds) b.visible = !isRanch();
   pumpC = 0; pumpA = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
   rider = rider || new Rider();
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
@@ -239,6 +255,28 @@ function spawnRider() {
       for (const w of waves) if (rider.z - w.zW >= -2) { w.tBreak += shift; if (w.px !== undefined) w.px -= w.cond.peel * shift; }   // (its break point too, or it breaks down the reef)
       nextBreak += shift; } }
   ui.msg.style.display = 'none';
+}
+
+// ---------- the Surf Ranch: you order each wave. The machine starts it at the deep end a few seconds out, it runs down
+// the pool past you, and you can order the next one once it has gone by.
+const ranchWaiting = () => isRanch() && rider && !rider.standing && rider.state === 'LIE' && !waves.some((w) => w.zW < rider.z + 4);
+function ranchSend(kind) {
+  if (!ranchWaiting()) return;
+  ranchKind = kind; const w = addWave(T + 6); w.size = 1;   // (every pool wave is the full size: no sets)
+}
+for (const b of document.querySelectorAll('#ranch button')) {
+  const go = (e) => { e.preventDefault(); e.stopPropagation(); ranchSend(b.dataset.wave); };
+  b.addEventListener('touchstart', go, { passive: false }); b.addEventListener('click', go);
+}
+// the machine rides its rail at the breaking point of the wave it's pulling; with no wave it waits at the start
+function updateRanch(dt) {
+  if (!isRanch()) return;
+  const w = waves[waves.length - 1], car = ranchW.car;
+  const tx = w ? Math.min(POOL.x1 - 8, Math.max(POOL.x0 + 8, w.peelX)) : POOL.x0 + 10;
+  car.position.x += (tx - car.position.x) * Math.min(1, dt * (w ? 8 : 0.6));
+  document.body.classList.toggle('ranch-wait', !!ranchWaiting());
+  // the pool walls: you can't paddle through them
+  if (rider) { const m = 3; rider.x = Math.min(POOL.x1 - m, Math.max(POOL.x0 + m, rider.x)); rider.z = Math.min(POOL.z1 - m, Math.max(POOL.z0 + m, rider.z)); }
 }
 
 // ---------- controls: PADDLE/PUMP (hold, left) and a thumb pad (right half). Keyboard for testing.
@@ -322,18 +360,18 @@ function toMenu() {
   // clear the session: the menu gets its slow drifting wave behind it again (and nothing of the old ride keeps running)
   if (surfer) endWipe(); rider = null; rig.visible = false; endT = -1;
   for (const w of waves) w.dispose(scene); waves = [];
-  setWeather('medium'); ui.cond.textContent = '';
+  setWeather('medium'); setSpot('medium'); ui.cond.textContent = '';
   underK = 0; underEl.style.opacity = 0; underEl.style.display = 'none'; setText(ui.speed, ''); setText(ui.score, ''); setText(ui.hint, ''); ui.tube.style.opacity = 0;
   input.paddleBtn = false; input.stallBtn = false; input.stick = null; padTouch = null; padX = padY = 0;
   keys.clear(); steerF = stickY = 0; ui.paddle.classList.remove('down'); ui.stall.classList.remove('down');
-  document.body.classList.remove('playing', 'riding'); ui.msg.style.display = 'none';
+  document.body.classList.remove('playing', 'riding', 'ranch-wait'); ui.msg.style.display = 'none';
   ui.start.style.display = ''; showBests();
 }
 document.getElementById('menu').addEventListener('touchstart', (e) => { e.preventDefault(); toMenu(); }, { passive: false });
 document.getElementById('menu').addEventListener('click', toMenu);
 async function start(m) {
   if (starting) return; starting = true; if (window.__g) window.__g.paused = false;
-  mode = m; setWeather(m); audio.start();
+  mode = m; setWeather(m); setSpot(m); audio.start();
   // fullscreen + landscape lock must be asked for inside the tap, before any waiting (Android); iOS ignores both safely
   try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {}); } catch (e) {}
   ui.load.textContent = surfer ? '' : 'Loading...';
@@ -344,7 +382,7 @@ async function start(m) {
   setLeft = 0; setPos = 0;
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15;   // a calm start: time to look around and find the set
   updateWaves(0); spawnRider();
-  ui.cond.textContent = mode === 'random' ? 'Random' : CONDITIONS[mode].name;
+  ui.cond.textContent = modeName(mode);
 }
 if (Q.get('mode')) start(Q.get('mode'));
 
@@ -988,12 +1026,13 @@ function updateHUD(dt) {
   const lbl = rider.standing ? 'PUMP' : 'PADDLE'; if (ui.paddle.textContent !== lbl) ui.paddle.textContent = lbl;
   // coaching for the first few waves: read the sea like a surfer would
   let hint = '';
-  if (st === 'LIE') {
+  if (st === 'LIE' && ranchWaiting()) hint = session.waves < 3 ? 'Order a wave: it comes down the pool to you in a few seconds' : '';
+  else if (st === 'LIE') {
     const inc = incoming(), facingIn = Math.sin(rider.th) > 0.5;
     const onWave = rider.y > 0.3 && rider.onFace;
     if (rider.washed) hint = 'Caught inside! Hold on, paddle back out';
     else if (onWave) hint = rider.paddling ? 'Keep paddling!' : 'Paddle now!';
-    else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? 'Wave coming: turn to face the beach' : inc.t < 2.5 ? 'Paddle hard!' : 'Wave coming... get ready';
+    else if (inc.w && inc.t < 7 && inc.t > -0.5) hint = !facingIn ? `Wave coming: turn to face ${isRanch() ? 'the shallow end' : 'the beach'}` : inc.t < 2.5 ? 'Paddle hard!' : 'Wave coming... get ready';
     else if (session.waves < 2 && inc.t >= 7) hint = 'Watch the horizon for the next set';
     else if (rider.z > 12) hint = 'Too far in: paddle back out past the break';
   } else if (st === 'POP') hint = session.waves < 5 ? 'Up! Go LEFT along the wave, hold PUMP for speed' : 'Up!';
@@ -1063,9 +1102,9 @@ function tick(dt) {
   }
   if (rider) {
     updateWaves(dt);
-    rider.update(dt, inp, waves);
-    // drifting too far inside or out wide on a lie: bring the surfer back to the lineup
-    if (rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out('Drifted out of the lineup'); }
+    rider.update(dt, inp, waves); updateRanch(dt);
+    // drifting too far inside or out wide on a lie: bring the surfer back to the lineup (the pool's walls hold you in)
+    if (!isRanch() && rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out('Drifted out of the lineup'); }
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); paddleArms(dt); dtArm = dt; surfStance(); }
     updateLeash(); updateScenery(dt); updateLocals(dt);
@@ -1125,4 +1164,4 @@ renderer.setAnimationLoop(() => {
   }
   autoQuality(dt);
 });
-window.__g = { paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); ui.cond.textContent = m === 'random' ? 'Random' : CONDITIONS[m].name; for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
+window.__g = { ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };

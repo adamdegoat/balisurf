@@ -349,6 +349,7 @@ export const WEATHER = {
   medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2862a6, hor: 0xc4dfe9, sunCol: 0xfff7e6, fog: 0xcde3ea, deep: 0x094c66, turq: 0x15a99f, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
   hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2458a0, hor: 0xbcd6e4, sunCol: 0xffe6bf, fog: 0xc6dbe4, deep: 0x083f55, turq: 0x149a90, cloud: 0.2, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
   extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
+  ranch:   { sun: [0.45, 0.72, -0.5], zen: 0x2a6cb8, hor: 0xcfe2ea, sunCol: 0xfff3dd, fog: 0xd4e5ec, deep: 0x1a8ea0, turq: 0x3fd6c8, cloud: 0.08, chop: 0.3, fogFar: 700, rain: 0, sunVis: 1 },   // dry, clear country sky; calm pool water
   random:  { sun: [0.3, 0.7, -0.6],  zen: 0x2b66aa, hor: 0xc2dde8, sunCol: 0xfff3dc, fog: 0xcbe1e9, deep: 0x0a4e69, turq: 0x16a6a0, cloud: 0.32, chop: 1.1, fogFar: 310, rain: 0, sunVis: 1 },
 };
 export const ENV = {
@@ -356,6 +357,8 @@ export const ENV = {
   uFog: { value: new THREE.Color() }, uDeep: { value: new THREE.Color() }, uTurq: { value: new THREE.Color() },
   uTime: { value: 0 },                                // one clock for every water surface, so the sea and the wave match
   uCloud: { value: 0.3 }, uChop: { value: 1 }, uFogFar: { value: 260 }, uSunVis: { value: 1 }, uFlash: { value: 0 },
+  uPool: { value: new THREE.Vector4(-1e6, 1e6, -1e6, 1e6) },   // water only inside this box (x0, x1, z0, z1): the wave pool
+  uReef: { value: 1 },                                           // 0 = no reef under the water (a concrete pool)
 };
 export function setWeather(name) {
   const w = WEATHER[name]; ENV.weather = w; ENV.name = name;
@@ -390,7 +393,7 @@ export function waterMaterial({ wave = false } = {}) {
       }`,
     fragmentShader: /* glsl */`
       precision highp float;
-      uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq;
+      uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash, uReef; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq; uniform vec4 uPool;
       varying vec3 vW; varying vec3 vN; varying vec2 vFT; varying float vAge;
       ${NOISE}
       vec3 sky(vec3 d){
@@ -409,6 +412,7 @@ export function waterMaterial({ wave = false } = {}) {
         return mix(c, uHor * .8 + uZen * .2, uCloud * .6) + uFlash;
       }
       void main(){
+        if (vW.x < uPool.x || vW.x > uPool.y || vW.z < uPool.z || vW.z > uPool.w) discard;   // (the wave pool's walls)
         vec3 V = normalize(cameraPosition - vW);
         vec3 N = normalize(vN);
         if (!gl_FrontFacing) N = -N;
@@ -447,7 +451,7 @@ export function waterMaterial({ wave = false } = {}) {
         // the reef under clear shallow water (flat water inside the break, toward the beach): pale turquoise over sand
         // with darker coral and rock patches, fading out in deep water, on the wave faces and under a stormy sky
         float reefK = smoothstep(-45., 15., vW.z) * (1. - smoothstep(165., 190., vW.z)) * smoothstep(-160., -60., vW.x)
-                    * smoothstep(.55, .99, normalize(vN).y) * (1. - smoothstep(.05, 1.4, vW.y)) * (1. - .7 * uCloud);
+                    * smoothstep(.55, .99, normalize(vN).y) * (1. - smoothstep(.05, 1.4, vW.y)) * (1. - .7 * uCloud) * uReef;
         if (reefK > .001) {
           float rn = fbm(vW.xz * .06), rn2 = fbm(vW.xz * .27 + 3.1);
           vec3 reefCol = mix(vec3(.3, .66, .62), vec3(.13, .25, .22), clamp(smoothstep(.46, .6, rn) + .35 * (rn2 - .5), 0., 1.));
