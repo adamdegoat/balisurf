@@ -8,7 +8,7 @@ import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
 import { SurfAudio } from './audio.js?v=8';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
-import { villa, VILLA } from './villa.js?v=16';
+import { villa, VILLA } from './villa.js?v=19';
 import { crew } from './crew.js?v=3';
 
 const Q = new URLSearchParams(location.search);
@@ -1168,6 +1168,7 @@ function autoQuality(dt) {
 const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)'); let lastPortrait = false;
 let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1, lastPump = false;
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
+const _wl = new THREE.Vector3();
 let villaW = null, crewW = null, walker = null, vMoveT = null, vLookT = null, vPickType = null;
 const vStick = document.getElementById('vStick'), vPanel = document.getElementById('vPanel');
 function startVilla() {
@@ -1177,7 +1178,7 @@ function startVilla() {
   setSpot('villa');
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
   if (surfer) endWipe(); rider = null; rig.visible = false;
-  document.getElementById('vZoom').classList.remove('on'); document.getElementById('vZoom').textContent = 'ZOOM';
+  document.getElementById('vZoom').classList.remove('on'); document.getElementById('vZoom').textContent = 'ZOOM'; document.getElementById('vWatch').classList.remove('on'); document.getElementById('vWatch').textContent = 'WATCH A RIDE';
   walker = { x: villaW.spawn.x, z: villaW.spawn.z, yaw: villaW.spawn.yaw, pitch: -0.08, y: VILLA.Y + 1.65, mx: 0, mz: 0 };
   ui.start.style.display = 'none'; document.body.classList.add('playing', 'villa'); ui.cond.textContent = 'Your villa';
   document.getElementById('vTip').style.opacity = 1; setTimeout(() => { document.getElementById('vTip').style.opacity = 0; }, 7000);
@@ -1186,7 +1187,9 @@ document.getElementById('goVilla').addEventListener('click', startVilla);
 document.getElementById('goVilla').addEventListener('touchend', (e) => { e.preventDefault(); startVilla(); }, { passive: false });
 document.getElementById('vGo').addEventListener('click', (e) => { e.stopPropagation(); toMenu(); });
 { const zb = document.getElementById('vZoom'), zt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.zoom = !walker.zoom; zb.classList.toggle('on', walker.zoom); zb.textContent = walker.zoom ? 'ZOOM OUT' : 'ZOOM'; };
-  zb.addEventListener('click', zt); zb.addEventListener('touchstart', zt, { passive: false }); }
+  zb.addEventListener('click', zt); zb.addEventListener('touchstart', zt, { passive: false });
+  const wb = document.getElementById('vWatch'), wt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.watch = !walker.watch; walker.watchI = -1; wb.classList.toggle('on', walker.watch); wb.textContent = walker.watch ? 'STOP WATCHING' : 'WATCH A RIDE'; };
+  wb.addEventListener('click', wt); wb.addEventListener('touchstart', wt, { passive: false }); }
 document.getElementById('vGo').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); toMenu(); }, { passive: false });
 // the board panel: what it is and how it feels, and a button to take it
 function vPick(type) {
@@ -1213,7 +1216,8 @@ const vmEnd = (e) => { e.preventDefault(); for (const t of e.changedTouches) if 
   vMoveT = null; if (walker) walker.mx = walker.mz = 0; vStick.classList.remove('live'); vStick.querySelector('b').style.transform = ''; } };
 vm.addEventListener('touchend', vmEnd, { passive: false }); vm.addEventListener('touchcancel', vmEnd, { passive: false });
 const lookStart = (id, x, y) => { vLookT = { id, x, y, x0: x, y0: y, t0: performance.now() }; };
-const lookMove = (id, x, y) => { if (!vLookT || vLookT.id !== id || !walker) return; const zs = hfovHalf / 50; walker.yaw += (x - vLookT.x) * 0.0055 * zs; walker.pitch = Math.max(-1.1, Math.min(0.9, walker.pitch - (y - vLookT.y) * 0.0045 * zs)); vLookT.x = x; vLookT.y = y; };   // (zoomed in, the look slows to match)
+const lookMove = (id, x, y) => { if (!vLookT || vLookT.id !== id || !walker) return; if (walker.watch && Math.hypot(x - vLookT.x0, y - vLookT.y0) > 25) document.getElementById('vWatch').click();   // (look away yourself and it lets go)
+  const zs = hfovHalf / 50; walker.yaw += (x - vLookT.x) * 0.0055 * zs; walker.pitch = Math.max(-1.1, Math.min(0.9, walker.pitch - (y - vLookT.y) * 0.0045 * zs)); vLookT.x = x; vLookT.y = y; };   // (zoomed in, the look slows to match)
 const lookEnd = (id, x, y) => { if (!vLookT || vLookT.id !== id) return; if (Math.hypot(x - vLookT.x0, y - vLookT.y0) < 10 && performance.now() - vLookT.t0 < 350) vTap(x, y); vLookT = null; };
 vl.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); const t = e.changedTouches[0]; lookStart(t.identifier, t.clientX, t.clientY); }, { passive: false });
 vl.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) lookMove(t.identifier, t.clientX, t.clientY); }, { passive: false });
@@ -1223,7 +1227,7 @@ vm.addEventListener('mousedown', (e) => lookStart('m', e.clientX, e.clientY));  
 addEventListener('mousemove', (e) => lookMove('m', e.clientX, e.clientY));
 addEventListener('mouseup', (e) => lookEnd('m', e.clientX, e.clientY));
 function villaTick(dt) {
-  updateWaves(dt); crewW.update(dt, waves, T);
+  updateWaves(dt); crewW.update(dt, waves, T); if (villaW.tick) villaW.tick(dt);
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
@@ -1248,7 +1252,18 @@ function villaTick(dt) {
   W_.y += (V.floorAt(W_.x, W_.z, foot) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
   camera.position.set(W_.x, W_.y, W_.z + SPOTS.medium.dz);
   _pe.set(W_.pitch, -W_.yaw - Math.PI / 2, 0); camera.quaternion.setFromEuler(_pe);
-  { const tgt = W_.zoom ? 8 : 50; if (Math.abs(hfovHalf - tgt) > 0.05) setHfov(hfovHalf + (tgt - hfovHalf) * Math.min(1, dt * 6)); else if (hfovHalf !== tgt) setHfov(tgt); }   // binoculars: about 5x
+  // watching: the camera follows one surfer's ride (the one deepest in the barrel, else the longest ride going), zoomed
+  // so they fill a good part of the view; between rides it rests on the lineup
+  if (W_.watch) {
+    const S = crewW.surfers; let s = S[W_.watchI];
+    if (!s || s.st !== 'RIDE') { W_.watchI = -1; let best = -1, bs = -1; S.forEach((q, i) => { if (q.st === 'RIDE') { const sc = q.tau + (q.tubeT > 0 ? 50 : 0); if (sc > bs) { bs = sc; best = i; } } }); W_.watchI = best; s = S[best]; }
+    const c = camera.position, P = s ? s.p : _wl.set(5, 0, -18);
+    const dx = P.x - c.x, dz = P.z - c.z, dy = P.y + (s ? 0.9 : 0) - c.y, d = Math.hypot(dx, dz);
+    const yaw = Math.atan2(dz, dx), pitch = Math.atan2(dy, d), k = Math.min(1, dt * (s ? 4 : 1.5));
+    W_.yaw += Math.atan2(Math.sin(yaw - W_.yaw), Math.cos(yaw - W_.yaw)) * k; W_.pitch += (pitch - W_.pitch) * k;
+    W_.watchH = Math.max(3, Math.min(30, THREE.MathUtils.radToDeg(Math.atan((s ? 14 : 40) / d))));
+  }
+  { const tgt = W_.watch ? W_.watchH : W_.zoom ? 8 : 50; if (Math.abs(hfovHalf - tgt) > 0.05) setHfov(hfovHalf + (tgt - hfovHalf) * Math.min(1, dt * 6)); else if (hfovHalf !== tgt) setHfov(tgt); }   // binoculars: about 5x
   sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   audio.update({ H: 4.5, near: 0.15, barrel: false, riding: false, v: 0, turn: 0, lean: 0, slide: 0, stall: false, storm: 0, rain: 0, underwater: false, dt, chop: 1 });
 }

@@ -89,6 +89,9 @@
     color: #0d1720; background: #9fe3d6; border: 0; border-radius: 3px; padding: 11px 16px; touch-action: none; }
   #vZoom { position: fixed; right: max(16px, env(safe-area-inset-right)); top: calc(max(10px, env(safe-area-inset-top)) + 50px); z-index: 9; font: 700 12px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em;
     color: var(--ink); background: rgba(8,14,20,.55); border: 1.5px solid rgba(253,247,238,.5); border-radius: 3px; padding: 9px 14px; touch-action: none; }
+  #vWatch { position: fixed; right: max(16px, env(safe-area-inset-right)); top: calc(max(10px, env(safe-area-inset-top)) + 94px); z-index: 9; font: 700 12px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em;
+    color: var(--ink); background: rgba(8,14,20,.55); border: 1.5px solid rgba(253,247,238,.5); border-radius: 3px; padding: 9px 14px; touch-action: none; }
+  #vWatch.on { background: #9fe3d6; color: #0d1720; border-color: #9fe3d6; }
   #vZoom.on { background: #ffcf8a; color: #0d1720; border-color: #ffcf8a; }
   #vPanel { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: none; min-width: 300px; max-width: 80vw;
     background: rgba(8,14,20,.72); border: 1.5px solid rgba(253,247,238,.5); border-radius: 4px; padding: 12px 14px; text-align: left; }
@@ -134,6 +137,7 @@
 <button class="vui" id="vGo">GO SURFING</button>
 <div class="vui" id="vTip">Left thumb walks, right thumb looks. Boards are in the board room.</div>
 <button class="vui" id="vZoom">ZOOM</button>
+<button class="vui" id="vWatch">WATCH A RIDE</button>
 <div class="vui" id="vPanel"><b id="vName"></b><span id="vDesc"></span><div id="vStats"></div><button id="vTake">TAKE THIS BOARD</button></div>
 <div class="ctl" id="ranch"><span>ORDER A WAVE</span><button data-wave="easy">MELLOW<small>3.5 m, slow</small></button><button data-wave="medium">BARREL<small>4.5 m, hollow</small></button><button data-wave="hard">HEAVY<small>6 m, fast</small></button></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
@@ -151,11 +155,11 @@
   <div id="load"></div>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1520</small>
+<small id="build">build 260925-1527</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=450"></script>
+<script type="module" src="js/game.js?v=451"></script>
 </body>
 </html>
