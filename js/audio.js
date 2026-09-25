@@ -137,7 +137,14 @@ export class SurfAudio {
   musicNext() {
     if (!this.order.length) { const o = this.tracks.slice(); for (let i = o.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [o[i], o[j]] = [o[j], o[i]]; }
       if (o[0] === this.now && o.length > 1) o.push(o.shift()); this.order = o; }   // (never the same song twice in a row)
+    if (this.now) (this.hist ||= []).push(this.now); if (this.hist && this.hist.length > 20) this.hist.shift();
     this.now = this.order.shift(); this.mel.src = this.now; if (this.mWant > 0) this.mel.play().catch(() => {}); if (this.onTrack) this.onTrack(this.now);
+  }
+  // back: a few seconds into a song it starts it again; right at the start it goes to the one before (like any player)
+  musicPrev() {
+    if (!this.mel) return;
+    if (this.mel.currentTime > 4 || !this.hist || !this.hist.length) { this.mel.currentTime = 0; this.musicKick(); return; }
+    this.order.unshift(this.now); this.now = this.hist.pop(); this.mel.src = this.now; if (this.mWant > 0) this.mel.play().catch(() => {}); if (this.onTrack) this.onTrack(this.now);
   }
   // how loud the music should be now, and how far off it sounds (lowpass Hz); silent for a while and it pauses (saves battery)
   musicLevel(v, lp = 20000) {

@@ -206,6 +206,13 @@
     background: linear-gradient(180deg, rgba(40,28,18,.86), rgba(22,15,10,.9)); border: 1px solid rgba(255,201,120,.55); color: var(--sand); font: 500 13.5px/1.35 var(--body); box-shadow: 0 4px 16px rgba(0,0,0,.25); }
   #fBubble.on { opacity: 1; } #fBubble b { display: block; font: 700 12px var(--disp); letter-spacing: .06em; color: var(--amber); }
   body:not(.villa) #fBubble, body.drone #fBubble { display: none; }
+  /* the Now playing box is a little player: tap it for back / next */
+  #vSong.on { pointer-events: auto; cursor: pointer; touch-action: none; }   /* (only while it shows: hidden, taps go through to the walk area) */
+  #vSong .mctl { display: none; gap: 10px; margin-top: 8px; }
+  #vSong.open .mctl { display: flex; }
+  #vSong .mctl button { width: 46px; height: 36px; border-radius: 999px; border: 1px solid rgba(255,201,120,.55); background: rgba(255,201,120,.12); color: var(--amber); display: grid; place-items: center; touch-action: none; }
+  #vSong .mctl button:active { background: linear-gradient(180deg, #ffd694, #f2ad52); color: #2a1a0c; }
+  #vSong .mctl svg { width: 18px; height: 18px; }
   #vSit { top: auto !important; bottom: max(22px, env(safe-area-inset-bottom)) !important; transform: none !important; }   /* (down in the corner, clear of the pills above it) */
   body.drone #vSit, body.drone #vWatch, body.drone #vPanel { display: none !important; }
   #vSit { border-radius: 999px !important; font-size: 15px !important; font-weight: 700 !important; padding: 12px 20px !important; color: #2a1a0c !important; background: linear-gradient(180deg, #ffd694, #f2ad52) !important;
@@ -257,7 +264,7 @@
 <div class="vui" id="vAlt"></div>
 <button class="vui" id="vUp">UP</button><button class="vui" id="vDn">DOWN</button>
 <div class="vui" id="vNote"></div>
-<div class="vui" id="vSong"><i>Now playing</i><b id="vSongT"></b><span id="vSongA"></span></div>
+<div class="vui" id="vSong"><i>Now playing</i><b id="vSongT"></b><span id="vSongA"></span><div class="mctl"><button id="mPrev" aria-label="Previous song"><svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="4" width="2.2" height="12" rx="1"/><path d="M16.5 4.8v10.4a.8.8 0 0 1-1.2.7L7.2 10.7a.8.8 0 0 1 0-1.4l8.1-5.2a.8.8 0 0 1 1.2.7z"/></svg></button><button id="mNext" aria-label="Next song"><svg viewBox="0 0 20 20" fill="currentColor"><rect x="14.8" y="4" width="2.2" height="12" rx="1"/><path d="M3.5 4.8v10.4a.8.8 0 0 0 1.2.7l8.1-5.2a.8.8 0 0 0 0-1.4L4.7 4.1a.8.8 0 0 0-1.2.7z"/></svg></button></div></div>
 <div class="vui" id="vPanel"><b id="vName"></b><span id="vDesc"></span><div id="vStats"></div><button id="vTake">TAKE THIS BOARD</button></div>
 <div class="ctl" id="ranch"><span>ORDER A WAVE</span><button data-wave="easy">MELLOW<small>3.5 m, slow</small></button><button data-wave="medium">BARREL<small>4.5 m, hollow</small></button><button data-wave="hard">HEAVY<small>6 m, fast</small></button></div>
 <div id="msg"><div id="msg-t"></div><div id="msg-n"></div><div id="msg-s"></div><div id="sess"></div></div>
@@ -277,11 +284,11 @@
   <p id="soundTip"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6 6 0 0 1 0 9"/></svg> Tap anywhere for music</p>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-2004</small>
+<small id="build">build 260925-2006</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=526"></script>
+<script type="module" src="js/game.js?v=527"></script>
 </body>
 </html>

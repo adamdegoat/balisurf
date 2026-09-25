@@ -5,7 +5,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=111';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=115';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
-import { SurfAudio } from './audio.js?v=14';
+import { SurfAudio } from './audio.js?v=15';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=22';
 import { villa, VILLA } from './villa.js?v=65';
@@ -1257,6 +1257,12 @@ const SONGS = { 'we-dub-a-long-way': ['We Dub A Long Way', 'Brotheration Records
   'barefoot-in-the-breeze': ['Barefoot in the Breeze', 'OpenMindAudio'], 'island-vibes': ['Reggae Island Vibes', 'Alex Morgan'], 'everyday-is-a-holiday': ['Everyday Is a Holiday', 'Brotheration Records'],
   'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'] };
 const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] || ['Island radio', ''];
+// the Now playing box: tap it and back / next buttons open under the song (they fold away again after a few seconds)
+{ const box = document.getElementById('vSong'); let shut = null; const later = () => { clearTimeout(shut); shut = setTimeout(() => box.classList.remove('open'), 6000); };
+  const tap = (e) => { e.preventDefault(); e.stopPropagation(); audio.musicKick(); box.classList.toggle('open'); later(); };
+  box.addEventListener('click', tap); box.addEventListener('touchstart', tap, { passive: false });
+  for (const [id, f] of [['mPrev', () => audio.musicPrev()], ['mNext', () => audio.musicNext()]]) { const b = document.getElementById(id), go = (e) => { e.preventDefault(); e.stopPropagation(); f(); audio.musicKick(); later(); };
+    b.addEventListener('click', go); b.addEventListener('touchstart', go, { passive: false }); } }
 audio.onTrack = (src) => { const [t, a] = songOf(src); if (villaW) villaW.setSong(t, a); document.getElementById('vSongT').textContent = t; document.getElementById('vSongA').textContent = a ? 'by ' + a : ''; };
 const MUSIC = ['we-dub-a-long-way', 'reggae-dub-1', 'dreaming-of-reggae', 'roots-reggae', 'roots-guitare-tamtam', 'feel-the-vibe', 'barefoot-in-the-breeze', 'island-vibes', 'everyday-is-a-holiday', 'stand-firm-like-a-tree'].map((n) => 'music/' + n + '.mp3');
 let radioOn = true;   // (the villa's speakers, all together)
@@ -1270,7 +1276,7 @@ function musicTick() {
   if (!playing) return audio.musicLevel(0.45);
   if (mode === 'villa' || isRanch()) audio.gameLevel(1);
   if (mode === 'villa' && walker && villaW) { if (!radioOn) { document.getElementById('vSong').classList.remove('on'); return audio.musicLevel(0); } let d = 1e9; for (const R of villaW.sounds.speakers) d = Math.min(d, Math.hypot(R[0] - walker.x, R[1] - walker.z, R[2] - (walker.y - 1.2)));   // (the nearest speaker)
-    document.getElementById('vSong').classList.toggle('on', d < 7 && !walker.watch);
+    document.getElementById('vSong').classList.toggle('on', (d < 7 && !walker.watch) || document.getElementById('vSong').classList.contains('open'));   // (kept up while you're using its buttons)
     const k = Math.max(0, 1 - d / 22);
     return audio.musicLevel(0.04 + 0.5 * k * k, 1800 + 12000 * k * k); }
   if (isRanch()) return audio.musicLevel(0.38, 14000);
