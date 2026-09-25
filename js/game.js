@@ -56,7 +56,7 @@ const jukung = (() => {
     for (const xs of [-1.4, 1.4]) { const arm = m(new THREE.CylinderGeometry(0.05, 0.05, 2.7, 4), 0x5b4a36); arm.rotation.x = Math.PI / 2; arm.position.set(xs, 0.35, zs * 1.3); g.add(arm); }
   }
   const mast = m(new THREE.CylinderGeometry(0.04, 0.05, 3, 4), 0x5b4a36); mast.position.y = 1.7; g.add(mast);
-  g.position.set(-28, 0, -48); g.rotation.y = 0.35; g.scale.setScalar(1.2); scene.add(g); return g;   // anchored out the back, where the swells pass unbroken: you see it while you wait
+  g.position.set(-70, 0, -120); g.rotation.y = 0.35; g.scale.setScalar(1.2); scene.add(g); return g;   // anchored out the back, where the swells pass unbroken: you see it while you wait
 })();
 const birds = (() => {
   const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0.5, -1.1, 0.15, -0.2, 0, 0, -0.3, 0, 0, 0.5, 0, 0, -0.3, 1.1, 0.15, -0.2]), 3));
@@ -104,7 +104,7 @@ const CUT = { value: 0.21 };   // just the neck and head (at 42 cm it cut your a
 const ARMBONE = { value: new Float32Array(96) };
 function cutaway(m) {
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uCut = CUT; sh.uniforms.uArmBone = ARMBONE;
+    sh.uniforms.uCut = CUT; sh.uniforms.uArmBone = ARMBONE; sh.uniforms.uNear = { value: m.userData.near || 0 };
     sh.vertexShader = 'varying vec3 vCutW; varying float vArm; uniform float uArmBone[96];\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
 vCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;
 #ifdef USE_SKINNING
@@ -112,18 +112,18 @@ vArm = skinWeight.x * uArmBone[int(skinIndex.x)] + skinWeight.y * uArmBone[int(s
 #else
 vArm = 0.;
 #endif`);
-    sh.fragmentShader = 'uniform float uCut;\nvarying vec3 vCutW; varying float vArm;\n' + sh.fragmentShader.replace('void main() {', `void main() {
+    sh.fragmentShader = 'uniform float uCut, uNear;\nvarying vec3 vCutW; varying float vArm;\n' + sh.fragmentShader.replace('void main() {', `void main() {
   vec3 cq = vCutW - cameraPosition; float cy = clamp(cq.y, -0.75, 0.);
   if (vArm < 0.12 && (length(cq - vec3(0., cy, 0.)) < uCut * 1.9 || length(cq) < uCut * 2.2)) discard;   // body near the eyes
-  if (length(cq) < uCut * 0.6) discard;   // anything right in the lens (arms are never cut: a cut shows the hollow inside of the arm as a 'fin')`);
+  if (length(cq) < uCut * 0.6 + uNear) discard;   // (uNear > 0 on the shorts: sliced close to the lens they showed as teal hooks)   // anything right in the lens (arms are never cut: a cut shows the hollow inside of the arm as a 'fin')`);
   };
   m.side = THREE.FrontSide;   // (so a cut shows nothing behind it, not the inside of the arm)
-  m.customProgramCacheKey = () => 'cutaway2';
+  m.customProgramCacheKey = () => 'cutaway3' + (m.userData.near || 0);
   m.needsUpdate = true;
 }
 const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
   surfer = g.scene; rig.add(surfer);
-  surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else cutaway(o.material); } });
+  surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else { if (/short/i.test(o.material.name + o.name)) o.material.userData.near = 0.45; cutaway(o.material); } } });
   surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/.test(b.name)) ARMBONE.value[i] = 1; }); });
   mixer = new THREE.AnimationMixer(surfer);
   for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale')); clips[c.name] = mixer.clipAction(c); }
@@ -348,7 +348,7 @@ const _wT = new THREE.Vector3(), _lT = new THREE.Vector3();
 // A real surfer's head is steady: the eye point is smoothed, the horizon stays level with only a slight lean into turns,
 // and the view swings smoothly (never snaps) as you turn. Your own head is hidden so the camera never sees inside it.
 const POVCAM = { fwd: 0.1, up: 0.14, pitch: -0.5, drop: 0.08 };   // eye point ahead of/above the head bone, head pitch riding, extra pitch at the take-off
-const _pq2 = new THREE.Quaternion();
+const _pq2 = new THREE.Quaternion(); let tubeLook = 0;
 const pov = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: -0.2, roll: 0, ready: false }, _eye = new THREE.Vector3(), _pe = new THREE.Euler(0, 0, 0, 'YXZ');
 function povCamera(dt) {
   if (!bones.head && surfer) surfer.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -359,7 +359,10 @@ function povCamera(dt) {
   const travel = moving ? Math.atan2(rider.vz, rider.vx) : rider.th;
   // look mostly where you're travelling, partly where the board points (you see the nose swing in a turn/drift)
   const dh = Math.atan2(Math.sin(rider.th - travel), Math.cos(rider.th - travel));
-  const yawT = travel + dh * (standing ? 0.7 : 0.8);   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
+  let yawT = travel + dh * (standing ? 0.7 : 0.8);
+  // in the barrel look down the tube toward the exit (along the line), not out through the open side at the beach
+  tubeLook += ((rider.inBarrel && standing ? 1 : 0) - tubeLook) * Math.min(1, dt * 3);
+  if (tubeLook > 0.01) yawT += Math.atan2(Math.sin(-0.15 - yawT), Math.cos(-0.15 - yawT)) * 0.65 * tubeLook;   // (more of the board heading: in a snap the board stays in view instead of swinging out of shot)
   const ef = standing ? POVCAM.fwd : -0.05, eu = standing ? POVCAM.up : 0.2;   // lying: eyes at the head, a bit up, so your paddling hands pass below them
   _eye.x += Math.cos(yawT) * ef; _eye.z += Math.sin(yawT) * ef; _eye.y += eu;   // camera just in front of the face, like a surfer's mouth-mounted camera
   // smooth the eye's position relative to the board (not in the world, or at speed it would trail behind your head)
@@ -384,7 +387,7 @@ function povCamera(dt) {
   }
   snapCam = false;
   // head pitch: riding, look down the line and at the nose; lying, look ahead over the nose; at the drop, look down the face
-  const dropK = st === 'POP' ? 7 : st === 'RIDE' ? 7 * Math.max(0, 1 - rider.stateT / 0.5) : 0;   // the pop: eyes down on the board between your hands, then back up to the line
+  const dropK = st === 'POP' ? 4 : st === 'RIDE' ? 4 * Math.max(0, 1 - rider.stateT / 0.5) : 0;   // the pop: eyes down on the board between your hands, then back up to the line
   let pitchLook = -9, pitchT = standing ? POVCAM.pitch - POVCAM.drop * dropK : sitting ? -0.53 : -0.4;   // sitting: tipped down enough to see your knees and hands on the board   // take-off: look down at the board and the face; lying: down enough to see your arms paddling
   // sitting or lying facing out to sea: look up at a wave that's coming (a 15 m wave's crest is well above the horizon)
   if (!standing) {
@@ -395,6 +398,7 @@ function povCamera(dt) {
     }
   }
   if (pitchLook > pitchT) pitchT = pitchLook;
+  pitchT += 0.14 * tubeLook;   // and up a little: the lip over your head
   pov.pitch += (pitchT - pov.pitch) * Math.min(1, dt * (st === 'POP' ? 4 + 20 * Math.min(1, rider.stateT / 0.3) : 5));   // (the pop: eyes snap down to the board between your hands)
   pov.roll += ((standing ? -rider.lean * 0.28 : 0) - pov.roll) * Math.min(1, dt * 6);   // you feel the lean: the horizon tips as you lay into a carve
   // three.js cameras look down -z: turn our heading (angle in x/z) into a yaw about y
@@ -750,6 +754,8 @@ function reachArm(ua, la, hd, T, pole, w) {
     const ang = Math.atan2(_hF.crossVectors(palm, want).dot(ay), palm.dot(want));
     hd.quaternion.multiply(_hP.setFromAxisAngle(_hT.set(0, 1, 0), ang * 0.85 * w)); hd.updateMatrixWorld(true);
   }
+  // fingers relaxed and open (the clip curls them into a fist)
+  hd.traverse((f) => { if (f !== hd && f.isBone) f.quaternion.slerp(_hQ.identity(), 0.75 * w); });
 }
 const _hX = new THREE.Vector3(), _hY = new THREE.Vector3(), _hZ = new THREE.Vector3(), _hF = new THREE.Vector3(), _hT = new THREE.Vector3(), _hM = new THREE.Matrix4(), _hQ = new THREE.Quaternion(), _hP = new THREE.Quaternion();
 function setWorldBasis(bone, X, Y, Z, w) {
