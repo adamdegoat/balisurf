@@ -8,7 +8,8 @@ import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
 import { SurfAudio } from './audio.js?v=8';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
-import { villa, VILLA } from './villa.js?v=11';
+import { villa, VILLA } from './villa.js?v=16';
+import { crew } from './crew.js?v=3';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -211,7 +212,7 @@ function setSpot(m) {
   for (const g of builtSpots()) g.visible = false;
   if (!r) spotGroup(scene, key).visible = true;
   ranchW.group.visible = r;
-  if (villaW) villaW.group.visible = m === 'villa';
+  if (villaW) villaW.group.visible = m === 'villa'; if (crewW) crewW.group.visible = m === 'villa';
   ENV.uReefEnd.value = 190 + S.dz; ENV.uReefTint.value.setRGB(...S.reefTint);
   if (r) ENV.uPool.value.set(POOL.x0, POOL.x1, POOL.z0, POOL.z1); else ENV.uPool.value.set(-1e6, 1e6, -1e6, 1e6);
   ENV.uReef.value = r ? 0 : 1;
@@ -1167,12 +1168,12 @@ function autoQuality(dt) {
 const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)'); let lastPortrait = false;
 let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1, lastPump = false;
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
-let villaW = null, walker = null, vMoveT = null, vLookT = null, vPickType = null;
+let villaW = null, crewW = null, walker = null, vMoveT = null, vLookT = null, vPickType = null;
 const vStick = document.getElementById('vStick'), vPanel = document.getElementById('vPanel');
 function startVilla() {
   if (starting) return;
   mode = 'villa'; setWeather('villa'); audio.start();
-  if (!villaW) { villaW = villa(scene); villaW.group.position.z = SPOTS.medium.dz; }
+  if (!villaW) { villaW = villa(scene); villaW.group.position.z = SPOTS.medium.dz; crewW = crew(scene); }
   setSpot('villa');
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
   if (surfer) endWipe(); rider = null; rig.visible = false;
@@ -1222,13 +1223,13 @@ vm.addEventListener('mousedown', (e) => lookStart('m', e.clientX, e.clientY));  
 addEventListener('mousemove', (e) => lookMove('m', e.clientX, e.clientY));
 addEventListener('mouseup', (e) => lookEnd('m', e.clientX, e.clientY));
 function villaTick(dt) {
-  updateWaves(dt);
+  updateWaves(dt); crewW.update(dt, waves, T);
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const mx = W_.mx || kx, mz = W_.mz || kz, fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), sp = 2.7 * dt;
   let nx = W_.x + (fx * mz - fz * mx) * sp, nz = W_.z + (fz * mz + fx * mx) * sp;
-  const r = 0.3, A = V.walk;
+  const r = 0.3, A = V.walk, foot = W_.y - 1.65;
   nx = Math.min(A.x1, Math.max(A.x0, nx)); nz = Math.min(A.z1, Math.max(A.z0, nz));
   for (const c of V.colliders) {
     if (nx > c[0] - r && nx < c[1] + r && nz > c[2] - r && nz < c[3] + r) {
@@ -1236,6 +1237,7 @@ function villaTick(dt) {
       if (px < pz) nx = nx - (c[0] - r) < c[1] + r - nx ? c[0] - r : c[1] + r; else nz = nz - (c[2] - r) < c[3] + r - nz ? c[2] - r : c[3] + r;
     }
   }
+  if (V.solid && V.solid(nx, nz, foot)) { if (!V.solid(nx, W_.z, foot)) nz = W_.z; else if (!V.solid(W_.x, nz, foot)) nx = W_.x; else { nx = W_.x; nz = W_.z; } }   // (the stair, the deck, the tree)
   W_.x = nx; W_.z = nz;
   // look at a board in the rack and its card comes up by itself (no need to tap); look away and it goes
   W_.gazeT = (W_.gazeT || 0) - dt;
@@ -1243,10 +1245,10 @@ function villaTick(dt) {
     const hit = _vr.intersectObjects(V.rack, true)[0], t = hit ? hit.object.userData.type : null;
     if (t) { W_.gazeOff = 0; if (t !== vPickType) vPick(t); } else if (vPickType && (W_.gazeOff = (W_.gazeOff || 0) + 0.2) > 1.2 && Math.hypot(W_.x - V.rackAt.x, W_.z - V.rackAt.z) > 5) vPick(null); }
   const moving = Math.hypot(mx, mz) > 0.1; W_.bob = (W_.bob || 0) + (moving ? dt * 8 : 0);
-  W_.y += (V.floorAt(W_.x, W_.z) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
+  W_.y += (V.floorAt(W_.x, W_.z, foot) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
   camera.position.set(W_.x, W_.y, W_.z + SPOTS.medium.dz);
   _pe.set(W_.pitch, -W_.yaw - Math.PI / 2, 0); camera.quaternion.setFromEuler(_pe);
-  { const tgt = W_.zoom ? 12 : 50; if (Math.abs(hfovHalf - tgt) > 0.05) setHfov(hfovHalf + (tgt - hfovHalf) * Math.min(1, dt * 6)); else if (hfovHalf !== tgt) setHfov(tgt); }   // binoculars: about 5x
+  { const tgt = W_.zoom ? 8 : 50; if (Math.abs(hfovHalf - tgt) > 0.05) setHfov(hfovHalf + (tgt - hfovHalf) * Math.min(1, dt * 6)); else if (hfovHalf !== tgt) setHfov(tgt); }   // binoculars: about 5x
   sunLight.position.copy(camera.position).addScaledVector(ENV.uSun.value, 30); sunLight.target.position.copy(camera.position);
   audio.update({ H: 4.5, near: 0.15, barrel: false, riding: false, v: 0, turn: 0, lean: 0, slide: 0, stall: false, storm: 0, rain: 0, underwater: false, dt, chop: 1 });
 }
@@ -1337,4 +1339,4 @@ renderer.setAnimationLoop(() => {
   }
   autoQuality(dt);
 });
-window.__g = { get walker() { return walker; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
+window.__g = { get walker() { return walker; }, get crew() { return crewW; }, startVilla: () => startVilla(), useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
