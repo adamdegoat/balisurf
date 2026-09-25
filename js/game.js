@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=93';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=111';
-import { makeBoard } from './board.js?v=6';
+import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
+import { makeBoard, BOARD_LENGTH } from './board.js?v=7';
 import { SurfAudio } from './audio.js?v=8';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=7';
@@ -52,7 +52,17 @@ fit();
 
 // ---------- surfer on a board
 const rig = new THREE.Group(); scene.add(rig);           // board frame: +z along the board, +y out of the deck
-const board = makeBoard(); rig.add(board);
+let board = makeBoard(); rig.add(board);
+// your board: the shortboard unless you've picked another (remembered on this phone). A longer board sits further forward
+// under you, so the nose reaches out ahead of your feet as on the real thing
+let boardType = 'short', boardTail = -0.9;
+function useBoard(t) {
+  boardType = t; try { localStorage.setItem('sumbasurf.board', t); } catch (e) {}
+  rig.remove(board); board.geometry.dispose(); board = makeBoard(t); board.position.z = Math.max(0, (BOARD_LENGTH(t) - 1.88) * 0.33); rig.add(board);
+  boardTail = board.position.z - BOARD_LENGTH(t) / 2 + 0.04; setBoard(t);
+  for (const b of document.querySelectorAll('[data-board]')) b.classList.toggle('on', b.dataset.board === t);
+}
+try { const t = localStorage.getItem('sumbasurf.board'); if (t && t !== 'short') setTimeout(() => useBoard(t), 0); } catch (e) {}
 // a jukung (Balinese outrigger fishing boat) anchored in the channel up-reef of the peak, bobbing on the swell, and a
 // few frigate birds wheeling high over the lineup
 const jukung = (() => {
@@ -105,7 +115,7 @@ const _la = new THREE.Vector3(), _lb = new THREE.Vector3(), _lc = new THREE.Vect
 function updateLeash() {
   if (!surfer || !bones.foot_l || !rig.visible || !surfer.visible) { leash.visible = false; return; }   // (hidden while you tumble: you ARE the camera)
   leash.visible = true;
-  rig.localToWorld(_la.set(0, 0.05, -0.9));                                              // the plug near the tail
+  rig.localToWorld(_la.set(0, 0.05, boardTail));                                         // the plug near the tail
   const fl = bones.foot_l.getWorldPosition(_lb), fr = bones.foot_r.getWorldPosition(_lc);
   const ankle = fl.distanceToSquared(_la) < fr.distanceToSquared(_la) ? fl : fr;         // whichever foot is at the back
   const d = _la.distanceTo(ankle), sag = Math.max(0, 1.8 - d) * 0.35, p = leash.geometry.attributes.position;
@@ -376,6 +386,7 @@ function showBests() {
 }
 showBests();
 for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => start(b.dataset.mode));
+for (const b of document.querySelectorAll('[data-board]')) b.addEventListener('click', () => useBoard(b.dataset.board));
 let starting = false;
 // back to the level select: stop the game behind the menu (you pick a level again to restart)
 function toMenu() {
@@ -1092,7 +1103,7 @@ function updateHUD(dt) {
   else if (st === 'RIDE' && rider.inBarrel && (rider.foamT || 0) > 0.4) hint = 'Too deep! PUMP and steer up the face to get out';
   else if (st === 'RIDE' && rider.stateT < 7.5 && session.waves < 3) hint = rider.stateT < 2.5 ? 'Slide your thumb left and right to carve, like a steering wheel' : rider.stateT < 5 ? 'Hold PUMP for speed, STALL to brake and let the barrel catch you' : 'Let go and the board just glides straight';
   else if (st === 'RIDE' && rider.stateT > 8 && rider.stateT < 12 && session.waves < 5 && !rider.ride.cutbacks) hint = 'Cutback: keep turning right till you face the breaking wave, then turn back';
-  else if (st === 'RIDE' && rider.stateT > 13 && rider.stateT < 17 && session.waves >= 1 && session.waves < 6 && !rider.ride.moves.some((m) => m.name.startsWith('AIR'))) hint = 'Air: race down, then turn hard up the face into the lip and it launches you';
+  else if (st === 'RIDE' && rider.stateT > 13 && rider.stateT < 17 && session.waves >= 1 && session.waves < 6 && !rider.ride.moves.some((m) => m.name.startsWith('AIR')) && RIDE.air) hint = 'Air: race down, then turn hard up the face into the lip and it launches you';
   // the curl is right behind you: tell the player how to get covered (a barrel comes to whoever sets up for it)
   if (st === 'RIDE' && !hint && !rider.inBarrel && rider.wave && rider.s > 0 && rider.s < 2.2 * rider.wave.cond.H && rider.wave.cond.hollow > 0.5 && session.barrels < 2) hint = rider.y < 0.6 * rider.wave.cond.H ? 'Barrel coming! Stay low and hold STALL' : 'The lip is pitching behind you: drop low to get barreled';
   setText(ui.hint, session.waves < 5 || st === 'POP' ? hint : '');
@@ -1227,4 +1238,4 @@ renderer.setAnimationLoop(() => {
   }
   autoQuality(dt);
 });
-window.__g = { ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };
+window.__g = { useBoard: (t) => useBoard(t), ranchSend: (k) => ranchSend(k), paused: false, cutaway, CUT, armCam, audio, renderer, scene, camera, rig, get surfer() { return surfer; }, get rider() { return rider; }, get waves() { return waves; }, incoming, input, keys, setMode: (m) => { mode = m; setWeather(m); setSpot(m); ui.cond.textContent = modeName(m); for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15; updateWaves(0); }, step: (sec, dt = 1 / 30, draw = true) => { for (let t = 0; t < sec; t += dt) tick(dt); if (draw) renderer.render(scene, camera); }, spawnRider, get T() { return T; }, want: () => _want };

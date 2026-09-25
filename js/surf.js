@@ -24,7 +24,24 @@ export const RIDE = {
   pump: 0.5,                           // pumping adds this share of the downhill pull (and costs 1.2x that when climbing)
   popTime: 0.35,                       // seconds from lying to standing
   waterPush: 1.0,                      // how much the wave's moving water carries you
+  catchK: 1,                           // how much speed and slope a board needs to catch a wave (bigger boards: less)
+  turnMin: 1,                          // share of the shortboard's turn rate that counts as a real turn
+  air: true,                           // can this board launch an air
 };
+
+// The boards. Each changes the physics the way the real thing does (relative to the 6'2" shortboard above):
+//   fish      5'8" wide twin fin: paddles and planes easily and holds speed with little pumping; loose, skatey turns that
+//             drift early; less grip on steep heavy waves
+//   longboard 9'2": paddles fast and catches waves early; very stable and glides; slow, wide turns; no snaps or airs
+//   gun       9'6" big-wave board: paddles into huge waves early; holds a line at high speed with lots of grip; stiff turns
+const BASE = { ...RIDE };
+export const BOARDS = {
+  short: {},
+  fish: { paddleThrust: 3.0, paddleMax: 2.7, drag: 0.07, drag2: 0.011, leanMax: 1.25, leanRate: 8.0, yawLag: 0.1, railBite: 0.25, gripMax: 18, tailLet: 0.25, skidLoss: 0.12, glide: 0.78, pump: 0.62, catchK: 0.85 },
+  long: { paddleThrust: 3.4, paddleMax: 3.1, lieDrag: 0.18, drag: 0.075, drag2: 0.009, leanMax: 0.85, leanRate: 4.0, yawLag: 0.35, railBite: 0.42, gripMax: 20, glide: 0.82, pump: 0.3, popTime: 0.5, catchK: 0.65, air: false, turnMin: 0.55 },
+  gun: { paddleThrust: 3.2, paddleMax: 3.0, lieDrag: 0.2, drag: 0.08, drag2: 0.009, leanMax: 1.0, leanRate: 5.0, yawLag: 0.25, railBite: 0.35, finGrip: 5.0, gripMax: 30, glide: 0.75, pump: 0.4, popTime: 0.42, catchK: 0.75, turnMin: 0.75 },
+};
+export function setBoard(name) { Object.assign(RIDE, BASE, BOARDS[name] || {}); }
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -302,8 +319,8 @@ export class Rider {
       // the catch: on the face, heading for the beach, and going as fast as the wave
       // (once you're sliding down a steep enough face at a good share of its speed, it has you: you pop up and gravity does the rest)
       // (on a huge wave you get in earlier, lower on the face, like a big-wave gun: the speed you need is capped)
-      const catchV = Math.min(C.speed * 0.5, 3.2 + 0.1 * C.speed);
-      if (this.onFace && this.recentPaddle > 0 && Math.sin(this.th) > 0.2 && this.vz > catchV && slope > 0.4) { this.catchT += h; if (this.catchT > 0.1) { this.set('POP'); this.catchT = 0; } }
+      const catchV = Math.min(C.speed * 0.5, 3.2 + 0.1 * C.speed) * P.catchK;   // (a longer, floatier board gets in with less)
+      if (this.onFace && this.recentPaddle > 0 && Math.sin(this.th) > 0.2 && this.vz > catchV && slope > 0.4 * P.catchK) { this.catchT += h; if (this.catchT > 0.1) { this.set('POP'); this.catchT = 0; } }
       else this.catchT = 0;
       return;
     }
@@ -328,7 +345,7 @@ export class Rider {
     else if (this.wwFloatT > 0) { if (this.wwFloatT > 0.35) this.move('FLOATER', Math.min(1, this.wwFloatT / 1.2)); this.wwFloatT = 0; }   // made it back onto the clean face
     // an air: come up the face fast and hit the lip, and it throws you into the sky with it (going up slowly, it just
     // takes you over the falls, below). Needs speed and a steep, rising face; not from inside the tube
-    if (this.state === 'RIDE' && this.stateT > 0.8 && onFront && s > -0.25 * H && y > 0.78 * sl.top && this.vyS > Math.max(2.6, 0.42 * Math.sqrt(9.8 * H)) && this.v > 0.8 * C.speed && this.upT > 0.12) {   // (a deliberate hit: fast, and pointing up at the lip, not a top turn that happens to rise)
+    if (P.air && this.state === 'RIDE' && this.stateT > 0.8 && onFront && s > -0.25 * H && y > 0.78 * sl.top && this.vyS > Math.max(2.6, 0.42 * Math.sqrt(9.8 * H)) && this.v > 0.8 * C.speed && this.upT > 0.12) {   // (a deliberate hit: fast, and pointing up at the lip, not a top turn that happens to rise)
       this.air = { t: 0, vy: Math.min(0.9 * Math.sqrt(9.8 * H), this.vyS * 1.1 + 1.2), spin: 0, peak: 0 };   // (capped: you fly about as high as the wave is steep, not further)
       this.vz = Math.max(this.vz, C.speed * 1.02);   // the throwing lip carries you forward with it
       this.inBarrel = false; this.onFace = false; return;
@@ -362,7 +379,7 @@ export class Rider {
       if (this.inBarrel) this.tubeOut = 0;
       // a turn counts when the carve swings hard one way and then hard the other at speed
       // (and only a real carve: the last one held for at least 0.35 s, so thumb wiggles don't count)
-      if (Math.abs(this.turn) > 0.9 && this.v > C.peel * 0.8) {
+      if (Math.abs(this.turn) > 0.9 * P.turnMin && this.v > C.peel * 0.8) {   // (a longboard's flowing turns count at its own, gentler rate)
         const sg = Math.sign(this.turn);
         if (sg !== this.turnSign) { if (this.turnSign !== 0 && this.turnHold > 0.35) { this.ride.turns++; this.move('TURN', crit); } this.turnSign = sg; this.turnHold = 0; }
         else this.turnHold = (this.turnHold || 0) + h;
@@ -374,7 +391,7 @@ export class Rider {
       // a snap (top turn): climb hard up to the lip, then whip the board back down the face from up there
       const relVz = this.vz - C.speed, hTop = y / Math.max(sl.top, 0.3);
       if (relVz < -1.2 && hTop > 0.6) this.snapArm = 1.2; else this.snapArm = Math.max(0, this.snapArm - h);
-      if (this.snapArm > 0 && relVz > 0.8 && hTop > 0.5 && Math.abs(this.turn) > 0.9 && !(this.trick && this.trick.name.endsWith('SNAP'))) {
+      if (this.snapArm > 0 && relVz > 0.8 && hTop > 0.5 && Math.abs(this.turn) > 1.3 && !(this.trick && this.trick.name.endsWith('SNAP'))) {
         this.snapArm = 0; this.ride.snaps++; this.move('SNAP', crit);
       }
       if (this.trick) { this.trick.t += h; if (this.trick.t > 1.4) this.trick = null; }
