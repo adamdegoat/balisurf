@@ -226,7 +226,7 @@ function incoming() {
 }
 function spawnRider() {
   if (surfer) endWipe(); rig.visible = true; for (const b of birds) b.visible = true;
-  pumpC = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
+  pumpC = 0; pumpA = 0; stanceW = 0; lastState = ''; endT = -1; snapCam = true;
   rider = rider || new Rider();
   // in the lineup: just outside and a little down the line from the peak, sitting up facing the sets
   rider.reset(2 + Math.random() * 4, -7 - Math.random() * 3, -Math.PI / 2);
@@ -568,8 +568,10 @@ function updateRig(dt, t) {
   } else if (st === 'RIDE') {
     // crouch: deeper at speed and in the barrel; pumping compresses the legs, letting go extends them
     pumpC += ((input.paddle ? 1 : 0) - pumpC) * Math.min(1, dt * 7);
+    // pumping is a rhythm, not a held squat: compress onto the board on the way down, spring up light, ~1.4 times a second
+    pumpA += ((input.paddle ? 1 : 0) - pumpA) * Math.min(1, dt * 5); if (pumpA > 0.01) pumpPh += dt * Math.PI * 2 * 1.4;
     // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
-    const deep = Math.min(0.7, (rider.inBarrel ? 0.45 : 0.14 + 0.06 * Math.min(1, rider.v / 10)) + 0.2 * pumpC + 0.25 * gLoad + 0.22 * Math.min(1, Math.abs(rider.lean) / RIDE.leanMax) + 0.2 * (rider.stalling || 0));   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
+    const deep = Math.min(0.7, (rider.inBarrel ? 0.45 : 0.14 + 0.06 * Math.min(1, rider.v / 10)) + 0.22 * pumpA * (0.5 + 0.5 * Math.sin(pumpPh)) + 0.25 * gLoad + 0.22 * Math.min(1, Math.abs(rider.lean) / RIDE.leanMax) + 0.2 * (rider.stalling || 0));   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     // rising out of the pop-up's deep squat over half a second (not snapping up: that jerks your eyes up 16 cm in a frame)
     const up_ = Math.min(1, rider.stateT / 0.6), rise = up_ * up_ * (3 - 2 * up_);
@@ -832,7 +834,7 @@ function swingBone(bone, end, sgn, ang) {
   bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));
   bone.updateMatrixWorld(true);
 }
-let stanceW = 0, pumpC = 0, sitting = false, sitTilt = 0;
+let stanceW = 0, pumpC = 0, pumpA = 0, pumpPh = 0, sitting = false, sitTilt = 0;
 const rigQ = new THREE.Quaternion();
 function straddle() { straddleFor(bones, rig, surfer); }
 // the same straddle for any sitting body B (bone map) on its board frame R (the locals use it too)
@@ -918,7 +920,7 @@ function surfStance() {
   bones.upperarm_l.getWorldPosition(_ik1); bones.upperarm_r.getWorldPosition(_ik2);
   const chest = _cv.crossVectors(WORLD_UP, _ik3.subVectors(_ik2, _ik1)).dot(INTO_WAVE) > 0 ? 1 : 0;   // up x (right - left shoulder) = chest
   const leanW = Math.abs(leanN) * (Math.sign(_in.dot(R) * ws) || 0);   // + = leaning toward the wave (bottom turn), - = away (top turn / cutback)
-  const bt = Math.max(0, leanW), tt = Math.max(0, -leanW), pumpUp = rider.pumping ? Math.sin(bodyT * 6.5) * 0.06 : 0;
+  const bt = Math.max(0, leanW), tt = Math.max(0, -leanW), pumpUp = pumpA * Math.sin(pumpPh) * 0.1;   // + = compressed: the arms drive down and forward with the legs, back up as you spring
   // your eyes this frame (the camera itself is placed after the pose, a frame behind: at 10 m/s that's 17 cm)
   const eye = bones.head.getWorldPosition(_eyeA).addScaledVector(F, POVCAM.fwd).addScaledVector(WORLD_UP, POVCAM.up);
   // a target in eye space: f forward, d down, x toward the wave (negative = open side)
@@ -929,12 +931,12 @@ function surfStance() {
     const front = s === frontArm, sway = Math.sin(bodyT * 1.7 + (front ? 0 : 1.3)) * 0.03;
     const P = _ap;
     if (front) {
-      at(P, chest ? 0.62 : 0.58, 0.42 - sway - pumpUp, chest ? 0.32 : -0.32);   // out over the rail, beside the board                       // trim
+      at(P, (chest ? 0.62 : 0.58) + 0.6 * pumpUp, 0.42 - sway + pumpUp, chest ? 0.32 : -0.32);   // out over the rail, beside the board                       // trim
       if (bt) P.lerp(chest ? at(_aq, 0.6, 0.26, 0.26) : at(_aq, 0.45, 0.7, 0.34), bt);                               // bottom turn
       if (tt) P.lerp(at(_aq, 0.55, 0.5, -0.32), tt);                                                                  // top turn / cutback: leads round, points down the face
       if (deep) P.lerp(chest ? at(_aq, 0.48, 0.55, 0.48) : at(_aq, 0.38, 0.7, -0.4), deep);                           // barrel (backside pigdog: low, grabbing the outside rail)
     } else {
-      at(P, -0.08, 0.78 - sway, -0.3);   // relaxed and low, just ahead of the back hip toward the rail (the shoulder is ~0.35 below the eyes)                                                                                // trim: by the back hip
+      at(P, -0.08 - 0.9 * pumpUp, 0.78 - sway + 0.3 * pumpUp, -0.3);   // relaxed and low, just ahead of the back hip toward the rail (the shoulder is ~0.35 below the eyes)                                                                                // trim: by the back hip
       if (bt) P.lerp(chest ? at(_aq, -0.08, 0.92, 0.35) : at(_aq, -0.2, 0.62, -0.25), bt);
       if (tt) P.lerp(at(_aq, 0.3, 0.75, -0.15), tt);                                                                  // comes across low
       if (deep) P.lerp(chest ? at(_aq, -0.15, 0.7, 0.2) : at(_aq, -0.3, 0.6, 0.4), deep);                             // barrel (backside: trailing arm along the face)
@@ -942,7 +944,7 @@ function surfStance() {
     // a hand never reaches across your body (a whole arm across the view reads as broken): if its pose asks for the
     // other side, it goes to its own side instead; in a stall the drag is done by the hand on the wave side
     bones['upperarm_' + s].getWorldPosition(_ik4);
-    if (stallK) { if ((chest ? !front : front)) P.lerp(at(_aq, 0.55, 0.62, 0.46), stallK); else P.lerp(front ? at(_aq, 0.45, 0.55, -0.2) : at(_aq, -0.1, 0.75, -0.3), stallK); }   // the other hand stays relaxed (never folded back behind its own shoulder)   // frontside the back hand drags, backside the front hand; ahead enough to see it trail through the face
+    if (stallK) { if ((chest ? !front : front)) { at(_aq, 0.35, 0.62, 0.5); _aq.y = Math.min(Math.max(heightAt(waves, _aq.x, _aq.z) + 0.02, eye.y - 0.85), eye.y - 0.5); P.lerp(_aq, stallK); } else P.lerp(front ? at(_aq, 0.45, 0.55, -0.2) : at(_aq, -0.1, 0.75, -0.3), stallK); }   // the other hand stays relaxed (never folded back behind its own shoulder)   // frontside the back hand drags, backside the front hand; ahead enough to see it trail through the face   // the drag hand is on the water itself: fingers in the face beside you
     // pop-up: flat on the deck under your shoulders, beside your ribs
     // pop-up: hands flat on the deck either side of the stringer, just ahead of your chest (placed on the board itself)
     if (popK > 0) { const sideSign = Math.sign(_cv.subVectors(bones['upperarm_' + s].getWorldPosition(_ik4), bones.spine_03.getWorldPosition(_ik1)).dot(_ik2.set(1, 0, 0).applyQuaternion(rig.quaternion))) || 1;
