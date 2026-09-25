@@ -124,7 +124,7 @@ export class SurfAudio {
     this.ctx.createMediaElementSource(el).connect(this.mLP).connect(this.mGain).connect(this.lim);
     this.mAn = this.ctx.createAnalyser(); this.mAn.fftSize = 256; this.mAn.smoothingTimeConstant = 0.5; this.mLP.connect(this.mAn); this.mBins = new Uint8Array(this.mAn.frequencyBinCount);   // (listens for the bass, for the speaker cones)
     el.addEventListener('ended', () => this.musicNext()); el.addEventListener('error', () => setTimeout(() => this.musicNext(), 1000));
-    this.musicNext();
+    this.musicNext(); this.musicKick();
   }
   musicNext() {
     if (!this.order.length) { const o = this.tracks.slice(); for (let i = o.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [o[i], o[j]] = [o[j], o[i]]; }
@@ -138,6 +138,7 @@ export class SurfAudio {
     if (v > 0.001) { clearTimeout(this.mStop); this.mStop = 0; if (this.mel.paused && this.ctx.state === 'running') this.mel.play().catch(() => {}); }
     else if (!this.mel.paused && !this.mStop) this.mStop = setTimeout(() => { this.mStop = 0; if (!(this.mWant > 0.001)) this.mel.pause(); }, 3000);
   }
+  musicKick() { if (this.mel && this.mel.paused) this.mel.play().catch(() => {}); }   // (called inside a tap: on an iPhone the first play has to be)
   // how hard the bass is hitting right now, 0..1 (the kick and the bass line)
   musicBeat() { if (!this.mAn || this.mel.paused) return 0; this.mAn.getByteFrequencyData(this.mBins); let e = 0; for (let i = 1; i < 6; i++) e += this.mBins[i]; e /= 5 * 255; this.mB = Math.max(e, (this.mB || 0) * 0.9); return Math.max(0, (e - this.mB * 0.7) * 3.3); }
   quiet(on) { if (this.ok) this.set(this.master.gain, on ? 0 : 0.55, 0.3); }   // the game's own sounds off (in the menu), the music carries on

@@ -5,7 +5,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=95';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=114';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=10';
-import { SurfAudio } from './audio.js?v=11';
+import { SurfAudio } from './audio.js?v=12';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=10';
 import { villa, VILLA } from './villa.js?v=32';
@@ -1207,9 +1207,12 @@ function musicTick() {
   if (isRanch()) return audio.musicLevel(0.38, 14000);
   audio.musicLevel(0);   // (on the reef, only the sea: the sound of the wave is how you surf)
 }
-// the first touch anywhere wakes the sound (a phone won't play anything before that), and the music starts
-{ const first = () => { audio.start(); audio.musicStart(MUSIC); if (!document.body.classList.contains('playing')) audio.quiet(true); removeEventListener('pointerdown', first, true); removeEventListener('touchend', first, true); };
-  addEventListener('pointerdown', first, true); addEventListener('touchend', first, true); }
+// sound can only start from a tap (a phone plays nothing before one, and an iPhone only counts the END of a tap, not
+// the finger going down). Every tap tries until the sound and the music are really running, then it stops listening
+{ const tip = document.getElementById('soundTip');
+  const unlock = () => { audio.start(); audio.wake(); audio.musicStart(MUSIC); audio.musicKick(); if (!document.body.classList.contains('playing')) audio.quiet(true);
+    setTimeout(() => { if (audio.ok && audio.ctx.state === 'running' && audio.mel && !audio.mel.paused) { for (const ev of ['touchend', 'click', 'keydown']) removeEventListener(ev, unlock, true); if (tip) tip.hidden = true; } }, 400); };
+  for (const ev of ['touchend', 'click', 'keydown']) addEventListener(ev, unlock, true); }
 function vSit() { const W_ = walker; if (!W_ || !W_.near) return;
   if (W_.near.radio) { radioOn = !radioOn; vSitB.textContent = radioOn ? 'MUSIC OFF' : 'MUSIC ON'; return; }   // (the radio: a switch, not a seat)
   W_.sit = W_.near; W_.stand = [W_.x, W_.z, W_.y]; W_.sitT = 1.2; W_.mx = W_.mz = 0; vSitB.textContent = 'STAND UP'; }
