@@ -19,9 +19,9 @@ export const CONDITIONS = {
   //   fat   = how gently the lower face ramps out in front (soft ramp vs near-vertical wall)
   //   tube  = how much the barrel helps you hold your line inside it (a small friendly tube is easy to stay in; a heavy one is all on you)
   // speed from shallow-water physics c ~ sqrt(g(d+H/2)) with d = H/0.78, ~4.2*sqrt(H)
-  easy:    { H: 2.8,  speed: 6.0,  peel: 3.0,  angle: 62, period: 12, hollow: 0.72, forgive: 0.6, len: 1,   width: 1.3,  fat: 1.3, tube: 1.3,  name: 'Easy' },     // a proper head-and-a-half wave, but slow and forgiving (slower than a real one this size): the beginner's barrel
-  medium:  { H: 3.5,  speed: 7.6,  peel: 4.2,  angle: 62, period: 14, hollow: 0.8,  forgive: 1,   len: 1.1, width: 1.1,  fat: 1.1, tube: 1.0,  name: 'Medium' },   // clean peeling walls
-  hard:    { H: 5.0,  speed: 9.4,  peel: 6.8,  angle: 55, period: 16, hollow: 1.0,  forgive: 0.85,   len: 1.5, width: 0.95, fat: 0.8, tube: 0.15, name: 'Hard' },     // steep, hollow, heavy
+  easy:    { H: 3.5,  speed: 6.4,  peel: 3.4,  angle: 62, period: 12, hollow: 0.72, forgive: 0.6, len: 1,   width: 1.3,  fat: 1.3, tube: 1.3,  name: 'Easy' },     // a proper double-overhead wave, but slow and forgiving (slower than a real one this size): the beginner's barrel
+  medium:  { H: 4.5,  speed: 8.4,  peel: 5.0,  angle: 62, period: 14, hollow: 0.8,  forgive: 1,   len: 1.1, width: 1.1,  fat: 1.1, tube: 1.0,  name: 'Medium' },   // clean peeling walls
+  hard:    { H: 6.0,  speed: 10.2, peel: 7.6,  angle: 55, period: 16, hollow: 1.0,  forgive: 0.85,   len: 1.5, width: 0.95, fat: 0.8, tube: 0.15, name: 'Hard' },     // steep, hollow, heavy
   extreme: { H: 15,   speed: 13.5, peel: 11,   angle: 45, period: 20, hollow: 1.0,  forgive: 1,   len: 4,   width: 1.25, fat: 1.1, tube: 0.3,  name: 'Extreme' },  // a 15 m mountain of water; a giant reef wave breaks in shallower water (H/d ~1.1) and runs ~13-14 m/s, like Jaws
 };
 
