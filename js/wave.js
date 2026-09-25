@@ -71,7 +71,7 @@ export class Wave {
     if (shared) {
       this.geo = shared.geo; this.xs = shared.xs; this.shared = true;
       this.mesh = new THREE.Mesh(shared.geo, shared.mat); this.mesh.frustumCulled = false; scene.add(this.mesh);
-      this.initSpray(scene); this.initMist(scene); this.initVeil(scene);
+      this.initSpray(scene); this.initMist(scene); this.initVeil(scene); this.initSpit(scene);
       return;
     }
     const g = new THREE.BufferGeometry();
@@ -92,7 +92,7 @@ export class Wave {
     this.mesh.frustumCulled = false;
     scene.add(this.mesh);
     this.initSpray(scene);
-    this.initMist(scene); this.initVeil(scene);
+    this.initMist(scene); this.initVeil(scene); this.initSpit(scene);
     this.xs = new Float32Array(NX);
     this.build();
     SHARED.set(cond, { geo: this.geo, mat: this.mesh.material, xs: this.xs }); this.shared = true;
@@ -198,11 +198,41 @@ export class Wave {
       if (this.ml[i] <= 0) P[i * 3 + 1] = -99;
     }
     this.mist.geometry.attributes.position.needsUpdate = true;
-    this.mist.material.opacity = 0.38 * this.fade;
+    this.mist.material.opacity = 0.26 * this.fade;
+  }
+  // barrel spit: every few seconds a hollow wave's tube compresses and blows a burst of mist out of its mouth, along
+  // the line ahead of the curl (its own particles: brighter than the drifting whitewater mist)
+  initSpit(scene) {
+    const N = 110; this.spitN = N;
+    this.tp = new Float32Array(N * 3).fill(-99); this.tv = new Float32Array(N * 3); this.tl = new Float32Array(N).fill(-1);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.tp, 3));
+    this.spit = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf6f4ee, size: 0.45 * this.cond.H, map: sprite('mist', 64, [[0, 'rgba(255,255,255,.9)'], [0.5, 'rgba(255,255,255,.35)'], [1, 'rgba(255,255,255,0)']]), transparent: true, opacity: 0.6, depthWrite: false }));
+    this.spit.frustumCulled = false; scene.add(this.spit);
+    this.spitT = 3 + Math.random() * 4;
+  }
+  updateSpit(dt) {
+    const H = this.cond.H, P = this.tp, V = this.tv;
+    if (this.cond.hollow > 0.5 && this.fade > 0.3 && (this.spitT -= dt) <= 0) {
+      this.spitT = 5 + Math.random() * 5;
+      for (let i = 0; i < this.spitN; i++) {
+        const s0 = -(0.5 + Math.random() * 1.3) * H, sh = this.shapeAt(s0), amp = this.amp(s0);
+        P[i * 3] = this.peelX + s0; P[i * 3 + 1] = (0.2 + Math.random() * 0.3) * H * amp;
+        P[i * 3 + 2] = sh.P[5][0] * H * (this.cond.width || 1) + this.zW + this.bend(s0) + (Math.random() - .5) * 0.4 * H;
+        V[i * 3] = this.cond.peel * (1.5 + Math.random()); V[i * 3 + 1] = (Math.random() - .3) * 1.5; V[i * 3 + 2] = this.cond.speed * 0.9 + (Math.random() - .5) * 2;
+        this.tl[i] = 0.6 + Math.random() * 0.9;
+      }
+    }
+    for (let i = 0; i < this.spitN; i++) {
+      if (this.tl[i] <= 0) { P[i * 3 + 1] = -99; continue; }
+      this.tl[i] -= dt; V[i * 3] *= Math.exp(-1.5 * dt); V[i * 3 + 1] -= 0.8 * dt;
+      P[i * 3] += V[i * 3] * dt; P[i * 3 + 1] += V[i * 3 + 1] * dt; P[i * 3 + 2] += V[i * 3 + 2] * dt;
+    }
+    this.spit.geometry.attributes.position.needsUpdate = true;
+    this.spit.material.opacity = 0.6 * this.fade;
   }
   // offshore spray: the land breeze blows a thin veil of spray back off the top of the standing face (the Bali look)
   initVeil(scene) {
-    const N = 260; this.veilN = N;
+    const N = 560; this.veilN = N;
     this.vp = new Float32Array(N * 3); this.vv = new Float32Array(N * 3); this.vl = new Float32Array(N).fill(-1);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.vp, 3));
     this.veil = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.55 * Math.sqrt(this.cond.H), map: sprite('veil', 64, [[0, 'rgba(255,255,255,.7)'], [0.45, 'rgba(255,255,255,.22)'], [1, 'rgba(255,255,255,0)']]), transparent: true, opacity: 0.3, depthWrite: false }));
@@ -212,16 +242,16 @@ export class Wave {
     const H = this.cond.H, P = this.vp, V = this.vv;
     for (let i = 0; i < this.veilN; i++) {
       if (this.vl[i] <= 0) {
-        if (Math.random() > 0.35) { P[i * 3 + 1] = -99; continue; }
+        if (Math.random() > 0.75) { P[i * 3 + 1] = -99; continue; }
         // along the crest of the standing face, from the curl out onto the shoulder, where the wave is tall and steep
-        const s = -H + Math.random() * 14 * H;
+        const s = -H + Math.pow(Math.random(), 1.8) * 13 * H;   // thickest near the curl, where the face is steepest
         const sh = this.shapeAt(s), crest = sh.P[9];
         if (crest[1] < 0.55 || sh.broken > 0.3) { P[i * 3 + 1] = -99; continue; }
         const amp = this.amp(s);
         P[i * 3] = this.peelX + s + (Math.random() - .5) * 1.5;
         P[i * 3 + 1] = crest[1] * H * amp + Math.random() * 0.15 * H;
         P[i * 3 + 2] = crest[0] * H * (this.cond.width || 1) + this.zW + this.bend(s);
-        V[i * 3] = (Math.random() - .5) * 0.8; V[i * 3 + 1] = 0.6 + Math.random() * 1.2; V[i * 3 + 2] = this.cond.speed - 3 - Math.random() * 4;   // rides in with the wave, blown back off its top
+        V[i * 3] = (Math.random() - .5) * 0.8; V[i * 3 + 1] = 1 + Math.random() * 1.8; V[i * 3 + 2] = this.cond.speed - 4 - Math.random() * 5;   // rides in with the wave, blown back off its top
         this.vl[i] = 0.8 + Math.random() * 1.2;
       }
       this.vl[i] -= dt;
@@ -230,7 +260,7 @@ export class Wave {
       if (this.vl[i] <= 0) P[i * 3 + 1] = -99;
     }
     this.veil.geometry.attributes.position.needsUpdate = true;
-    this.veil.material.opacity = 0.55 * this.fade;
+    this.veil.material.opacity = 0.75 * this.fade;
   }
   initSpray(scene) {
     const N = 900; this.sprayN = N;
@@ -249,7 +279,8 @@ export class Wave {
     if (!this.shared) { this.geo.dispose(); this.mesh.material.dispose(); }   // shared shapes stay for the next wave
     this.spray.geometry.dispose(); this.spray.material.dispose();
     scene.remove(this.mist); this.mist.geometry.dispose(); this.mist.material.dispose();
-    scene.remove(this.veil); this.veil.geometry.dispose(); this.veil.material.dispose();   // (sprites are shared: kept)
+    scene.remove(this.veil); this.veil.geometry.dispose(); this.veil.material.dispose();
+    scene.remove(this.spit); this.spit.geometry.dispose(); this.spit.material.dispose();   // (sprites are shared: kept)
   }
   lipAt(s) {                                          // world position of the lip tip for the slice at s
     // the shape for a given s never changes, so remember it (per 10 cm); only x moves with the peel
@@ -296,6 +327,7 @@ export class Wave {
     this.updateSpray(dt);
     this.updateMist(dt);
     this.updateVeil(dt);
+    this.updateSpit(dt);
   }
 }
 
