@@ -8,8 +8,9 @@ import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
 import { SurfAudio } from './audio.js?v=14';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=22';
-import { villa, VILLA } from './villa.js?v=62';
+import { villa, VILLA } from './villa.js?v=65';
 import { makeBirds } from './birds.js?v=1';
+import { friends } from './friends.js?v=3';
 import { crew } from './crew.js?v=5';
 import { wildlife } from './wildlife.js?v=8';
 
@@ -229,7 +230,7 @@ function setSpot(m) {
   for (const g of builtSpots()) g.visible = false;
   if (!r) spotGroup(scene, key).visible = true;
   ranchW.group.visible = r;
-  if (villaW) villaW.group.visible = m === 'villa'; if (crewW) crewW.group.visible = m === 'villa'; if (wildW) wildW.group.visible = m === 'villa';
+  if (villaW) villaW.group.visible = m === 'villa'; if (crewW) crewW.group.visible = m === 'villa'; if (wildW) wildW.group.visible = m === 'villa'; if (friendsW) { friendsW.group.visible = m === 'villa'; if (m !== 'villa') friendsW.hide(); }
   { const warm = m === 'villa'; hemi.color.set(warm ? 0xfff0dc : 0xcfe6ff); hemi.groundColor.set(warm ? 0x5a4030 : 0x3a4a48); sunLight.color.set(warm ? 0xffdcb0 : 0xfff0dd); }   // (the villa in warm evening light, reflected off the wood; the surf spots keep their clear daylight)
   ENV.uReefEnd.value = 190 + S.dz; ENV.uReefTint.value.setRGB(...S.reefTint);
   if (r) ENV.uPool.value.set(POOL.x0, POOL.x1, POOL.z0, POOL.z1); else ENV.uPool.value.set(-1e6, 1e6, -1e6, 1e6);
@@ -1288,7 +1289,7 @@ function vSit() { const W_ = walker; if (!W_ || !W_.near) return;
 function vStand() { const W_ = walker; if (!W_ || !W_.sit) return; [W_.x, W_.z, W_.y] = W_.stand;   // (feet back where they were: standing up on the tree deck, you're still on the deck)
   W_.sit = null; W_.near = null; W_.seatT = 0.5; vSitB.classList.remove('on'); }
 { const t = (e) => { e.preventDefault(); e.stopPropagation(); if (walker && walker.sit) vStand(); else vSit(); }; vSitB.addEventListener('click', t); vSitB.addEventListener('touchstart', t, { passive: false }); }
-let villaW = null, crewW = null, wildW = null, birdsW = null, walker = null, vMoveT = null, vLookT = null, vPickType = null;
+let villaW = null, crewW = null, wildW = null, birdsW = null, friendsW = null, walker = null, vMoveT = null, vLookT = null, vPickType = null;
 const vStick = document.getElementById('vStick'), vPanel = document.getElementById('vPanel');
 // the villa, its surfers, the wildlife and the birds: built once. Normally done quietly while you're on the menu (so
 // tapping Your villa opens at once); if you get there first, right then
@@ -1408,7 +1409,9 @@ vm.addEventListener('mousedown', (e) => lookStart('m', e.clientX, e.clientY));  
 addEventListener('mousemove', (e) => lookMove('m', e.clientX, e.clientY));
 addEventListener('mouseup', (e) => lookEnd('m', e.clientX, e.clientY));
 function villaTick(dt) {
-  updateWaves(dt); crewW.update(dt, waves, T); wildW.update(dt, waves); birdsW.update(dt); if (villaW.tick) villaW.tick(dt, radioOn ? audio.musicBeat() : 0, walker.x, walker.z, walker.y - 1.65);
+  updateWaves(dt); crewW.update(dt, waves, T); wildW.update(dt, waves); birdsW.update(dt);
+  if (!friendsW && surfer) friendsW = friends(scene, surfer, villaW.friendSpots.map((f) => ({ ...f, z: f.z + SPOTS.medium.dz, board: f.board && [f.board[0], f.board[1], f.board[2] + SPOTS.medium.dz] })));   // (your friends: as soon as the body model is in)
+  if (friendsW) friendsW.update(dt, T, radioOn ? audio.musicBeat() : 0, { x: walker.x, y: walker.y, z: walker.z + SPOTS.medium.dz }, camera); if (villaW.tick) villaW.tick(dt, radioOn ? audio.musicBeat() : 0, walker.x, walker.z, walker.y - 1.65);
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
@@ -1445,7 +1448,7 @@ function villaTick(dt) {
     const df = d3(V.sounds.fire); if (df < 14 && (W_.fireT = (W_.fireT || 0) - dt) <= 0) { W_.fireT = 0.06 + Math.random() * 0.22; audio.crackle(Math.pow(1 - df / 14, 2)); }
     const dc = d3(V.sounds.chime); if (dc < 20 && (W_.chimeT = (W_.chimeT || 0) - dt) <= 0) { W_.chimeT = Math.random() < 0.6 ? 0.25 + Math.random() * 0.5 : 2 + Math.random() * 4; audio.chime(Math.pow(1 - dc / 20, 1.5)); }
     if ((W_.birdT = (W_.birdT === undefined ? 3 : W_.birdT) - dt) <= 0) { W_.birdT = 5 + Math.random() * 9; audio.bird(0.5 + Math.random() * 0.5); }
-    for (const q of crewW.surfers) { if (q.st === 'RIDE' && q.tubeT > 2.4 && !q.hooted) { q.hooted = true; const d = Math.hypot(q.p.x - W_.x, q.p.z - (W_.z + SPOTS.medium.dz)); audio.hoot(Math.max(0.2, Math.min(1, 70 / d))); } if (!(q.tubeT > 0.1)) q.hooted = false; } }
+    for (const q of crewW.surfers) { if (q.st === 'RIDE' && q.tubeT > 2.4 && !q.hooted) { q.hooted = true; const d = Math.hypot(q.p.x - W_.x, q.p.z - (W_.z + SPOTS.medium.dz)); audio.hoot(Math.max(0.2, Math.min(1, 70 / d))); if (friendsW && Math.random() < 0.6) friendsW.say('nando', ['Did you see that? Spat right out of it!', 'Barrel! What a ride!', 'Deep in there, whoa!', 'That one was all time, brother.'][Math.random() * 4 | 0]); } if (!(q.tubeT > 0.1)) q.hooted = false; } }
   W_.gazeT = (W_.gazeT || 0) - dt;
   if (W_.gazeT <= 0) { W_.gazeT = 0.2; _vp.set(0, -0.1); _vr.setFromCamera(_vp, camera); _vr.far = 4.5;
     const hit = _vr.intersectObjects(V.rack, true)[0], t = hit ? hit.object.userData.type : null;

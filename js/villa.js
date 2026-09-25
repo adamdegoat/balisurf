@@ -171,8 +171,23 @@ export function villa(scene) {
   box(0.35, 0.06, 2.6, PLANK_D, xL + 0.25, Y + 1.5, 41.5); box(0.35, 0.06, 2.6, PLANK_D, xL + 0.25, Y + 2.1, 41.5);   // shelf by the doorway
   for (let k = 0; k < 9; k++) box(0.22, 0.3 + (k % 3) * 0.05, 0.08, [[0.55, 0.2, 0.15], [0.2, 0.3, 0.45], [0.85, 0.75, 0.55]][k % 3], xL + 0.3, Y + 1.7, 40.4 + k * 0.11);
   cyl(0.02, 0.14, 0.3, [0.95, 0.85, 0.78], xL + 0.3, Y + 2.3, 42.3, 8);
-  const PRINT = [[0.13, 0.48, 0.58], [0.93, 0.62, 0.33], [0.17, 0.35, 0.52]];
-  for (let k = 0; k < 3; k++) { const x = -92.1 + k * 1.9; box(1.2, 0.85, 0.05, POST, x, Y + 1.95, V.z1 - 0.1); box(1.05, 0.7, 0.06, PRINT[k], x, Y + 1.95, V.z1 - 0.12, 0.25); box(1.05, 0.12, 0.065, [0.95, 0.95, 0.92], x, Y + 1.76, V.z1 - 0.12); }
+  // three old surf photos in teak frames: a barrel from the inside, a rider on a sunset wave, a faded 1970s poster
+  const photo = (draw) => { const cv = document.createElement('canvas'); cv.width = 320; cv.height = 224; const c = cv.getContext('2d'); draw(c, 320, 224);
+    const im = c.getImageData(0, 0, 320, 224), d = im.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - 0.5) * 18; d[i] = Math.min(255, d[i] * 0.92 + 18 + n); d[i + 1] = Math.min(255, d[i + 1] * 0.9 + 14 + n); d[i + 2] = Math.min(255, d[i + 2] * 0.82 + 6 + n); } c.putImageData(im, 0, 0);   // (sun-faded, grainy)
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+  const PHOTOS = [
+    photo((c, w, h) => { const gr = c.createRadialGradient(w * 0.62, h * 0.5, 10, w * 0.62, h * 0.5, w * 0.7); gr.addColorStop(0, '#e9f4ef'); gr.addColorStop(0.18, '#7fd3c6'); gr.addColorStop(0.5, '#1d7f86'); gr.addColorStop(1, '#0a3a4a'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(220,250,245,.35)'; c.lineWidth = 3; for (let k = 0; k < 9; k++) { c.beginPath(); c.ellipse(w * 0.62, h * 0.5, 40 + k * 22, 30 + k * 18, -0.3, 0, Math.PI * 2); c.stroke(); }
+      c.fillStyle = '#0d1a20'; c.beginPath(); c.ellipse(w * 0.6, h * 0.58, 5, 13, 0.2, 0, 7); c.fill(); c.fillRect(w * 0.6 - 16, h * 0.64, 32, 4); }),   // (looking out of the tube, a tiny surfer in the light)
+    photo((c, w, h) => { const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#f6c77a'); gr.addColorStop(0.55, '#f08a4b'); gr.addColorStop(1, '#6b3a2e'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#fff1c4'; c.beginPath(); c.arc(w * 0.72, h * 0.42, 26, 0, 7); c.fill();
+      c.fillStyle = '#2a1712'; c.beginPath(); c.moveTo(0, h); c.lineTo(0, h * 0.7); c.bezierCurveTo(w * 0.2, h * 0.64, w * 0.38, h * 0.3, w * 0.52, h * 0.34); c.bezierCurveTo(w * 0.6, h * 0.36, w * 0.58, h * 0.5, w * 0.5, h * 0.52); c.bezierCurveTo(w * 0.62, h * 0.62, w * 0.8, h * 0.72, w, h * 0.74); c.lineTo(w, h); c.fill();
+      c.beginPath(); c.ellipse(w * 0.36, h * 0.5, 4, 10, -0.4, 0, 7); c.fill(); c.fillRect(w * 0.33, h * 0.56, 22, 3); }),   // (a rider on the face against the sun)
+    photo((c, w, h) => { c.fillStyle = '#efe2c4'; c.fillRect(0, 0, w, h); c.fillStyle = '#d9542e'; c.beginPath(); c.arc(w / 2, h * 0.46, 54, 0, 7); c.fill();
+      c.fillStyle = '#1f4f6e'; for (let k = 0; k < 4; k++) { c.beginPath(); c.moveTo(0, h * 0.6 + k * 12); for (let x = 0; x <= w; x += 20) c.quadraticCurveTo(x + 10, h * 0.6 + k * 12 - 8, x + 20, h * 0.6 + k * 12); c.lineTo(w, h * 0.6 + k * 12 + 7); c.lineTo(0, h * 0.6 + k * 12 + 7); c.fill(); }
+      c.font = 'bold 34px Georgia, serif'; c.textAlign = 'center'; c.fillStyle = '#1f4f6e'; c.fillText('SUMBA', w / 2, 44); c.font = '16px Georgia, serif'; c.fillStyle = '#9a3a1e'; c.fillText('SURF  CLASSIC  1978', w / 2, h - 16); }) ];
+  for (let k = 0; k < 3; k++) { const x = -92.1 + k * 1.9; box(1.2, 0.88, 0.05, POST, x, Y + 1.95, V.z1 - 0.1);
+    const ph = new THREE.Mesh(new THREE.PlaneGeometry(1.06, 0.74), new THREE.MeshStandardMaterial({ map: PHOTOS[k], roughness: 0.9 })); ph.position.set(x, Y + 1.95, V.z1 - 0.13); ph.rotation.y = Math.PI; ph.scale.x = -1; g.add(ph); }   // (facing into the room, flipped back: the house is mirrored)
   const leafGeo = (() => { const geo = new THREE.SphereGeometry(1, 8, 4); geo.scale(0.35, 0.05, 0.6); geo.translate(0, 0, 0.55); return geo; })();
   const plant = (x, z, s) => { cyl(0.28 * s, 0.2 * s, 0.5 * s, [0.66, 0.38, 0.25], x, Y + 0.25 * s, z);
     for (let k = 0; k < 10; k++) { const m = new THREE.Mesh(tint(leafGeo.clone(), LEAF, 0.3), mat); m.position.set(x, Y + (0.6 + k * 0.1) * s, z); m.rotation.set(0, k * 2.4, 0); m.rotateX(-0.6 - (k % 3) * 0.2); m.scale.setScalar(s); g.add(m); }
@@ -375,7 +390,7 @@ export function villa(scene) {
     for (let k = 0; k < 11; k++) { const an = k / 11 * Math.PI * 2, st = new THREE.Mesh(tint(new THREE.DodecahedronGeometry(0.2, 0), STONE, 0.25), mat); st.position.set(fire.x + Math.cos(an) * 0.62, GY + 0.1, fire.z + Math.sin(an) * 0.62); st.scale.set(1.2, 0.8, 1); st.rotation.y = k; g.add(st); }
     for (let k = 0; k < 3; k++) { const an = k * 2.1; beam(fire.x + Math.cos(an) * 0.4, GY + 0.08, fire.z + Math.sin(an) * 0.4, fire.x - Math.cos(an) * 0.35, GY + 0.22, fire.z - Math.sin(an) * 0.35, 0.07); }
     for (const an of [0.5, 2.2, 3.9]) { const x = fire.x + Math.cos(an) * 2.1, z = fire.z + Math.sin(an) * 2.1, lg = new THREE.Mesh(tint(new THREE.CylinderGeometry(0.22, 0.24, 1.6, 9), [0.42, 0.3, 0.2], 0.2), mat);
-      lg.position.set(x, GY + 0.22, z); lg.rotation.set(0, -an, Math.PI / 2); g.add(lg); block(x - 0.6, x + 0.6, z - 0.6, z + 0.6); }
+      lg.position.set(x, GY + 0.22, z); lg.rotation.set(0, -an + Math.PI / 2, Math.PI / 2); g.add(lg); block(x - 0.6, x + 0.6, z - 0.6, z + 0.6); }   // (lying round the fire like benches)
     block(fire.x - 0.75, fire.x + 0.75, fire.z - 0.75, fire.z + 0.75);
     // palms with the hammock between
     const palm = (x, z, lean) => { const h = 7.5; for (let k = 0; k < 8; k++) { const t0 = k / 8, t1 = (k + 1) / 8; beam(x + lean * t0 * t0 * h * 0.25, GY + t0 * h, z, x + lean * t1 * t1 * h * 0.25, GY + t1 * h, z, 0.17 - 0.06 * t0); }
@@ -486,6 +501,74 @@ export function villa(scene) {
     for (const [t, dy] of [[caus, 0.035], [caus2, 0.04]]) { const q = new THREE.Mesh(new THREE.PlaneGeometry(wx, wz).rotateX(-Math.PI / 2), cm(t)); q.position.set(cx, Y - d + dy, cz); g.add(q); }
     root.userData.caustics = [caus, caus2]; }
 
+  // ---- a surfers' house: boards everywhere, wetsuits drying, a wax station, an outdoor shower, a bar made from an
+  // old longboard. (Boards here are the logo-less ones: the house is drawn mirrored, and a logo would read backwards)
+  const lay = (type, x, y, z, ry, tilt = 0) => { const b = makeBoard(type); b.rotation.order = 'YXZ'; b.rotation.set(tilt, ry, 0); b.position.set(x, y, z); g.add(b); return b; };   // (deck up)
+  const lean = (type, x, z, face, tilt = 0.2) => { const b = makeBoard(type), L = b.userData.length; b.rotation.order = 'YXZ'; b.rotation.set(-Math.PI / 2 + tilt, face, 0);   // standing on its tail, deck toward face, top leaning back
+    b.position.set(x, GY0 + 0.2 + L / 2 * Math.cos(tilt) + 0.02, z); g.add(b); return b; };
+  // the garden rack: four boards standing against the back wall of the house, between two bamboo uprights
+  { const z = V.z1 + 0.34; for (const x of [-99.2, -95.7]) { cyl(0.05, 0.06, 2.9, [0.66, 0.54, 0.3], x, GY0 + 1.45, V.z1 + 0.12, 6); }
+    box(3.6, 0.07, 0.07, [0.5, 0.36, 0.2], -97.45, GY0 + 1.2, V.z1 + 0.12); box(3.6, 0.07, 0.07, [0.5, 0.36, 0.2], -97.45, GY0 + 0.25, V.z1 + 0.22);
+    [['long', -98.7], ['fish', -97.95], ['gun', -97.2], ['long', -96.35]].forEach(([t, x], i) => { const b = lean(t, x, z, Math.PI, 0.16 + (i % 2) * 0.03); b.position.y -= 0.2; });
+    block(-99.4, -95.5, V.z1, V.z1 + 0.75); }
+  // the sign over it: SUMBASURF carved into an old plank, with the wave
+  { const tx = canvasTex(512, 128, (c, w, h) => { const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#8a5a30'); gr.addColorStop(1, '#6e4524'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < 60; i++) { c.strokeStyle = `rgba(40,22,10,${0.08 + Math.random() * 0.12})`; c.lineWidth = 1 + Math.random() * 2; c.beginPath(); const y = Math.random() * h; c.moveTo(0, y); c.bezierCurveTo(w * 0.3, y + (Math.random() - 0.5) * 12, w * 0.7, y + (Math.random() - 0.5) * 12, w, y + (Math.random() - 0.5) * 8); c.stroke(); }
+      c.font = 'bold 76px Georgia, "Times New Roman", serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,230,190,.25)'; c.fillText('SUMBASURF', w / 2 + 38, h / 2 + 3); c.fillStyle = '#2a170a'; c.fillText('SUMBASURF', w / 2 + 36, h / 2);
+      c.save(); c.translate(56, 64); c.scale(0.16, 0.16); c.translate(-261, -265); c.fillStyle = '#2a170a'; c.beginPath(); c.moveTo(70, 390); c.bezierCurveTo(150, 390, 190, 300, 250, 190); c.bezierCurveTo(300, 110, 420, 110, 440, 200); c.bezierCurveTo(450, 250, 420, 300, 370, 300);
+      c.bezierCurveTo(400, 260, 390, 210, 350, 205); c.bezierCurveTo(300, 200, 280, 260, 290, 330); c.bezierCurveTo(296, 370, 330, 390, 380, 390); c.closePath(); c.fill(); c.restore(); });
+    const sg = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.62), new THREE.MeshStandardMaterial({ map: tx, roughness: 0.85 })); sg.position.set(-97.45, GY0 + 3.05, V.z1 + 0.075); sg.scale.x = -1; g.add(sg); }   // (flipped back: the house is mirrored)
+  // the outdoor shower on the back wall: a bamboo pipe up to a big rain head, a slatted teak tray on pebbles, a towel on a hook
+  { const x = -90.4, z = V.z1 + 0.14; cyl(0.035, 0.035, 2.35, [0.66, 0.54, 0.3], x, GY0 + 1.18, z, 6); for (let y = 0.4; y < 2.3; y += 0.5) cyl(0.042, 0.042, 0.03, [0.5, 0.4, 0.2], x, GY0 + y, z, 6);
+    const arm = new THREE.Mesh(tint(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 6), [0.66, 0.54, 0.3]), mat); arm.rotation.x = Math.PI / 2; arm.position.set(x, GY0 + 2.33, z + 0.22); g.add(arm);
+    cyl(0.14, 0.12, 0.04, [0.35, 0.33, 0.3], x, GY0 + 2.3, z + 0.45, 14); cyl(0.04, 0.04, 0.05, [0.62, 0.52, 0.3], x + 0.12, GY0 + 1.05, z + 0.03, 8);
+    for (let k = 0; k < 7; k++) box(0.95, 0.04, 0.1, k % 2 ? FLOOR : FLOOR_L, x, GY0 + 0.07, V.z1 + 0.5 + k * 0.13, 0.05);
+    for (let k = 0; k < 16; k++) { const an = k / 16 * Math.PI * 2, st = new THREE.Mesh(tint(new THREE.DodecahedronGeometry(0.07, 0), [0.62, 0.6, 0.56], 0.2), mat); st.position.set(x + Math.cos(an) * 0.62, GY0 + 0.03, V.z1 + 0.9 + Math.sin(an) * 0.5); st.scale.y = 0.6; g.add(st); }
+    box(0.5, 0.75, 0.02, [0.95, 0.94, 0.9], x + 0.75, GY0 + 1.2, V.z1 + 0.09); for (const [dy, c] of [[0.22, [0.9, 0.45, 0.2]], [-0.22, [0.15, 0.45, 0.55]]]) box(0.5, 0.08, 0.025, c, x + 0.75, GY0 + 1.2 + dy, V.z1 + 0.09); }
+  // the wax station: a board up on two sawhorses, a stump for a table with bars of wax, a fin, a coiled leash
+  const WAX = { x: -89.6, z: 51.4, y: GY0 + 0.66 };   // (low stands: you bend over a board to wax it)
+  { for (const x of [WAX.x - 0.85, WAX.x + 0.85]) { box(0.08, 0.06, 0.6, PLANK_D, x, WAX.y - 0.08, WAX.z);
+      for (const [dx, dz] of [[-0.12, -0.25], [0.12, -0.25], [-0.12, 0.25], [0.12, 0.25]]) beam(x, WAX.y - 0.1, WAX.z + dz * 0.8, x + dx, GY0, WAX.z + dz * 1.2, 0.022); }
+    lay('gun', WAX.x, WAX.y - 0.05, WAX.z, Math.PI / 2); block(WAX.x - 1.25, WAX.x + 1.25, WAX.z - 0.35, WAX.z + 0.35);
+    const sx = WAX.x - 1.9, sz = WAX.z + 0.3; cyl(0.28, 0.3, 0.55, [0.45, 0.32, 0.2], sx, GY0 + 0.27, sz, 12); cyl(0.28, 0.28, 0.02, [0.7, 0.55, 0.35], sx, GY0 + 0.555, sz, 12);
+    for (const [dx, dz, c] of [[-0.1, -0.06, [0.95, 0.9, 0.6]], [0.02, -0.1, [0.9, 0.55, 0.65]], [0.1, 0.02, [0.6, 0.85, 0.9]]]) box(0.08, 0.04, 0.08, c, sx + dx, GY0 + 0.585, sz + dz);
+    { const fin = new THREE.Mesh(tint(new THREE.BoxGeometry(0.12, 0.012, 0.11), [0.12, 0.12, 0.13]), mat); fin.position.set(sx - 0.02, GY0 + 0.57, sz + 0.12); fin.rotation.y = 0.5; g.add(fin); }
+    const coil = new THREE.Mesh(tint(new THREE.TorusGeometry(0.1, 0.012, 5, 16), [0.1, 0.12, 0.14]), mat); coil.rotation.x = Math.PI / 2; coil.position.set(sx + 0.12, GY0 + 0.575, sz + 0.14); g.add(coil);
+    block(sx - 0.32, sx + 0.32, sz - 0.32, sz + 0.32); }
+  // wetsuits and boardshorts drying on a line from the palm to a bamboo post, swaying a little in the breeze
+  const lineItems = [];
+  { const A = [-101.3, GY0 + 2.15, 52.35], Bp = [-96.5, GY0 + 2.2, 53.05]; cyl(0.045, 0.055, 2.35, [0.66, 0.54, 0.3], Bp[0], GY0 + 1.17, Bp[2], 6); block(Bp[0] - 0.15, Bp[0] + 0.15, Bp[2] - 0.15, Bp[2] + 0.15);
+    const at = (t) => [A[0] + (Bp[0] - A[0]) * t, A[1] + (Bp[1] - A[1]) * t - 0.8 * 0.22 * t * (1 - t) * 4 * 0.5, A[2] + (Bp[2] - A[2]) * t];
+    { const pts = []; for (let k = 0; k <= 12; k++) { const p = at(k / 12); pts.push(new THREE.Vector3(...p)); } g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xd8cfb8 }))); }
+    const rotY = Math.atan2(-(Bp[2] - A[2]), Bp[0] - A[0]);
+    const hang = (t, build) => { const p = at(t), pv = new THREE.Group(); pv.position.set(...p); pv.rotation.y = rotY; g.add(pv); build((w, h, d, c, x, y, z) => { const m = new THREE.Mesh(tint(new THREE.BoxGeometry(w, h, d), c, 0.04), mat); m.position.set(x, y, z); pv.add(m); return m; }); lineItems.push({ pv, ph: t * 9 }); };
+    const NEO = [0.07, 0.07, 0.08];
+    hang(0.2, (b) => { b(0.44, 0.62, 0.035, NEO, 0, -0.33, 0); for (const s of [-1, 1]) { const arm = b(0.11, 0.56, 0.03, NEO, s * 0.27, -0.3, 0); arm.rotation.z = s * 0.06; b(0.15, 0.78, 0.03, NEO, s * 0.1, -1.03, 0); b(0.02, 0.6, 0.036, [0.1, 0.45, 0.7], s * 0.21, -0.35, 0); } });   // a full wetsuit, blue side panels
+    hang(0.47, (b) => { b(0.46, 0.34, 0.025, [0.95, 0.5, 0.18], 0, -0.2, 0); for (const s of [-1, 1]) b(0.2, 0.2, 0.026, [0.95, 0.5, 0.18], s * 0.12, -0.45, 0); b(0.46, 0.05, 0.027, [0.98, 0.93, 0.8], 0, -0.06, 0); });   // boardshorts
+    hang(0.68, (b) => { b(0.72, 1.05, 0.012, [0.96, 0.95, 0.9], 0, -0.55, 0); for (const [y, c] of [[-0.2, [0.15, 0.5, 0.62]], [-0.55, [0.95, 0.72, 0.25]], [-0.9, [0.15, 0.5, 0.62]]]) b(0.72, 0.1, 0.014, c, 0, y, 0); });   // a beach towel
+    hang(0.86, (b) => { b(0.42, 0.3, 0.025, [0.12, 0.3, 0.45], 0, -0.18, 0); for (const s of [-1, 1]) b(0.19, 0.2, 0.026, [0.12, 0.3, 0.45], s * 0.11, -0.42, 0); }); }
+  // the bar on the south balcony: an old longboard for a counter on two rum barrels, coconuts and a bottle on it, two
+  // bamboo stools facing the sea
+  const BAR = { x: -92.9, z: B.z0 + 0.48 };
+  { for (const x of [BAR.x - 1.05, BAR.x + 1.05]) { cyl(0.26, 0.27, 0.96, [0.42, 0.26, 0.13], x, Y + 0.48, BAR.z, 14); for (const y of [0.2, 0.76]) cyl(0.275, 0.275, 0.03, [0.2, 0.2, 0.2], x, Y + y, BAR.z, 14); }
+    lay('long', BAR.x, Y + 1.0, BAR.z, Math.PI / 2);
+    for (const [dx, c] of [[-0.55, [0.45, 0.3, 0.15]], [-0.3, [0.55, 0.62, 0.25]]]) { const cn = new THREE.Mesh(tint(new THREE.SphereGeometry(0.075, 10, 8), c), mat); cn.position.set(BAR.x + dx, Y + 1.12, BAR.z + 0.02); g.add(cn); cyl(0.005, 0.005, 0.16, [0.95, 0.4, 0.3], BAR.x + dx + 0.02, Y + 1.2, BAR.z + 0.02, 4); }
+    { const bt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.24, 10), new THREE.MeshStandardMaterial({ color: 0x2f6b3a, roughness: 0.15, metalness: 0.1 })); bt.position.set(BAR.x + 0.45, Y + 1.19, BAR.z); g.add(bt); cyl(0.015, 0.03, 0.07, [0.2, 0.42, 0.25], BAR.x + 0.45, Y + 1.345, BAR.z, 8); }
+    block(BAR.x - 1.45, BAR.x + 1.45, B.z0, BAR.z + 0.34);
+    for (const dx of [-0.55, 0.55]) { const x = BAR.x + dx, z = BAR.z + 0.72; cyl(0.19, 0.19, 0.06, [0.72, 0.56, 0.34], x, Y + 0.74, z, 12);
+      for (let k = 0; k < 3; k++) { const an = k * 2.1; beam(x + Math.cos(an) * 0.12, Y + 0.72, z + Math.sin(an) * 0.12, x + Math.cos(an) * 0.2, Y, z + Math.sin(an) * 0.2, 0.018); }
+      cyl(0.16, 0.16, 0.02, [0.5, 0.4, 0.2], x, Y + 0.28, z, 10); block(x - 0.2, x + 0.2, z - 0.2, z + 0.2); } }
+  // a couple of boards leaning on the house by the balcony doors, ready to go
+  lean('fish', V.x1 + 0.12, 42.4, Math.PI / 2, 0.22).position.y += Y - GY0 - 0.2; lean('gun', V.x1 + 0.12, 43.2, Math.PI / 2, 0.18).position.y += Y - GY0 - 0.2;
+  // where your friends are: Kai on the log by the fire, Wayan at the wax station, Nando on the tree deck rail
+  const NANDO = { x: TX + Math.cos(-0.8) * 3.02, z: TZ + Math.sin(-0.8) * 3.02 };
+  const logK = { x: fire.x + Math.cos(3.9) * 2.1, z: fire.z + Math.sin(3.9) * 2.1 };
+  const wyaw = (dx, dz) => Math.atan2(-dx, dz);   // (a direction in the house's own frame, as a turn in the world: the house is mirrored)
+  const friendSpots = [
+    { id: 'kai', name: 'Kai', pose: 'guitar', x: OX - logK.x, z: logK.z + OZ, y: GY0, seat: 0.46, yaw: wyaw(fire.x - logK.x, fire.z - logK.z) },
+    { id: 'wayan', name: 'Wayan', pose: 'wax', x: OX - WAX.x, z: WAX.z - 0.6 + OZ, y: GY0, yaw: wyaw(0, 1), board: [OX - WAX.x, WAX.y + 0.03, WAX.z + OZ] },
+    { id: 'nando', name: 'Nando', pose: 'bino', x: OX - NANDO.x, z: NANDO.z + OZ, y: Y + DH, yaw: wyaw(Math.cos(-0.8), Math.sin(-0.8)) } ];
+  block(WAX.x - 0.3, WAX.x + 0.3, WAX.z - 1.0, WAX.z - 0.45);   // (Wayan)
   // ---- the fire's sparks, and fireflies over the garden: points of light, coloured as they fade
   const sparkN = 36, sparkP = new Float32Array(sparkN * 3), sparkC = new Float32Array(sparkN * 3), sparkV = new Float32Array(sparkN * 3), sparkL = new Float32Array(sparkN);
   const sparks = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ map: haloTex, size: 0.14, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
@@ -518,12 +601,14 @@ export function villa(scene) {
     part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0.1, -0.05), new THREE.Vector3(0, 0.18, 0.02), new THREE.Vector3(0.02, 0.17, 0.1)]), 10, 0.022, 6), GING, tail, 0, 0, 0);
     return { root: root2, body, head, legs, tail, x: -91, z: 51.8, hd: 0, st: 'walk', t: 0, tx: -95, tz: 47, gait: 0, cool: 0 };
   })();
-  const dogOK = (x, z) => x > G.x0 + 0.8 && x < G.x1 - 0.6 && z > G.z0 + 0.5 && z < G.z1 - 0.5 && Math.hypot(x - fire.x, z - fire.z) > 2.9 && !(x < -100.6 && z > 46.3 && z < 52.3) && !(x > -89 && z < 47);
+  const dogOK = (x, z) => x > G.x0 + 0.8 && x < G.x1 - 0.6 && z > G.z0 + 0.5 && z < G.z1 - 0.5 && Math.hypot(x - fire.x, z - fire.z) > 2.9 && !(x < -100.6 && z > 46.3 && z < 52.3) && !(x > -89 && z < 47)
+    && !(x > WAX.x - 2.4 && x < WAX.x + 1.5 && z > WAX.z - 1.2 && z < WAX.z + 0.8) && !(z < V.z1 + 1.1 && x < -95.2) && Math.hypot(x + 96.5, z - 53.05) > 0.5;   // (and clear of the wax station, Wayan, the board rack and the washing line post)
   const dogPick = () => { if (Math.random() < 0.35) { const an = Math.random() * 6.3; return [fire.x + Math.cos(an) * 3.2, fire.z + Math.sin(an) * 3.2]; }   // (a warm spot by the fire)
     for (let k = 0; k < 20; k++) { const x = G.x0 + 1 + Math.random() * (G.x1 - G.x0 - 2), z = G.z0 + 0.6 + Math.random() * (G.z1 - G.z0 - 1.2); if (dogOK(x, z)) return [x, z]; } return [-94, 51.5]; };
   let fT = 0;
   function tick(dt, beat = 0, wx, wz, wfoot) {
     fT += dt; swayT.value = fT;
+    for (const L of lineItems) { L.pv.rotation.x = 0.1 * Math.sin(fT * 1.3 + L.ph) + 0.04 * Math.sin(fT * 3.1 + L.ph); L.pv.rotation.z = 0.03 * Math.sin(fT * 0.9 + L.ph); }
     { const C = root.userData.caustics; if (C) { C[0].offset.set(fT * 0.035, fT * 0.02); C[1].offset.set(-fT * 0.025, fT * 0.03); } }   // (the light on the pool floor drifting)
     for (const L of lanterns) { L.hook.rotation.z = 0.08 * Math.sin(fT * 1.1 + L.ph) + 0.03 * Math.sin(fT * 2.7 + L.ph); L.hook.rotation.x = 0.06 * Math.sin(fT * 0.9 + L.ph * 1.3); }
     // sparks: born in the flames, rising on the heat, drifting, fading from yellow to red
@@ -582,7 +667,7 @@ export function villa(scene) {
   // little pieces): the timber, the furniture, the speakers' cabinets, lamps, tub... Not the moving parts (speaker cones,
   // the fire, the boards you pick from the rack) and not anything drawn mirrored, which would turn inside out merged
   { g.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), rel = new THREE.Matrix4();
-    const keep = new Set([...woofers]); flame.traverse((o) => keep.add(o)); flame2.traverse((o) => keep.add(o)); for (const b of rack) b.traverse((o) => keep.add(o)); for (const L of lanterns) L.hook.traverse((o) => keep.add(o)); dog.root.traverse((o) => keep.add(o));
+    const keep = new Set([...woofers]); flame.traverse((o) => keep.add(o)); flame2.traverse((o) => keep.add(o)); for (const b of rack) b.traverse((o) => keep.add(o)); for (const L of lanterns) L.hook.traverse((o) => keep.add(o)); dog.root.traverse((o) => keep.add(o)); for (const L of lineItems) L.pv.traverse((o) => keep.add(o));
     const byMat = new Map(); g.traverse((o) => { if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || keep.has(o)) return; rel.multiplyMatrices(inv, o.matrixWorld); if (rel.determinant() < 0) return;
       if (!byMat.has(o.material)) byMat.set(o.material, []); byMat.get(o.material).push(o); });
     for (const [M, parts] of byMat) { if (parts.length < 2) continue;
@@ -618,6 +703,7 @@ export function villa(scene) {
       return !(inRect(x, z, B.x0 + 0.35, B.x1 - 0.35, B.z0 + 0.35, V.z1) || inRect(x, z, PL.x0 - 0.5, PL.x1 - 0.3, PL.z0 + 0.3, PL.z1 - 0.3) ||   /* (the pool: step off the balcony into it anywhere along its edge) */ inRect(x, z, V.x1 - 0.2, B.x1 - 0.35, V.z1 - 1, LZ - 0.3) || inRect(x, z, G.x0 + 0.3, G.x1 + 0.3, V.z1 + 0.4, G.z1 - 0.3)); }
     if (foot > Y + DH - 0.4) {                                                         // up on the deck
       if (r > RD - 0.35) return true;
+      if (Math.hypot(x - NANDO.x, z - NANDO.z) < 0.45) return true;   // (Nando at the rail)
       if (inRect(x, z, TX + 2.55, TX + 3.25, TZ - 1.2, TZ + 0.6) || inRect(x, z, TX - 1.2, TX + 0.6, TZ - 3.25, TZ - 2.55) || inRect(x, z, TX - 2.85, TX - 2.25, TZ + 1.6, TZ + 2.2)) return true;   // (the benches, the speaker)
       if (r < R1 - 0.05) { const d = wrap(an - AE_); return !(d > -0.7 && d < 0.15); }  // (the stairwell, except where the stair arrives)
       return false; }
@@ -645,8 +731,8 @@ export function villa(scene) {
     [-84.7, 34.4, Y + 0.95, 0.35, -0.08, 'LIE BACK'], [-84.7, 39.6, Y + 0.95, -0.2, -0.08, 'LIE BACK'], [-88.1, 32.3, Y + 1.15, -0.3, -0.06, 'SIT'],
     [-90.2, 41.5, Y + 1.1, -Math.PI / 2 + 0.25, -0.05, 'SIT'], [tub.x, tub.z, Y + 1.38, -0.55, -0.08, 'SOAK'],
     [TX + 2.5, TZ - 0.3, Y + DH + 1.4, 0, -0.3, 'SIT'], [TX - 0.3, TZ - 2.5, Y + DH + 1.4, -Math.PI / 2 + 0.3, -0.3, 'SIT'],   // (perched up on the bench back, looking down over the rail at the break)
-    [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'],
-    ...[0.5, 2.2, 3.9].map((an) => [fire.x + Math.cos(an) * 2.1, fire.z + Math.sin(an) * 2.1, GY + 1.0, an + Math.PI, -0.25, 'SIT BY THE FIRE'])];
+    [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'], [BAR.x, BAR.z + 0.72, Y + 1.35, -Math.PI / 2 + 0.5, -0.06, 'SIT AT THE BAR'],
+    ...[0.5, 2.2].map((an) => [fire.x + Math.cos(an) * 2.1, fire.z + Math.sin(an) * 2.1, GY + 1.0, an + Math.PI, -0.25, 'SIT BY THE FIRE'])];
   const seats = seatL.map(([x, z, eye, a, pitch, name]) => ({ x: OX - x, z: z + OZ, eye, yaw: Math.PI - a, pitch, name }));
   for (const [x, z, y] of speakersL) seats.push({ x: OX - x, z: z + OZ, eye: y + 1.1, radio: true, name: 'MUSIC' });
   const sounds = { speakers: speakersL.map(([x, z, y]) => [OX - x, z + OZ, y + 0.3]), fire: [OX - fire.x, fire.z + OZ, GY], chime: [OX + 85, 28.8 + OZ, Y + 2.2], tub: [OX - tub.x, tub.z + OZ, Y] };
@@ -654,5 +740,5 @@ export function villa(scene) {
     const bm = new THREE.MeshStandardMaterial({ color: 0xb89a62, roughness: 0.6 }); const top = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12), bm); ch.add(top);
     for (let k = 0; k < 6; k++) { const an = k / 6 * Math.PI * 2, L = 0.28 + (k % 3) * 0.1, c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, L, 6), bm); c.position.set(Math.cos(an) * 0.12, -0.12 - L / 2, Math.sin(an) * 0.12); ch.add(c); }
     root.userData.chime = ch; }
-  return { group: root, rack, colliders, walk, floorAt, solid, fix, inPool, tick, seats, sounds, setSong, dog, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.2 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
+  return { group: root, rack, colliders, walk, floorAt, solid, fix, inPool, tick, seats, sounds, setSong, dog, friendSpots, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.2 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
 }

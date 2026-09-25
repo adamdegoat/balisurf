@@ -201,6 +201,12 @@
   #vAlt { position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 8; pointer-events: none; display: none; white-space: pre;
     font: 700 13px var(--disp); letter-spacing: .08em; color: var(--sand); background: rgba(24,17,11,.6); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; }
   body.drone #vUp, body.drone #vDn, body.drone #vAlt { display: block; }
+  /* a friend at the villa talking: a small bubble over their head */
+  #fBubble { position: fixed; left: 0; top: 0; z-index: 8; pointer-events: none; opacity: 0; transition: opacity .35s; max-width: 250px; padding: 8px 13px; border-radius: 14px;
+    background: linear-gradient(180deg, rgba(40,28,18,.86), rgba(22,15,10,.9)); border: 1px solid rgba(255,201,120,.55); color: var(--sand); font: 500 13.5px/1.35 var(--body); box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+  #fBubble.on { opacity: 1; } #fBubble b { display: block; font: 700 12px var(--disp); letter-spacing: .06em; color: var(--amber); }
+  body:not(.villa) #fBubble, body.drone #fBubble { display: none; }
+  #vSit { top: auto !important; bottom: max(22px, env(safe-area-inset-bottom)) !important; transform: none !important; }   /* (down in the corner, clear of the pills above it) */
   body.drone #vSit, body.drone #vWatch, body.drone #vPanel { display: none !important; }
   #vSit { border-radius: 999px !important; font-size: 15px !important; font-weight: 700 !important; padding: 12px 20px !important; color: #2a1a0c !important; background: linear-gradient(180deg, #ffd694, #f2ad52) !important;
     border: 1px solid rgba(255,236,200,.7) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 3px 14px rgba(0,0,0,.25); }
@@ -271,11 +277,11 @@
   <p id="soundTip"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6 6 0 0 1 0 9"/></svg> Tap anywhere for music</p>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260925-1954</small>
+<small id="build">build 260925-2004</small>
 <div id="rotate">Turn your phone sideways.</div>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=521"></script>
+<script type="module" src="js/game.js?v=526"></script>
 </body>
 </html>
