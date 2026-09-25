@@ -464,7 +464,7 @@ export function waterMaterial({ wave = false } = {}) {
         float thin = vFT.y;
         vec3 deep = uDeep, turq = uTurq;
         // water pulled up the face leaves vertical streaks; the base of the wave is darker and denser
-        ${wave ? 'thin *= .75 + .5 * fbm(vec2(vW.x * 2.2 + vW.z * .6, vW.y * .35 - uTime * .6));' : ''}
+        ${wave ? 'if (vW.y > .03) thin *= .75 + .5 * fbm(vec2(vW.x * 2.2 + vW.z * .6, vW.y * .35 - uTime * .6));   // (on the flat skirt round the wave it comes out 0 below anyway)' : ''}
         thin *= smoothstep(.03, .22 * uH, vW.y);                        // flat water in front of the wave matches the open sea (no seam)
         float base = smoothstep(.0, .9, vW.y / max(uH, .5));
         float back = pow(max(dot(-V, uSun), 0.), 3.);                // looking toward the sun through the water
@@ -480,7 +480,7 @@ export function waterMaterial({ wave = false } = {}) {
           vec3 reefCol = mix(vec3(.3, .66, .62), vec3(.13, .25, .22), clamp(smoothstep(.46, .6, rn) + .35 * (rn2 - .5), 0., 1.));
           body = mix(body, reefCol * uReefTint * (.55 + .45 * uSunVis), reefK * .38);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
         }
-        ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);\n        // the throwing lip is a moving sheet: light and dark streaks run through it, and its thinnest edge glows palest\n        vec2 shq = vec2(vW.x * .9, (vW.y - vW.z) * .3 + uTime * 1.2); float sheet = vnoise(shq) * .62 + vnoise(shq * 2.3 + 1.7) * .38;   // (two layers of noise: plenty for a streak, half the cost of the full four)\n        body *= 1. + (sheet - .5) * 1.4 * glow;\n        body += vec3(.3, .55, .5) * smoothstep(.8, 1., vFT.y) * glow * .25 * (.4 + .6 * uSunVis);' : ''}
+        ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);\n        // the throwing lip is a moving sheet: light and dark streaks run through it, and its thinnest edge glows palest\n        if (glow > .001) {   // (the upper face and lip only)\n          vec2 shq = vec2(vW.x * .9, (vW.y - vW.z) * .3 + uTime * 1.2); float sheet = vnoise(shq) * .62 + vnoise(shq * 2.3 + 1.7) * .38;   // (two layers of noise: plenty for a streak, half the cost of the full four)\n          body *= 1. + (sheet - .5) * 1.4 * glow;\n          body += vec3(.3, .55, .5) * smoothstep(.8, 1., vFT.y) * glow * .25 * (.4 + .6 * uSunVis);\n        }' : ''}
         ${wave ? 'if (N.y < -.15) refl = mix(refl, body * .8, smoothstep(-.15, -.55, N.y));   // (the underside of the lip mirrors the water below it, not the sky)' : ''}
         vec3 col = mix(body, refl, fres);
         // sun glint

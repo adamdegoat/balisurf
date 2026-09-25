@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=110';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=111';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=115';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=14';
 import { SurfAudio } from './audio.js?v=14';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=21';
-import { villa, VILLA } from './villa.js?v=58';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=22';
+import { villa, VILLA } from './villa.js?v=59';
 import { makeBirds } from './birds.js?v=1';
 import { crew } from './crew.js?v=5';
 import { wildlife } from './wildlife.js?v=8';
@@ -1290,18 +1290,33 @@ function vStand() { const W_ = walker; if (!W_ || !W_.sit) return; [W_.x, W_.z, 
 { const t = (e) => { e.preventDefault(); e.stopPropagation(); if (walker && walker.sit) vStand(); else vSit(); }; vSitB.addEventListener('click', t); vSitB.addEventListener('touchstart', t, { passive: false }); }
 let villaW = null, crewW = null, wildW = null, birdsW = null, walker = null, vMoveT = null, vLookT = null, vPickType = null;
 const vStick = document.getElementById('vStick'), vPanel = document.getElementById('vPanel');
-function startVilla() {
-  if (starting) return;
-  mode = 'villa'; setWeather('villa'); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
-  if (!villaW) { villaW = villa(scene); villaW.group.position.z = SPOTS.medium.dz; crewW = crew(scene); if (audio.now) villaW.setSong(...songOf(audio.now));
+// the villa, its surfers, the wildlife and the birds: built once. Normally done quietly while you're on the menu (so
+// tapping Your villa opens at once); if you get there first, right then
+function prepVilla() {
+  if (villaW) return;
+  villaW = villa(scene); villaW.group.position.z = SPOTS.medium.dz; crewW = crew(scene); if (audio.now) villaW.setSong(...songOf(audio.now));
     wildW = wildlife(scene, { point: { x: 172, z: 125 } });   // (the balcony, in the waves' frame)
     birdsW = makeBirds(wildW.group, { center: [60, 5], span: [140, 40], splash: (x, z) => wildW.splash(x, z) });   // (seabirds over the break: frigatebirds high, terns diving for fish)
     wildW.notify = (msg) => { const n = document.getElementById('vNote'); n.textContent = msg; n.classList.add('on'); clearTimeout(n.t); n.t = setTimeout(() => n.classList.remove('on'), 5000); };
     wildW.sound = (kind, x, z) => { const d = walker ? Math.hypot(x - walker.x, z - (walker.z + SPOTS.medium.dz)) : 250, late = d / 343, k = Math.min(1, 120 / d);   // (sound takes its time over 250 m of water)
       if (kind === 'blow') { audio.burst(0.25 * k, 500, 1.4, 'bandpass', late); audio.burst(0.15 * k, 180, 1.2, 'lowpass', late); }
-      else { audio.burst(0.7 * k, 160, 2.6, 'lowpass', late); audio.burst(0.4 * k, 900, 1.8, 'bandpass', late + 0.05); for (const q of crewW.surfers) if (q.st !== 'RIDE') { audio.hoot(0.6 * k); break; } } }; }
+      else { audio.burst(0.7 * k, 160, 2.6, 'lowpass', late); audio.burst(0.4 * k, 900, 1.8, 'bandpass', late + 0.05); for (const q of crewW.surfers) if (q.st !== 'RIDE') { audio.hoot(0.6 * k); break; } } };
+}
+// while you look at the menu: build the villa and get every shader in the game ready, in the background, a bit after
+// the page has settled (each would otherwise be a stall the first time you tap to surf or to go to the villa)
+function warmAll() {
+  if (warmAll.done) return; warmAll.done = true; warmShaders.done = true;
+  const shown = []; scene.traverse((o) => { if (!o.visible) { o.visible = true; shown.push(o); } });
+  try { renderer.compileAsync ? renderer.compileAsync(scene, camera).catch(() => {}) : renderer.compile(scene, camera); } finally { for (const o of shown) o.visible = false; }   // (the driver finishes them off the main thread where it can)
+}
+{ const idle = (f) => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 2500 }) : setTimeout(f, 60));
+  ready.then(() => setTimeout(() => idle(() => { if (mode === 'villa' || starting) return; prepVilla(); if (villaW) { villaW.group.visible = false; crewW.group.visible = false; wildW.group.visible = false; } idle(() => { if (!starting) warmAll(); }); }), 1800)).catch(() => {}); }
+function startVilla() {
+  if (starting) return;
+  mode = 'villa'; setWeather('villa'); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
+  prepVilla();
   setSpot('villa');
-  if (!startVilla.compiled) { startVilla.compiled = true; crewW.group.visible = true; renderer.compile(scene, camera); }   // (build every villa shader now, not in a stall the first time each thing comes into view)
+  if (!warmAll.done) { crewW.group.visible = true; renderer.compile(scene, camera); }   // (build every villa shader now, not in a stall the first time each thing comes into view: normally already done on the menu)
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
   if (surfer) endWipe(); rider = null; rig.visible = false;
   document.getElementById('vZoom').classList.remove('on'); document.querySelector('#vZoom span').textContent = 'ZOOM'; document.getElementById('vWatch').classList.remove('on'); document.querySelector('#vWatch span').textContent = 'WATCH A RIDE'; vSitB.classList.remove('on');

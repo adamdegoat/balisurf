@@ -31,3 +31,15 @@ export async function breakdown(mode, what, seed = 7, pr = 1.3) {
   for (const [k, list] of Object.entries(groups)) { for (const o of list) o.visible = false; await bench(10); out[k] = +(all - await bench(50)).toFixed(2); for (const o of list) o.visible = true; }
   G.paused = false; return out;
 }
+// the same split for whatever is on screen now (the menu, the villa): each kind hidden in turn, A/B/A/B to beat drift
+export async function now(pr = 1.3) {
+  const G = g(); G.renderer.setPixelRatio(pr); G.paused = true;
+  const inGroup = (o, grp) => { for (let p = o; p; p = p.parent) if (p === grp) return true; return false; };
+  const groups = {};
+  G.scene.traverse((o) => { if (!o.material) return; for (let p = o; p; p = p.parent) if (!p.visible) return;
+    let k = kind(o); if (G.villaW && inGroup(o, G.villaW.group)) k = 'villa:' + (o.isPoints ? 'points' : o.material.type); else if (G.crew && inGroup(o, G.crew.group)) k = 'crew'; else if (G.wild && inGroup(o, G.wild.group)) k = 'wildlife';
+    (groups[k] ||= []).push(o); });
+  const out = { px: `${G.renderer.domElement.width}x${G.renderer.domElement.height}`, total: await bench(40) };
+  for (const [k, l] of Object.entries(groups)) { let d = 0; for (let rep = 0; rep < 3; rep++) { const a = await bench(20); l.forEach((o) => { o.visible = false; }); const b = await bench(20); l.forEach((o) => { o.visible = true; }); d += a - b; } out[`${k}(${l.length})`] = +(d / 3).toFixed(2); }
+  G.paused = false; return out;
+}
