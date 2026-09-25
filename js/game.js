@@ -10,7 +10,7 @@ import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=39';
 import { villa, VILLA } from './villa.js?v=92';
 import { makeBirds } from './birds.js?v=1';
-import { friends } from './friends.js?v=20';
+import { friends } from './friends.js?v=22';
 import { crew } from './crew.js?v=8';
 import { wildlife } from './wildlife.js?v=11';
 
@@ -206,18 +206,19 @@ vArm = 0.; vLeg = 0.;
   if (uHideLegs > .5 && vLeg > .35) discard;   // your own legs aren't drawn in your view (knees coming up at the lens read as a glitch): arms and board only
   if (vCutW.y < uWaterY) discard;   // lying or sitting on the board: hands and legs under the surface are hidden by the water (the body is drawn after the world, so it would show on top)
   if (vArm >= 0.12 && length(cq) < uArmCut) discard;   // (>= 0.12: the shoulder skin is only part arm-weighted)   // the upper arm is right at the lens: only forearms and hands show, like helmet-cam footage
-  if (!gl_FrontFacing && vArm >= 0.12 && uArmCut > 0.) discard;   // (the shoulder hidden during the pop-up: no dark cap at the lens)
+  if (!gl_FrontFacing && length(cq) < 0.45) discard;   // (right at the lens a cut arm's inside is never capped: seen from inside, the cap filled the view as a black blob)
   if (!gl_FrontFacing) { gl_FragColor = vec4(uCap, 1.); return; }   // a cut shows solid skin/cloth, never the hollow inside (that was the 'fin')
   if (length(cq) < uCut * 0.6 + uNear) discard;   // (uNear > 0 on the shorts: sliced close to the lens they showed as teal hooks)   // anything right in the lens (arms are never cut: a cut shows the hollow inside of the arm as a 'fin')`);
   };
   m.side = THREE.DoubleSide;   // (inside faces are drawn as a solid cap colour, so a cut looks closed)
-  m.customProgramCacheKey = () => 'cutaway10' + (m.userData.near || 0);
+  m.customProgramCacheKey = () => 'cutaway16' + (m.userData.near || 0);
   m.needsUpdate = true;
 }
+const hairMeshes = [];   // your own hair: with your head shrunk away for your own eyes it collapsed into a dark sheet from your neck to the lens, which filled the screen in hard turns. Only drawn when you're seen from outside
 const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=2', (g) => {
   surfer = g.scene; rig.add(surfer);
   surfer.traverse((o) => o.layers.set(1));
-  surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else { if (/short/i.test(o.material.name + o.name)) { o.material.userData.near = 0.45; o.material.userData.cap = 0x0f3b3f; } cutaway(o.material); } } });
+  surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') { o.material.side = THREE.DoubleSide; hairMeshes.push(o); } else { if (/short/i.test(o.material.name + o.name)) { o.material.userData.near = 0.45; o.material.userData.cap = 0x0f3b3f; } cutaway(o.material); } } });
   surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/.test(b.name)) ARMBONE.value[i] = 1; if (i < 96 && /^clavicle/.test(b.name)) ARMBONE.value[i] = 0.1; }); });
   surfer.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b, i) => { if (i < 96 && /^(thigh|calf|foot|ball)/.test(b.name)) LEGBONE.value[i] = 1; }); });
   mixer = new THREE.AnimationMixer(surfer);
@@ -946,7 +947,7 @@ const wake = (() => {
 // ---------- your track: the churned white line your board leaves on the water. Laid at the fins every 30 cm as a ribbon
 // that lies on the surface, spreads and breaks up as it ages, drifts in with the wave, and fades over five seconds (a
 // cut or a slide leaves a wider scar). One mesh of a few hundred points: nothing for a phone
-const TRACK_N = 220;
+const TRACK_N = 320;
 const track = (() => {
   const P = Array.from({ length: TRACK_N }, () => ({ x: 0, y: -99, z: 0, t: -99, w: 0, dx: 1, dz: 0 }));
   const pos = new Float32Array(TRACK_N * 2 * 3), uv = new Float32Array(TRACK_N * 2 * 2), al = new Float32Array(TRACK_N * 2), idx = [];
@@ -970,21 +971,22 @@ const track = (() => {
       const on = rider && rider.standing && (rider.state === 'RIDE' || rider.state === 'POP') && rider.y > -1;
       if (on) {
         const fx = rig.position.x - pose.fwd.x * 0.75, fz = rig.position.z - pose.fwd.z * 0.75;
-        if (!last) { last = { x: fx, z: fz }; dist = 1; }
-        dist += Math.hypot(fx - last.x, fz - last.z);
-        if (dist >= 0.3) { dist = 0; head = (head + 1) % TRACK_N; const q = P[head], L = Math.hypot(fx - last.x, fz - last.z) || 1;
-          Object.assign(q, { x: fx, z: fz, y: heightAt(waves, fx, fz) + 0.04, t: T0, w: 0.36 + Math.min(0.55, Math.abs(rider.turn) * 0.2 + rider.skid * 0.6 + (rider.slide || 0) * 0.5), dx: (fx - last.x) / L, dz: (fz - last.z) / L });
-          last.x = fx; last.z = fz; }
+        const fy = rig.position.y;
+        if (!last) { last = { x: fx, y: fy, z: fz }; dist = 1; }
+        dist += Math.hypot(fx - last.x, fy - last.y, fz - last.z);   // (spaced along the path itself: climbing a steep face, points 30 cm apart across the water would be metres apart up it, and the flat strip between them would cut into the curved face)
+        if (dist >= 0.3) { dist = 0; head = (head + 1) % TRACK_N; const q = P[head], pq = P[(head - 1 + TRACK_N) % TRACK_N], L = Math.hypot(fx - last.x, fz - last.z) || 1;
+          Object.assign(q, { x: fx, z: fz, y: heightAt(waves, fx, fz) + 0.04, yl: undefined, yr: undefined, t: T0, w: 0.36 + Math.min(0.55, Math.abs(rider.turn) * 0.2 + rider.skid * 0.6 + (rider.slide || 0) * 0.5), dx: L > 0.08 ? (fx - last.x) / L : pq.dx, dz: L > 0.08 ? (fz - last.z) / L : pq.dz });   // (straight up the face the step across the water is tiny: keep the last heading, not a jittering one)
+          last.x = fx; last.y = fy; last.z = fz; }
       } else last = null;
       // build the ribbon from the newest point back (a gap where a ride ended: two rides never join up)
       for (let k = 0; k < TRACK_N; k++) {
         const i = (head - k + TRACK_N) % TRACK_N, q = P[i], age = T0 - q.t, o = k * 2;
         let a = q.t < 0 ? 0 : Math.max(0, 1 - age / 5);
-        if (a > 0) { q.z += 1.1 * dt; if ((i + frame) % 3 === 0) q.y = heightAt(waves, q.x, q.z) + 0.04; }
         const nq = P[(i - 1 + TRACK_N) % TRACK_N]; if (k < TRACK_N - 1 && (nq.t < 0 || Math.abs(q.t - nq.t) > 0.6)) a = 0;   // (the next point back belongs to another ride)
         if (k === 0) a *= 0.2;
         const w = a > 0 ? q.w * (1 + Math.min(age, 5) * 0.5) : 0, sx = -q.dz * w, sz = q.dx * w;   // (faded out: no width, so nothing is drawn there at all)
-        pos[o * 3] = q.x + sx; pos[o * 3 + 1] = q.y; pos[o * 3 + 2] = q.z + sz; pos[o * 3 + 3] = q.x - sx; pos[o * 3 + 4] = q.y; pos[o * 3 + 5] = q.z - sz;
+        if (a > 0) { q.z += 1.1 * dt; if (q.yl === undefined || q.hot || (i + frame) % 3 === 0) { const y0 = q.y; q.y = heightAt(waves, q.x, q.z) + 0.04; q.hot = Math.abs(q.y - y0) > 0.02; q.yl = heightAt(waves, q.x + sx, q.z + sz) + 0.04; q.yr = heightAt(waves, q.x - sx, q.z - sz) + 0.04; } }   // (each edge sits on the water where it is: up a steep face, one edge level with the middle would be buried in the wave and the line drawn as a saw. A point the moving face is lifting ('hot') is re-seated every frame, not every third: out of step with its neighbours, every third one sank into the face and the line showed as rungs)
+        pos[o * 3] = q.x + sx; pos[o * 3 + 1] = a > 0 ? q.yl : q.y; pos[o * 3 + 2] = q.z + sz; pos[o * 3 + 3] = q.x - sx; pos[o * 3 + 4] = a > 0 ? q.yr : q.y; pos[o * 3 + 5] = q.z - sz;
         uv[o * 2] = q.t * 3; uv[o * 2 + 1] = 0; uv[o * 2 + 2] = q.t * 3; uv[o * 2 + 3] = 1; al[o] = al[o + 1] = a;
       }
       g.attributes.position.needsUpdate = true; g.attributes.uv.needsUpdate = true; g.attributes.aA.needsUpdate = true;
@@ -1720,7 +1722,8 @@ renderer.setAnimationLoop(() => {
   if (portrait.matches !== lastPortrait) { lastPortrait = portrait.matches; if (document.body.classList.contains('playing')) audio.pause(portrait.matches); }   // (and so does the sound: no endless drone while it waits)
   // pass 1: the world; pass 2: your body through its own lens (skipped when a test view shows the body in the world cam)
   const mir = MIRROR; if (mir) flipProj(camera);   // (a right-hand spot: the picture drawn flipped left to right)
-  HIDELEGS.value = camera.layers.isEnabled(1) || mode === 'villa' ? 0 : 1;   // (walking round the villa, your legs are yours again)
+  HIDELEGS.value = camera.layers.isEnabled(1) || mode === 'villa' ? 0 : 1;
+  for (const h of hairMeshes) h.visible = camera.layers.isEnabled(1);   // (walking round the villa, your legs are yours again)
   // the ride's over (the score is up): your body settling back onto the board moves faster than your eyes follow, and
   // from just behind it you'd see your own back; it isn't drawn in your view until you're back in the lineup
   if (surfer && !W.on) surfer.visible = !(rider && rider.state === 'OUT' && !camera.layers.isEnabled(1));

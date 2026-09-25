@@ -104,6 +104,13 @@ function womanise(mesh) {
   };
   m.customProgramCacheKey = () => 'belle-suit-2';
 }
+// the crop's fringe hangs to eye level (made for a head nobody sees: yours). On a friend it read as a blindfold, so
+// the front of the hair is lifted to sit on the brow, the eyes clear
+function liftFringe(mesh) {
+  const g = mesh.geometry = mesh.geometry.clone(), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (p.getZ(i) > 0.04 && y < 1.575) p.setY(i, 1.575 - (1.575 - y) * 0.25); }
+  p.needsUpdate = true; g.computeVertexNormals();
+}
 export function friends(scene, src, spots) {
   const group = new THREE.Group(); scene.add(group);
   const list = [];
@@ -111,8 +118,8 @@ export function friends(scene, src, spots) {
     const body = cloneSkinned(src), root = new THREE.Group(); root.add(body); group.add(root);
     body.position.set(0, 0, 0); body.quaternion.identity(); body.scale.set(1, 1, 1);   // (the clone carries wherever your own body was last posed on the board)
     const L = LOOK[S.id] || LOOK.kai;
-    body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.frustumCulled = false; o.material = o.material.clone(); o.material.side = THREE.FrontSide;
-      const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
+    body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.visible = true; o.frustumCulled = false; o.material = o.material.clone(); o.material.side = THREE.FrontSide;
+      const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; liftFringe(o); } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
     const B = {}; body.traverse((o) => { if (o.isBone) B[o.name] = o; });
     if (L.scale) body.scale.setScalar(L.scale);
     if (S.id === 'belle') body.traverse((o) => { if (o.isMesh && (o.material.name === 'hair' || /short/.test(o.material.name))) o.visible = false; if (o.isSkinnedMesh && o.material.name === 'skin') womanise(o); });   // (her own long hair instead of the lads' crop; a swimsuit instead of board shorts)

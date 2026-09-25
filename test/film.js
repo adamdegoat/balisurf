@@ -24,9 +24,9 @@ function draw(fov, body, crop, chase) {
     if (r.domElement.width !== W || r.domElement.height !== H) { r.setPixelRatio(1); r.setSize(W, H, false); }
     c.aspect = W / H; c.fov = fov; c.updateProjectionMatrix(); c.updateMatrixWorld(); c.layers.enable(1); const hl = g.HIDELEGS.value, wy = g.WATERY.value, ac = g.ARMCUT.value, cut = g.CUT.value;
     g.HIDELEGS.value = 0; g.WATERY.value = -99; g.ARMCUT.value = 0; g.CUT.value = 0;
-    let head = null; g.surfer.traverse((o) => { if (o.isBone && o.name === 'head') head = o; }); const hs = head && head.scale.x; if (head) { head.scale.setScalar(1); head.updateMatrixWorld(true); }   // (your own head, shrunk away for first person, back on)
+    let head = null; const hair = []; g.surfer.traverse((o) => { if (o.isBone && o.name === 'head') head = o; if (o.isMesh && o.material.name === 'hair') { hair.push(o); o.visible = true; } }); const hs = head && head.scale.x; if (head) { head.scale.setScalar(1); head.updateMatrixWorld(true); }   // (your own head, shrunk away for first person, back on)
     const mir = g.mirror; if (mir) g.flipProj(c); r.render(g.scene, c); if (mir) g.flipProj(c);
-    if (head) { head.scale.setScalar(hs); head.updateMatrixWorld(true); }
+    if (head) { head.scale.setScalar(hs); head.updateMatrixWorld(true); } for (const o of hair) o.visible = false;
     g.HIDELEGS.value = hl; g.WATERY.value = wy; g.ARMCUT.value = ac; g.CUT.value = cut; c.layers.disable(1);
     if (Array.isArray(chase)) { c.position.copy(chase[0]); c.quaternion.copy(chase[1]); c.updateMatrixWorld(); }
     cx.drawImage(r.domElement, 0, 0, W, H); return; }
@@ -202,6 +202,18 @@ function walkTake(n, start, pts, pitch0, pitch1, cropX = 0.5) { let wi = 0; retu
 T.walk = walkTake(165, [-97.2, 36.6], [[-94.5, 36.5], [-91, 35.8], [-87.5, 36.6], [-85.9, 37.4], [-83.6, 38.2]], 0.12, -0.08);
 T.coach = walkTake(120, [-91.2, 35.2], [[-89.2, 36.4], [-88.4, 36.9]], 0.02, -0.02, 0.5);   // (in the living room, up to Coach Rudi at the open doors)
 T.rack = walkTake(85, [-95.6, 38.3], [[-97.9, 38.3], [-98.1, 38.3]], -0.02, -0.14, 0.58);
+// a friend at the villa: the camera drifts round them at head height (a0..a1: angles from the way they face)
+export function friendTake(name, id, n, { d = 2.2, h = 0.25, a0 = -0.5, a1 = 0.5, fov = 45, ly = -0.1 } = {}) {
+  T[name] = { n, init() { villaInit(); G().step(2, 1 / 30, false); },
+    frame(i) { const g = G(); g.step(1 / FPS, 1 / FPS, false); const F = g.friends.list.find((f) => f.id === id), c = g.camera, k = i / n, p = new THREE.Vector3();
+      F.root.getWorldPosition(p); const hd = F.head && F.head.y > 1 ? F.head : p.clone().add(new THREE.Vector3(0, 1.5, 0));
+      const yaw = (F.S.yaw || 0) + a0 + (a1 - a0) * k; c.position.set(hd.x + Math.sin(yaw) * d, hd.y + h, hd.z + Math.cos(yaw) * d); c.lookAt(hd.x, hd.y + ly, hd.z); return { fov }; } };
+  return name; }
+// any free camera move in the villa's world: from -> to, looking at a point (world coordinates)
+export function freeTake(name, n, from, to, look, fov = 50, look2) {
+  T[name] = { n, init() { villaInit(); G().step(2, 1 / 30, false); },
+    frame(i) { const g = G(); g.step(1 / FPS, 1 / FPS, false); const k = i / n, e = k * k * (3 - 2 * k), c = g.camera; c.position.set(...from.map((v, j) => v + (to[j] - v) * e)); const L2 = look2 || look; c.lookAt(...look.map((v, j) => v + (L2[j] - v) * e)); return { fov }; } };
+  return name; }
 // wildlife: set the moment up, then film it low from the water
 T.dolphins = { n: 100, init() { villaInit(); const g = G(), P = g.wild.pod; P.on = false; P.next = 0; g.step(1 / 30, 1 / 30, false); g.step(4, 1 / 30, false); },
   frame(i) { const g = G(); g.step(1 / FPS, 1 / FPS, false); const P = g.wild.pod, px = P.x0 + P.dx * P.t, pz = P.z0 + P.dz * P.t; const c = g.camera;
