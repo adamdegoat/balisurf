@@ -26,7 +26,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.08, 2000);
 // POV: a wide, GoPro-like view (about 100 degrees across); the outside wipeout shot uses a normal ~80
 let hfovHalf = 50;
-const fitFov = () => { camera.aspect = innerWidth / innerHeight; camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(hfovHalf)) / Math.min(camera.aspect, 2.0))); camera.updateProjectionMatrix(); };
+const fitFov = () => { if (!innerWidth || !innerHeight) return; camera.aspect = innerWidth / innerHeight; camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(hfovHalf)) / Math.min(camera.aspect, 2.0))); camera.updateProjectionMatrix(); };
 const setHfov = (h) => { if (h !== hfovHalf) { hfovHalf = h; fitFov(); } };
 fitFov();
 skyDome(scene); ocean(scene);
@@ -45,7 +45,7 @@ const armCam = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 3
 let armK = 0;   // 0 = same lens as the world (lying/sitting: your hands are on the board and must line up with it), 1 = normal lens
 // fit the screen whenever it changes: rotation, the browser bar sliding away, split screen (iOS doesn't always send 'resize')
 let lastW = 0, lastH = 0;
-const fit = () => { const w = innerWidth, h = innerHeight; if (w === lastW && h === lastH) return; lastW = w; lastH = h; renderer.setSize(w, h); fitFov(); };
+const fit = () => { const w = innerWidth, h = innerHeight; if (!w || !h || (w === lastW && h === lastH)) return; lastW = w; lastH = h; renderer.setSize(w, h); fitFov(); };   // (a hidden window reports 0 x 0: keep the last size, not a broken camera)
 addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 250)); visualViewport?.addEventListener('resize', fit);
 // iPhone Safari ignores user-scalable=no: stop pinch-zoom, double-tap zoom and the rubber-band page drag ourselves
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
@@ -1329,14 +1329,15 @@ let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = nu
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
 const _wl = new THREE.Vector3();
 const vSitB = document.getElementById('vSit');
-// music: ten reggae tracks and ten chill surf tracks, shuffled. From the villa radio (quieter and duller the further you are from it), under the
+// music: 21 reggae tracks (every OpenMindAudio reggae song among them), shuffled. From the villa radio (quieter and duller the further you are from it), under the
 // menu, loud at the Surf Ranch like a pool speaker; never on the reef
 const SONGS = { 'we-dub-a-long-way': ['We Dub A Long Way', 'Brotheration Records'], 'reggae-dub-1': ['Reggae Dub One', 'Pietix'], 'dreaming-of-reggae': ['Dreaming of Reggae', 'Figaro Reggae Music'],
   'roots-reggae': ['Roots Reggae', 'MrBAS Music Labs'], 'roots-guitare-tamtam': ['Roots Guitare Tamtam', 'Acoostika Beat'], 'feel-the-vibe': ['Feel the Vibe in Here', 'Figaro Reggae Music'],
   'barefoot-in-the-breeze': ['Barefoot in the Breeze', 'OpenMindAudio'], 'island-vibes': ['Reggae Island Vibes', 'Alex Morgan'], 'everyday-is-a-holiday': ['Everyday Is a Holiday', 'Brotheration Records'],
-  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'], 'cloud-surf': ['Cloud Surf', 'OctoSound'], 'clouds-surfing': ['Clouds Surfing', 'PremiumMusicOdyssey'],
-  'guitar-duel-in-paradise': ['Guitar Duel in Paradise', 'Guitar Obsession'], 'morning-garden': ['Morning Garden', 'Folk Acoustic'], 'soft-waves': ['Soft Waves', 'Andrewbali'], 'summer-surf': ['Summer Surf', 'AudioCoffee'],
-  'sunset-surfboard-dreams': ['Sunset Surfboard Dreams', 'BackgroundMusicMaster'], 'surf-breeze': ['Surf Breeze', 'snoozybeats'], 'the-last-call': ['The Last Call', 'PremiumMusicOdyssey'], 'wellenreiter': ['Wellenreiter', 'conner'] };
+  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'], 'streets-still-singing': ['Streets Still Singing', 'OpenMindAudio'], 'drop-of-peace': ['Drop of Peace', 'OpenMindAudio'],
+  'generational-stew': ['Generational Stew', 'OpenMindAudio'], 'shelter-in-the-storm': ['Shelter in the Storm', 'OpenMindAudio'], 'yardman-sing-along': ['Yardman Sing Along', 'OpenMindAudio'], 'rise-again': ['Rise Again', 'OpenMindAudio'],
+  'moonbeam-rendezvous': ['Moonbeam Rendezvous', 'OpenMindAudio'], 'dawn-still-knows-your-name': ['Dawn Still Knows Your Name', 'OpenMindAudio'], 'breathe-and-hold-on': ['Breathe and Hold On', 'OpenMindAudio'],
+  'after-the-rain-we-feast': ['After the Rain We Feast', 'OpenMindAudio'], 'slow-kisses-warm-nights': ['Slow Kisses, Warm Nights', 'OpenMindAudio'] };
 const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] || ['Island radio', ''];
 // the Now playing box: tap it and back / next buttons open under the song (they fold away again after a few seconds)
 { const box = document.getElementById('vSong'); let shut = null; const later = () => { clearTimeout(shut); shut = setTimeout(() => box.classList.remove('open'), 6000); };
@@ -1346,7 +1347,8 @@ const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] 
     b.addEventListener('click', go); b.addEventListener('touchstart', go, { passive: false }); } }
 audio.onTrack = (src) => { const [t, a] = songOf(src); if (villaW) villaW.setSong(t, a); document.getElementById('vSongT').textContent = t; document.getElementById('vSongA').textContent = a ? 'by ' + a : ''; };
 const MUSIC = ['we-dub-a-long-way', 'reggae-dub-1', 'dreaming-of-reggae', 'roots-reggae', 'roots-guitare-tamtam', 'feel-the-vibe', 'barefoot-in-the-breeze', 'island-vibes', 'everyday-is-a-holiday', 'stand-firm-like-a-tree',
-  'cloud-surf', 'clouds-surfing', 'guitar-duel-in-paradise', 'morning-garden', 'soft-waves', 'summer-surf', 'sunset-surfboard-dreams', 'surf-breeze', 'the-last-call', 'wellenreiter'].map((n) => 'music/' + n + '.mp3');
+  'streets-still-singing', 'drop-of-peace', 'generational-stew', 'shelter-in-the-storm', 'yardman-sing-along', 'rise-again', 'moonbeam-rendezvous', 'dawn-still-knows-your-name', 'breathe-and-hold-on',
+  'after-the-rain-we-feast', 'slow-kisses-warm-nights'].map((n) => 'music/' + n + '.mp3');
 let radioOn = true;   // (the villa's speakers, all together)
 let earOn = false; try { earOn = localStorage.getItem('sumbasurf.ear') === '1'; } catch (e) {}   // an earpiece while you surf: your call, remembered
 { const eb = document.getElementById('ear'), show = () => { eb.classList.toggle('on', earOn); eb.querySelector('span').textContent = earOn ? 'EARPIECE ON' : 'EARPIECE'; };

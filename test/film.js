@@ -18,6 +18,7 @@ export function teardown() { const g = G(), r = g.renderer; r.setPixelRatio(save
 // draw the world through the camera (and your own arms and board through their own lens, like the game does)
 function draw(fov, body, crop) {
   const g = G(), r = g.renderer, c = g.camera, a = g.armCam;
+  if (r.domElement.width !== W || r.domElement.height !== H) { r.setPixelRatio(1); r.setSize(W, H, false); }   // (the page may have resized it under us)
   // crop: a vertical slice of the game's own landscape view (a phone on its side, 2.16:1), the slice centred at crop
   // (0..1 across it). The camera and its lens are exactly the game's; only the window onto them is tall
   if (crop !== undefined) { const fw = H * 2.16, x0 = Math.max(0, Math.min(fw - W, crop * fw - W / 2)); c.aspect = fw / H; c.fov = fov; c.setViewOffset(fw, H, x0, 0, W, H); c.updateProjectionMatrix();
@@ -48,8 +49,8 @@ const T = {};
 T.open = { n: 150, init() { const g = G(); document.getElementById('start').style.display = 'none'; g.step(1, 1 / 30, false); },
   frame(i) { const g = G(); g.step(1 / FPS, 1 / FPS, false); const c = g.camera; const k = i / 150; c.rotateY(-0.42 + 0.06 * k); c.rotateX(0.1); c.translateZ(-0.8 * k); return { fov: 84 - 6 * k }; } };
 // your ride: paddle in, the drop, set up in the pocket, pull in and ride the barrel out (Tanjung Uma); and the giant
-function rideTake(mode, seed, n, boardT = 'short') {
-  let br, rnd0; const rs = { w: 0, pan: 0.5 };
+function rideTake(mode, seed, n, boardT = 'short', line = false) {
+  let br, rnd0; const rs = { w: 0, pan: 0.5, dir: null, k: 0 };
   return { n, init() { const g = G(); rnd0 = Math.random; Math.random = seeded(seed); g.setMode(mode); document.getElementById('start').style.display = 'none'; document.body.classList.add('playing', 'riding');
       g.useBoard(boardT); g.spawnRider(); br = brain({}); const r = g.rider;   // (wait in the lineup until the wave is 3 s away)
       for (let i = 0; i < 60 * 90; i++) { const o = br(r); g.input.test = o.steer; g.input.paddleBtn = r.standing ? !!o.pump : !!o.paddle; g.step(1 / 60, 1 / 60, false); if (r.state === 'LIE' && g.incoming().t < 3.2) break; } },
@@ -66,13 +67,19 @@ function rideTake(mode, seed, n, boardT = 'short') {
       // to look down the line: the wall on your left, the lip curling over, the way out ahead
       const c = g.camera, lip = new THREE.Vector3(); if (r.wave && r.state === 'RIDE') { const L = r.wave.lipAt(r.s + 2); lip.set(L[0], L[1] * (r.wave.fade || 1), L[2]); c.updateMatrixWorld();
       const sp = lip.clone().project(c); const fx = 0.5 + sp.x * 0.5 * (1 / 2.16) * 2.16; rs.pan += (Math.max(0.33, Math.min(0.67, 0.5 + (fx - 0.5) * 0.55)) - rs.pan) * 0.05; } else rs.pan += (0.5 - rs.pan) * 0.05;
+      if (line) {   // (the reel's POV: once you're up, eyes down the line where you're going, the wall and the lip beside you)
+        const up = r.state === 'RIDE' && r.standing; rs.k += ((up ? 1 : 0) - rs.k) * 0.06;
+        if (rs.k > 0.01 && r.wave) { const Lh = r.wave.lipAt(r.s + 14), d = new THREE.Vector3(Lh[0] - c.position.x, 0, Lh[2] + 3 - c.position.z); if (d.lengthSq() > 0.04) { d.normalize(); rs.dir = rs.dir ? rs.dir.lerp(d, 0.07).normalize() : d; }   // (at the wave 14 m ahead: the way out of the tube)
+          if (rs.dir) { const q0 = c.quaternion.clone(), tg = c.position.clone().addScaledVector(rs.dir, 10); tg.y = c.position.y - 1.9; c.lookAt(tg); c.quaternion.copy(q0.slerp(c.quaternion.clone(), rs.k)); c.updateMatrixWorld(); } }
+        return { fov: 74, body: 62, crop: 0.5 }; }
       return { fov: 70, body: 62, crop: rs.pan }; },   // (the game's own camera, untouched)
     done() { const g = G(); if (boardT !== 'short') g.useBoard('short'); Math.random = rnd0; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; } };
 }
 T.ride = rideTake('medium', 3, 600);
 // the reel: the other breaks, each in the game's own first-person view
-T.rHard = rideTake('hard', 11, 300); T.rHiu = rideTake('hiu', 5, 250); T.rKanan = rideTake('kanan', 8, 360); T.rEasy = rideTake('easy', 4, 380, 'fish');
-T.rHard.keep = [[120, 300]]; T.rHiu.keep = [[125, 250]]; T.rKanan.keep = [[150, 360]]; T.rEasy.keep = [[170, 380]];
+T.rHard = rideTake('hard', 11, 300, 'short', true); T.rHiu = rideTake('hiu', 5, 250, 'short', true); T.rKanan = rideTake('kanan', 8, 360, 'short', true); T.rEasy = rideTake('easy', 4, 380, 'fish', true);
+T.rUma = rideTake('medium', 3, 480, 'short', true); T.rGiant = rideTake('extreme', 7, 330, 'gun', true);
+T.rHard.keep = [[120, 300]]; T.rHiu.keep = [[125, 250]]; T.rKanan.keep = [[150, 360]]; T.rEasy.keep = [[170, 380]]; T.rUma.keep = [[100, 480]]; T.rGiant.keep = [[100, 330]];
 T.giant = rideTake('extreme', 7, 300, 'gun'); T.giant.keep = [[110, 300]];
 // the villa and the view from it: free cameras in the villa's world (it keeps living: waves, crew, whale, dolphins)
 const V = { ok: false };
