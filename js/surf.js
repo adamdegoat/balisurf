@@ -42,8 +42,12 @@ export class Profile {
     for (; j < 64; j++) { const z = o[j * 4], y = o[j * 4 + 1], p = F[F.length - 1]; if (z >= p[0] - 1e-4 || y < p[1] - 1e-3) break; F.push([z, y]); }
     const B = [[o[63 * 4], o[63 * 4 + 1]]];
     for (let k = 62; k > j; k--) { const z = o[k * 4], y = o[k * 4 + 1], p = B[B.length - 1]; if (z <= p[0] + 1e-4 || y < p[1] - 1e-3) break; B.push([z, y]); }
+    // the underside of the lip, where the wave overhangs the face: from the top of the face out along the tube's
+    // ceiling to the lip's tip (z increasing). Nothing to ride on, but it's the roof of the barrel
+    const U = [F[F.length - 1]];
+    for (let k = j; k < 64; k++) { const z = o[k * 4], y = o[k * 4 + 1]; if (z <= U[U.length - 1][0] + 1e-4) break; U.push([z, y]); }
     const sh = w.shapeAt(sk), amp = w.amp(sk);
-    c = { F, B, top: Math.max(F[F.length - 1][1], B[B.length - 1][1]), topZ: F[F.length - 1][0], broken: sh.broken, curl: sh.curl,
+    c = { F, B, U, top: Math.max(F[F.length - 1][1], B[B.length - 1][1]), topZ: F[F.length - 1][0], broken: sh.broken, curl: sh.curl,
       lipY: sh.P[7][1] * H * amp, lipZ: sh.P[7][0] * H * (w.cond.width || 1) };
     if (this.cache.size > 6000) this.cache.clear();
     this.cache.set(key, c);
@@ -72,6 +76,13 @@ export class Profile {
       for (let i = 1; i < B.length; i++) if (zl <= B[i][0]) { const t = (zl - B[i][0]) / (B[i - 1][0] - B[i][0] || 1e-6); return B[i][1] + (B[i - 1][1] - B[i][1]) * t; }
     }
     return c.top;                                     // over the crest
+  }
+  // the height of the tube's roof above a point (in the wave's own frame), or Infinity where nothing hangs overhead
+  ceiling(s, zl) {
+    const U = this.slice(s).U;
+    if (U.length < 3 || zl <= U[0][0] || zl >= U[U.length - 1][0]) return Infinity;
+    for (let i = 1; i < U.length; i++) if (zl <= U[i][0]) { const t = (zl - U[i - 1][0]) / Math.max(1e-6, U[i][0] - U[i - 1][0]); return U[i - 1][1] + (U[i][1] - U[i - 1][1]) * t; }
+    return Infinity;
   }
   // how far toward the beach the face reaches at height y (anything shoreward of this is open air in front of the wave)
   frontZAt(s, y) {
@@ -152,6 +163,12 @@ export class Rider {
     }
     const gs = (this.standing ? 1 : P.lieGravity) * Math.max(0, g + curv) / (1 + slope2);
     let ax = -gs * hx, az = -gs * hz;
+    // the roof of the barrel: under an overhanging lip the face ends at the ceiling. Riding up toward it, the curtain
+    // pouring over pushes you back down the face (harder on a forgiving wave); right up into it and the lip takes you
+    if (this.standing && sl && sl.U.length >= 3 && sl.lipY < 0.62 * H && q.s < -0.3 * H && q.zl < sl.lipZ) {
+      const roof = sl.F[sl.F.length - 1][1] * (w.fade || 1), k = smooth(0.62 * roof, 0.9 * roof, q.y);
+      if (k > 0) az += 9 * k / (C.forgive || 1);
+    }
     // board velocity relative to the water: along the board and sideways
     const rx = this.vx, rz = this.vz - uz;
     const along = rx * dx + rz * dz, lx = rx - along * dx, lz = rz - along * dz;
@@ -290,6 +307,9 @@ export class Rider {
     // too high while it's throwing
     // (only a wave that pitches can throw you; a soft, crumbly one just breaks around you and the whitewater rule decides)
     if (C.hollow > 0.5 && onFront && y > Math.min(0.97, 0.86 / Math.sqrt(C.forgive || 1)) * sl.top && s < 0.6 * H && s > -2.2 * H && zl < sl.topZ + 0.35 && this.hz > -0.05) return this.wipe('Too high: the lip threw you over the falls');
+    // ...and you can't get out through the roof: the only way out of a barrel is the open end
+    const roofY = sl.U.length >= 3 && sl.lipY < 0.62 * H ? sl.F[sl.F.length - 1][1] : Infinity;
+    if (C.hollow > 0.5 && onFront && s < -0.3 * H && s > -4.5 * H && zl < sl.lipZ && y > 0.95 * roofY) return this.wipe('Too high in the tube: the lip took you over the falls');
     // covered: the lip is out in front of you and over your head (on a small wave that's while it's still coming down, at
     // about half the wave's height: the landing rules above keep the stricter 'lip is down' test)
     this.inBarrel = C.hollow > 0.5 && sl.lipY < 0.62 * H && s < -0.4 * H && s > -4.5 * H && zl < sl.lipZ - 0.25 && y < 0.62 * H && onFront;

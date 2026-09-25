@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=92';
-import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=100';
+import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=101';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=7';
 import { ranch, POOL } from './ranch.js?v=4';
@@ -496,6 +496,11 @@ function povCamera(dt) {
     const t = T, n1 = Math.sin(t * 11.3) * 0.6 + Math.sin(t * 17.9 + 1.3) * 0.4, n2 = Math.sin(t * 23.7 + 0.7) * 0.5 + Math.sin(t * 31.1 + 2.1) * 0.5;
     const amp = (0.006 + 0.006 * chop) * sp + 0.008 * rattle;
     camera.position.y += n1 * amp; camera.rotateX(n2 * amp * 0.6); camera.rotateZ(n1 * amp * 0.4);
+  }
+  // inside a barrel your eyes stay under its roof (the lip's underside), never poking out through the top of the tube
+  if (standing && rider.wave && rider.wave.prof) {
+    const w = rider.wave, s = camera.position.x - w.peelX, zl = camera.position.z - w.zW - w.bend(s), cy = w.prof.ceiling(s, zl) * (w.fade || 1);
+    if (camera.position.y > cy - 0.4) camera.position.y = Math.max(cy - 0.4, rig.position.y + 0.6);
   }
   // the eyes are always above your own board (never ask the water height here: under a lip or in the barrel the
   // 'surface' overhead is the lip, and pushing above it would lift you out of the tube)
