@@ -5,7 +5,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=93';
 import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=111';
 import { makeBoard } from './board.js?v=6';
-import { SurfAudio } from './audio.js?v=7';
+import { SurfAudio } from './audio.js?v=8';
 import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=6';
 
@@ -93,7 +93,7 @@ function updateLocals(dt) {
   }
 }
 function updateScenery(dt) {
-  if (jukung.visible = !!rider && !isRanch()) { const y = heightAt(waves, jukung.position.x, jukung.position.z); jukung.position.y += (y - 0.05 - jukung.position.y) * Math.min(1, dt * 3); jukung.rotation.x = Math.sin(T * 0.9) * 0.04; jukung.rotation.z = Math.sin(T * 0.7 + 1) * 0.03; }
+  if (jukung.visible = !!rider && !isRanch() && mode !== 'extreme') { const y = heightAt(waves, jukung.position.x, jukung.position.z); jukung.position.y += (y - 0.05 - jukung.position.y) * Math.min(1, dt * 3); jukung.rotation.x = Math.sin(T * 0.9) * 0.04; jukung.rotation.z = Math.sin(T * 0.7 + 1) * 0.03; }   // (no fishing boat out in The Mountain's storm)
   for (const b of birds) { const u = b.userData; u.a += u.w * dt; b.position.set(u.cx + Math.cos(u.a) * u.r, u.h + Math.sin(T * 0.3 + u.r) * 2, u.cz + Math.sin(u.a) * u.r); b.rotation.set(0, -u.a, Math.sin(T * 0.8 + u.r) * 0.25);
     const flap = Math.sin(T * 7 + u.r) * (Math.sin(T * 0.4 + u.r) > 0.6 ? 0.5 : 0.05); b.scale.set(1.8, 1.8 + flap, 1.8); }
 }
@@ -181,6 +181,8 @@ function play(name, { fade = 0.25, once = false, speed = 1, weight = 1 } = {}) {
 let mode = null, rider = null, waves = [], session = { waves: 0, total: 0, best: 0, scores: [], barrels: 0 }, nextBreak = 0, setLeft = 0, setPos = 0;
 let REEF = { xEnd: 190, zBeach: 150 }; const PROFILES = new Map();   // room for the bigger swells to run (the sand starts ~185 m in)
 const OCEAN_REEF = REEF, RANCH_REEF = { xEnd: POOL.x1 - 60, zBeach: POOL.z1 - 20 };
+const POOL_PLANES = [new THREE.Plane(new THREE.Vector3(1, 0, 0), -POOL.x0), new THREE.Plane(new THREE.Vector3(-1, 0, 0), POOL.x1), new THREE.Plane(new THREE.Vector3(0, 0, 1), -POOL.z0), new THREE.Plane(new THREE.Vector3(0, 0, -1), POOL.z1)];
+renderer.localClippingEnabled = true;
 let ranchKind = 'medium';   // the wave you last ordered at the Surf Ranch
 const isRanch = () => mode === 'ranch';
 const modeName = (m) => m === 'ranch' ? 'Surf Ranch' : m === 'random' ? 'Random' : SPOTS[m] ? SPOTS[m].name : CONDITIONS[m].name;
@@ -200,6 +202,7 @@ function addWave(tBreak) {
   const cond = CONDITIONS[condFor(mode)];
   const w = new Wave(scene, cond);
   if (!PROFILES.has(cond)) PROFILES.set(cond, new Profile(w));      // the surface shape is the same for every wave of a size: share its cache
+  if (isRanch()) for (const k of ['mist', 'spit', 'veil', 'spray']) if (w[k]) { w[k].material.clippingPlanes = POOL_PLANES; w[k].material.needsUpdate = true; }   // (spray and mist stay inside the pool, not drifting over the deck)
   w.tBreak = tBreak; w.prof = PROFILES.get(cond); w.xEnd = REEF.xEnd; w.zBeach = REEF.zBeach; w.seed = Math.random() * 100;
   waves.push(w);
   return w;
@@ -269,7 +272,7 @@ function spawnRider() {
 const ranchWaiting = () => isRanch() && rider && !rider.standing && rider.state === 'LIE' && !waves.some((w) => w.zW < rider.z + 4);
 function ranchSend(kind) {
   if (!ranchWaiting()) return;
-  ranchKind = kind;
+  ranchKind = kind; audio.machine();
   // the wave leaves the machine wall 1.5 s after you order it (the lights pulse first), then runs down the pool to you
   const C = CONDITIONS[kind], zStart = POOL.z0 + 1;
   const w = addWave(T + 1.5 - zStart / C.speed); w.size = 1; w.ranchT0 = T;   // (every pool wave is the full size: no sets)
@@ -362,8 +365,8 @@ function surfSteer(sx, stall) {
 }
 
 // your best ride per level, kept on this phone (quietly does nothing if storage is blocked)
-const bestFor = (m) => { try { return +localStorage.getItem('balisurf.best3.' + m) || 0; } catch (e) { return 0; } };
-const saveBest = (m, v) => { try { localStorage.setItem('balisurf.best3.' + m, String(v)); } catch (e) {} showBests(); };
+const bestFor = (m) => { try { return +localStorage.getItem('balisurf.best4.' + m) || 0; } catch (e) { return 0; } };
+const saveBest = (m, v) => { try { localStorage.setItem('balisurf.best4.' + m, String(v)); } catch (e) {} showBests(); };
 function showBests() {
   for (const b of document.querySelectorAll('[data-mode]')) {
     let el = b.querySelector('.best'); const v = bestFor(b.dataset.mode);
@@ -1067,7 +1070,7 @@ let dtArm = 1 / 60;
 
 // ---------- HUD + end of ride
 const setText = (el, t) => { if (el && el._t !== t) { el._t = t; el.textContent = t; } };   // only touch the page when the text changes
-let endT = -1, snapCam = true, tubeShowT = 0;
+let endT = -1, snapCam = true, tubeShowT = 0, lastAir = false;
 function updateHUD(dt) {
   const st = rider.state;
   setText(ui.speed, rider.standing ? `${Math.round(rider.v * 3.6)} km/h` : '');
@@ -1138,7 +1141,7 @@ function autoQuality(dt) {
 }
 
 // ---------- loop
-const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)');
+const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)'); let lastPortrait = false;
 let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1, lastPump = false;
 function tick(dt) {
   T += dt;
@@ -1155,8 +1158,9 @@ function tick(dt) {
   if (rider) {
     updateWaves(dt);
     rider.update(dt, inp, waves); updateRanch(dt);
+    rider.caughtT = rider.washed ? 6 : Math.max(0, (rider.caughtT || 0) - dt);   // (remember being washed in for a few seconds: that's why you ended up inside)
     // drifting too far inside or out wide on a lie: bring the surfer back to the lineup (the pool's walls hold you in)
-    if (!isRanch() && rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out('Drifted out of the lineup'); }
+    if (!isRanch() && rider.state === 'LIE' && (rider.z > 40 || Math.abs(rider.x - 5) > 70 || rider.z < -60)) { rider.out(rider.z > 40 && rider.caughtT > 0 ? 'Caught inside: the whitewater washed you in' : 'Drifted out of the lineup'); }
     updateRig(dt, T);
     if (mixer) { mixer.update(dt); paddleArms(dt); dtArm = dt; surfStance(); }
     updateLeash(); updateScenery(dt); updateLocals(dt);
@@ -1184,6 +1188,7 @@ function tick(dt) {
       if (st === 'POP') audio.splash(0.35);
       lastState = st;
     }
+    if (!!rider.air !== lastAir) { if (rider.air) audio.air(); else if (rider.state === 'RIDE') audio.land(); lastAir = !!rider.air; }
     // a snap or cutback rips spray off the rail: a sharp tearing hiss
     if (rider.trick && rider.trick !== lastTrick) { audio.burst(0.3, 3200, 0.45, 'highpass'); audio.burst(0.2, 1300, 0.35); }
     lastTrick = rider.trick;
@@ -1205,6 +1210,7 @@ function tick(dt) {
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
   if (!(window.__g && window.__g.paused) && !portrait.matches) tick(dt);   // turned upright: the game waits
+  if (portrait.matches !== lastPortrait) { lastPortrait = portrait.matches; if (document.body.classList.contains('playing')) audio.pause(portrait.matches); }   // (and so does the sound: no endless drone while it waits)
   // pass 1: the world; pass 2: your body through its own lens (skipped when a test view shows the body in the world cam)
   HIDELEGS.value = camera.layers.isEnabled(1) ? 0 : 1;
   // the ride's over (the score is up): your body settling back onto the board moves faster than your eyes follow, and

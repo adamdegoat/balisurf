@@ -5,18 +5,21 @@ export class SurfAudio {
   start() {
     if (this.ok) { this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}   // play even with the iPhone's silent switch on (it's a game, not a notification)
     const ctx = this.ctx = new AC(); this.ok = true;
     // 4 s of pink-ish noise, looped by every layer
     const len = ctx.sampleRate * 4, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
     let b0 = 0, b1 = 0, b2 = 0;
     for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = 0.997 * b0 + w * 0.03; b1 = 0.96 * b1 + w * 0.3; b2 = 0.6 * b2 + w; d[i] = (b0 * 3 + b1 + b2 * 0.3) * 0.25; }
     this.noise = buf;
-    this.master = ctx.createGain(); this.master.gain.value = 0.9;
+    this.master = ctx.createGain(); this.master.gain.value = 0.55;   // (headroom: at 0.9 the limiter squashed everything and it pumped)
     this.under = ctx.createBiquadFilter(); this.under.type = 'lowpass'; this.under.frequency.value = 18000;   // muffles everything underwater
     // a limiter at the end: thunder, the lip and the barrel boom can stack up; phone speakers must never crackle
     const lim = ctx.createDynamicsCompressor();
-    lim.threshold.value = -14; lim.knee.value = 8; lim.ratio.value = 8; lim.attack.value = 0.004; lim.release.value = 0.25;
-    this.master.connect(this.under).connect(lim).connect(ctx.destination);
+    lim.threshold.value = -8; lim.knee.value = 8; lim.ratio.value = 8; lim.attack.value = 0.004; lim.release.value = 0.25;
+    // cut the rumble under ~40 Hz: nobody hears it (least of all through a phone speaker) but it ate the limiter's headroom
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 40; hp.Q.value = 0.7;
+    this.master.connect(this.under).connect(hp).connect(lim).connect(ctx.destination);
     const layer = (type, f, q) => {
       const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = Math.random() * 3;
       src.playbackRate.value = 0.8 + Math.random() * 0.4;
@@ -50,6 +53,7 @@ export class SurfAudio {
     const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = freq; fl.Q.value = 0.8;
     const g = ctx.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + Math.min(0.04, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(fl).connect(g).connect(this.master); src.start(t0, Math.random() * 3); src.stop(t0 + dur + 0.05);
+    src.onended = () => { src.disconnect(); fl.disconnect(); g.disconnect(); };   // (free each one-off sound when it's finished)
   }
   // called every frame with what's going on
   update(o) {
@@ -82,12 +86,18 @@ export class SurfAudio {
     const k = Math.max(0, 1 - dist / 45);
     if (k <= 0) return;
     this.burst(0.55 * k * Math.min(1.3, H / 2), 70 + 30 / H, 0.9 + 0.25 * H, 'lowpass');
+    this.burst(0.25 * k * Math.min(1.3, H / 2), 380, 0.5 + 0.15 * H);   // (the same thump's mid body: a phone speaker can't play the deep part)
     this.burst(0.22 * k, 1600, 0.7 + 0.2 * H, 'bandpass', 0.05);
   }
   pump() { this.burst(0.12, 500, 0.35, 'lowpass'); this.burst(0.07, 1800, 0.3); }   // weighting the board: a push of water off the rails
   paddle() { this.burst(0.18, 900 + Math.random() * 400, 0.25); }
   splash(size = 1) { this.burst(0.5 * size, 700, 0.9 * size); this.burst(0.35 * size, 2500, 0.5 * size, 'highpass'); }
   thunder(dist = 1) { this.burst(0.9, 90, 3.5, 'lowpass', 0.4 + dist * 1.5); this.burst(0.4, 260, 1.2, 'lowpass', 0.35 + dist * 1.5); }
+  // an air: the rush of wind as you leave the lip, rising; the landing: a hard slap and a burst of spray
+  air() { this.burst(0.2, 900, 0.7); this.burst(0.12, 2200, 0.5, 'highpass', 0.1); }
+  land(k = 1) { this.burst(0.4 * k, 500, 0.35, 'lowpass'); this.burst(0.3 * k, 1600, 0.5); this.burst(0.2 * k, 3500, 0.4, 'highpass', 0.05); }
+  // the Surf Ranch machine: a deep whoosh as the chambers fire, with a metallic clank
+  machine() { this.burst(0.5, 160, 2.2, 'lowpass'); this.burst(0.3, 420, 1.8); this.burst(0.12, 2600, 0.25, 'bandpass', 0.05); }
   // iOS only lets sound restart from a tap: call this from touch handlers
   wake() { if (this.ok && this.ctx.state !== 'running') this.ctx.resume(); }
   pause(on) { if (!this.ok) return; on ? this.ctx.suspend() : this.ctx.resume(); }
