@@ -214,7 +214,7 @@ vArm = 0.; vLeg = 0.;
   m.customProgramCacheKey = () => 'cutaway10' + (m.userData.near || 0);
   m.needsUpdate = true;
 }
-const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=1', (g) => {
+const ready = new Promise((res, rej) => new GLTFLoader().load('surfer.glb?v=2', (g) => {
   surfer = g.scene; rig.add(surfer);
   surfer.traverse((o) => o.layers.set(1));
   surfer.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (o.material.name === 'hair') o.material.side = THREE.DoubleSide; else { if (/short/i.test(o.material.name + o.name)) { o.material.userData.near = 0.45; o.material.userData.cap = 0x0f3b3f; } cutaway(o.material); } } });
