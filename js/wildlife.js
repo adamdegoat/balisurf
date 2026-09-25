@@ -141,5 +141,5 @@ export function wildlife(scene, { point }) {
       if (t > dur) { const was = W.st; whale.visible = false; W.st = 'wait'; W.next = was === 'breach' ? 40 : 14 + Math.random() * 16; if (W.n % 4 === 0) { W.st = 'away'; W.next = 60 + Math.random() * 60; } }
     }
   }
-  return { group, update, whale: W, pod, set notify(f) { W.notify = f; }, set sound(f) { W.sound = f; } };
+  return { group, update, whale: W, pod, splash(x, z) { small.emit(x, 0.2, z, 0, 3.2, 0, 0.5, 22); }, set notify(f) { W.notify = f; }, set sound(f) { W.sound = f; } };   // (splash: a bird hitting the water)
 }

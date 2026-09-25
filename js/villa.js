@@ -7,7 +7,7 @@
 // house carries a spiral stair up to a deck in its canopy, the highest seat on the point.
 import * as THREE from 'three';
 import { makeBoard } from './board.js?v=14';
-import { landMaterial } from './wave.js?v=102';
+import { landMaterial, waterMaterial } from './wave.js?v=105';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const VILLA = { x0: -100, x1: -86, z0: 30, z1: 44, Y: 26 };   // the house and its floor height (in the point's own frame, below)
@@ -38,6 +38,7 @@ export function villa(scene) {
   const B = { x0: V.x0, x1: V.x1 + 3.4, z0: V.z0 - 3.4, z1: V.z1 };   // the balcony wraps the two sea sides (south and east)
   const GY0 = Y - 0.2, fire0 = { x: -94.5, z: 49.5 };                 // the garden's grass level and the fire pit (behind the house)
   const LZ = 46.6;                                                   // ...and runs on past the house to the tree
+  const PL = { x0: -82.6, x1: -79.4, z0: 29.6, z1: 39.4 };        // the infinity pool, hung off the east balcony over the cliff
   const TX = -83.5, TZ = 48.5, R0 = 1.05, R1 = 2.1, RD = 3.6, DH = 8, TURN = 3 * Math.PI, A0 = -Math.PI / 2;   // the banyan: trunk, stair ring, deck radius and height, stair turns and start angle
 
   // ---- the rocky point: a long finger of limestone running out from the cliffs, scrub on top, sheer sides into the sea
@@ -176,9 +177,10 @@ export function villa(scene) {
   const plant = (x, z, s) => { cyl(0.28 * s, 0.2 * s, 0.5 * s, [0.66, 0.38, 0.25], x, Y + 0.25 * s, z);
     for (let k = 0; k < 10; k++) { const m = new THREE.Mesh(tint(leafGeo.clone(), LEAF, 0.3), mat); m.position.set(x, Y + (0.6 + k * 0.1) * s, z); m.rotation.set(0, k * 2.4, 0); m.rotateX(-0.6 - (k % 3) * 0.2); m.scale.setScalar(s); g.add(m); }
     block(x - 0.35 * s, x + 0.35 * s, z - 0.35 * s, z + 0.35 * s); };
-  plant(-86.7, 43.3, 1.4); plant(-96, 43.2, 1.1); plant(-94.4, 30.9, 1.0); plant(-86.7, 30.8, 1.3);
+  plant(-87.5, 42.5, 1.1); plant(-96.4, 42.6, 1.0); plant(-94.4, 31.3, 0.95); plant(-89.8, 31.5, 1.0);   // (leaves reach 1.15 m per unit of size: each far enough from the walls that none pokes through; the last clear of the egg chair's view)
   const leafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide });
-  const glow = new THREE.MeshBasicMaterial({ color: 0xffd9a4 }), shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, emissive: 0x7a4818, emissiveIntensity: 0.7 });   // (woven shades glow with the bulb inside)
+  const glow = new THREE.MeshBasicMaterial({ color: 0xffc27a, toneMapped: false });   // (full brightness, not dimmed by the tone curve: lit bulbs, not cream beads)
+  const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, emissive: 0x7a4818, emissiveIntensity: 0.7 });   // (woven shades glow with the bulb inside)
   for (const [x, z] of [[-91.5, 39], [-88.8, 39], [-97.5, 37]]) {
     const shade = new THREE.Mesh(tint(new THREE.SphereGeometry(0.35, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.6), RATTAN), shadeMat); shade.position.set(x, Y + 2.7, z); shade.rotation.x = Math.PI; g.add(shade);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), glow); bulb.position.set(x, Y + 2.62, z); g.add(bulb);
@@ -187,7 +189,7 @@ export function villa(scene) {
 
   // a rattan egg chair hanging from the ring beam by the corner glass, and a cluster of pendants under the peak
   { const ex = -88.1, ez = 32.3, egg = new THREE.SphereGeometry(0.62, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.72); egg.scale(1, 1.25, 1);
-    const e = new THREE.Mesh(tint(egg, RATTAN, 0.2), shadeMat); e.position.set(ex, Y + 1.25, ez); e.rotation.set(-Math.PI / 2 - 0.25, 0, 0.6); g.add(e);   // (open side toward the sea)
+    const e = new THREE.Mesh(tint(egg, RATTAN, 0.2), shadeMat); e.position.set(ex, Y + 1.25, ez); e.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(Math.cos(-0.3), 0.25, Math.sin(-0.3)).normalize()); g.add(e);   // (its open side faces the way you look from it: out of the corner glass at the waves)
     cyl(0.5, 0.5, 0.14, LINEN, ex, Y + 0.78, ez, 14); box(0.35, 0.3, 0.12, TEAL, ex - 0.15, Y + 1.0, ez + 0.28);
     cyl(0.012, 0.012, yR - 0.35 - (Y + 1.9), [0.2, 0.2, 0.2], ex, (yR - 0.35 + Y + 1.9) / 2, ez, 4); block(ex - 0.65, ex + 0.65, ez - 0.65, ez + 0.65); }
   for (let k = 0; k < 7; k++) { const an = k * 0.9, r = k ? 0.55 : 0, x = xm + Math.cos(an) * r, z = zm + Math.sin(an) * r, y = Y + 3.4 + (k % 3) * 0.45;
@@ -301,7 +303,7 @@ export function villa(scene) {
   box(B.x1 - B.x0, 0.22, 0.2, POST, (B.x0 + B.x1) / 2, Y - 0.52, B.z0 + 0.15); box(0.2, 0.22, LZ - B.z0, POST, B.x1 - 0.15, Y - 0.52, (B.z0 + LZ) / 2);
   const railZ = (z, x0, x1) => { box(x1 - x0, 0.09, 0.16, POST, (x0 + x1) / 2, Y + 1.05, z); for (let x = x0; x <= x1 + 0.01; x += 0.22) box(0.045, 1.0, 0.045, PLANK_D, x, Y + 0.5, z); };
   const railX = (x, z0, z1) => { box(0.16, 0.09, z1 - z0, POST, x, Y + 1.05, (z0 + z1) / 2); for (let z = z0; z <= z1 + 0.01; z += 0.22) box(0.045, 1.0, 0.045, PLANK_D, x, Y + 0.5, z); };
-  railZ(B.z0, B.x0, B.x1); railX(B.x1, B.z0, LZ); railX(B.x0, B.z0, V.z0); railZ(LZ, V.x1, TX - 0.9);   // (open to the garden on the west, and at the north end: the stair up the tree)
+  railZ(B.z0, B.x0, B.x1); railX(B.x1, B.z0, PL.z0); railX(B.x1, PL.z1, LZ); railX(B.x0, B.z0, V.z0); railZ(LZ, V.x1, TX - 0.9);   // (the east rail stops either side of the pool: its edge is the view)   // (open to the garden on the west, and at the north end: the stair up the tree)
   deck(V.x1, B.x1, V.z1, LZ);
   for (const z of [34.4, 39.6]) { box(1.6, 0.3, 0.8, PLANK_D, -84.8, Y + 0.15, z); box(1.1, 0.12, 0.75, LINEN, -84.6, Y + 0.36, z); const bk = box(0.65, 0.1, 0.75, LINEN, -85.4, Y + 0.58, z); bk.rotation.z = -0.7; block(-85.6, -84.0, z - 0.45, z + 0.45); }   // loungers facing the waves
   box(0.5, 0.4, 0.5, PLANK_L, -85.2, Y + 0.2, 37); block(-85.5, -84.9, 36.7, 37.3);
@@ -360,14 +362,13 @@ export function villa(scene) {
       if (k < n) { const b0 = an, b1 = a0 + (a1 - a0) * (k + 1) / n; beam(TX + Math.cos(b0) * r, Y + DH + 1.0, TZ + Math.sin(b0) * r, TX + Math.cos(b1) * r, Y + DH + 1.0, TZ + Math.sin(b1) * r, 0.045); } } };
     const AE = A0 + TURN;   // where the stair comes out onto the deck
     railR(RD - 0.06, 0, Math.PI * 2, 32); railR(R1 - 0.02, AE + 0.3, AE + Math.PI * 2 - 0.55, 20);
-    for (let k = 0; k < 10; k++) { const an = k * Math.PI / 5 + 0.1, x = TX + Math.cos(an) * (RD - 0.06), z = TZ + Math.sin(an) * (RD - 0.06);   // lanterns hung on the rail
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), glow); bulb.position.set(x, Y + DH + 0.85, z); g.add(bulb); }
     box(0.5, 0.4, 1.6, PLANK_L, TX + 2.9, Y + DH + 0.2, TZ - 0.3); box(1.6, 0.4, 0.5, PLANK_L, TX - 0.3, Y + DH + 0.2, TZ - 2.9);   // two benches along the rail, facing the waves
   }
 
   // ---- the garden behind the house, on the grass of the point: a fire pit with log seats, a hammock slung between
   // two coconut palms, frangipani. One step down off the end of the balcony
   const GY = GY0, G = { x0: -103, x1: -86.3, z0: 44.4, z1: 53.5 };
+  const frondGeos = [], swayT = { value: 0 };
   const fire = fire0;
   {
     const STONE = [0.5, 0.47, 0.42];
@@ -380,9 +381,16 @@ export function villa(scene) {
     const palm = (x, z, lean) => { const h = 7.5; for (let k = 0; k < 8; k++) { const t0 = k / 8, t1 = (k + 1) / 8; beam(x + lean * t0 * t0 * h * 0.25, GY + t0 * h, z, x + lean * t1 * t1 * h * 0.25, GY + t1 * h, z, 0.17 - 0.06 * t0); }
       const tx = x + lean * h * 0.25, ty = GY + h; const frond = new THREE.PlaneGeometry(0.7, 3.2, 1, 4); frond.translate(0, 1.6, 0);
       { const fp = frond.attributes.position; for (let i = 0; i < fp.count; i++) { const y = fp.getY(i); fp.setZ(i, -0.12 * y * y); } frond.computeVertexNormals(); }
-      for (let k = 0; k < 9; k++) { const f = new THREE.Mesh(tint(frond.clone(), [0.26, 0.45, 0.16], 0.3), leafMat); f.position.set(tx, ty, z); f.rotation.set(0, k * 0.7, 0); f.rotateX(-1.1 - (k % 2) * 0.3); g.add(f); }
+      for (let k = 0; k < 9; k++) { const f = new THREE.Object3D(); f.position.set(tx, ty, z); f.rotation.set(0, k * 0.7, 0); f.rotateX(-1.1 - (k % 2) * 0.3); f.updateMatrix();
+        const q = tint(frond.clone(), [0.26, 0.45, 0.16], 0.3), fp = q.attributes.position, sw = new Float32Array(fp.count); for (let i = 0; i < fp.count; i++) sw[i] = fp.getY(i) / 3.2;
+        q.setAttribute('aSway', new THREE.BufferAttribute(sw, 1)); q.applyMatrix4(f.matrix); frondGeos.push(q); }
       block(x - 0.3, x + 0.3, z - 0.3, z + 0.3); return [tx, ty]; };
     palm(-101.8, 46.2, 0.6); palm(-101.4, 52.4, -0.4);
+    // (all the fronds as one mesh that sways in the sea breeze in its vertex shader: the tips move most)
+    leafMat.onBeforeCompile = (sh) => { sh.uniforms.uT = swayT; sh.vertexShader = 'attribute float aSway; uniform float uT;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      float sk = aSway * aSway, ph = position.x * .35 + position.z * .3;
+      transformed.x += (sin(uT * 1.3 + ph) * .16 + sin(uT * 3.1 + ph * 2.) * .03) * sk; transformed.z += cos(uT * 1.05 + ph) * .12 * sk; transformed.y += sin(uT * 1.7 + ph) * .06 * sk;`); };
+    const fronds = new THREE.Mesh(mergeGeometries(frondGeos), leafMat); g.add(fronds);
     const hm = new THREE.PlaneGeometry(1.1, 4.6, 6, 16); hm.rotateX(-Math.PI / 2);
     { const hp = hm.attributes.position; for (let i = 0; i < hp.count; i++) { const zz = hp.getZ(i) / 2.3, xx = hp.getX(i) / 0.55; hp.setY(i, -0.55 * (1 - zz * zz) - 0.12 * (1 - xx * xx)); } hm.computeVertexNormals(); }
     const hmm = new THREE.Mesh(tint(hm, [0.86, 0.8, 0.66], 0.1), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide })); hmm.position.set(-101.6, GY + 1.5, 49.3); g.add(hmm);
@@ -404,35 +412,162 @@ export function villa(scene) {
     for (let i = 0; i < n; i++) { let x, z; do { x = G.x0 - 1 + Math.random() * (G.x1 - G.x0 + 1); z = G.z0 + Math.random() * (G.z1 - G.z0 + 2); } while (Math.hypot(x - fire.x, z - fire.z) < 2.6 || (x > -89 && z < 47));
       e4.set((Math.random() - 0.5) * 0.4, Math.random() * 3, (Math.random() - 0.5) * 0.4); const sc = 0.6 + Math.random() * 0.9; tm.setMatrixAt(i, m4.compose(new THREE.Vector3(x, GY - 0.05, z), q4.setFromEuler(e4), new THREE.Vector3(sc, sc * (0.7 + Math.random() * 0.6), sc))); }
     g.add(tm); }
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.8, 7, 1, true), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85, depthWrite: false })); flame.position.set(fire.x, GY + 0.55, fire.z); g.add(flame);
-  const flame2 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.55, 6, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9, depthWrite: false })); flame2.position.set(fire.x, GY + 0.45, fire.z); g.add(flame2);
+  // the flames: soft glowing tongues (a painted flame on three crossed cards, added onto what's behind like real fire
+  // light), a tall outer one and a hot inner core, each flickering at its own pace
+  const flameTex = (() => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128; const c = cv.getContext('2d');
+    for (let i = 0; i < 16; i++) { const t = i / 15, y = 114 - t * 100, r = 27 * (1 - t * 0.8), gr = c.createRadialGradient(32, y, 0, 32, y, r);
+      gr.addColorStop(0, `rgba(255,236,170,${0.55 * (1 - t * 0.6)})`); gr.addColorStop(0.45, `rgba(255,140,40,${0.3 * (1 - t * 0.7)})`); gr.addColorStop(1, 'rgba(255,70,0,0)'); c.fillStyle = gr; c.fillRect(0, 0, 64, 128); }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const flameCards = (w, h, op) => { const grp = new THREE.Group(), fm = new THREE.MeshBasicMaterial({ map: flameTex, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false });
+    for (let k = 0; k < 3; k++) { const q = new THREE.Mesh(new THREE.PlaneGeometry(w, h), fm); q.position.y = h / 2; q.rotation.y = k * Math.PI / 3; grp.add(q); } grp.position.set(fire.x, GY + 0.12, fire.z); g.add(grp); return grp; };
+  const flame = flameCards(0.9, 1.05, 0.9), flame2 = flameCards(0.5, 0.6, 1);
 
-  // birds: frigatebirds wheeling over the point on the evening wind
-  const birdGeo = new THREE.BufferGeometry(); birdGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.35, 0, 0, -0.25, -1.1, 0.25, 0.05,  0, 0, -0.25, 0, 0, 0.35, 1.1, 0.25, 0.05], 3)); birdGeo.computeVertexNormals();
-  const birds = new THREE.InstancedMesh(birdGeo, new THREE.MeshBasicMaterial({ color: 0x1c1a1c, side: THREE.DoubleSide }), 6); birds.frustumCulled = false; root.add(birds);
-  const BD = Array.from({ length: 6 }, (_, i) => ({ r: 25 + i * 9, h: 45 + (i % 3) * 12, w: (i % 2 ? 1 : -1) * (0.12 + i * 0.015), a: i * 1.3, f: i }));
-  const bm = new THREE.Matrix4(), bq = new THREE.Quaternion(), bs = new THREE.Vector3(), bp = new THREE.Vector3(), be = new THREE.Euler();
+  // ---- evening lights: festoon bulbs on sagging cables between bamboo poles at the balcony corners and back to the
+  // eaves, a ring of them under the banyan's canopy, and paper lanterns on the tree deck rail. Each glows with a soft
+  // halo. All the bulbs are one instanced mesh, the halos one cloud of sprites, the cables one set of lines
+  const haloTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const c = cv.getContext('2d'), gr = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,226,170,1)'); gr.addColorStop(0.22, 'rgba(255,184,96,.55)'); gr.addColorStop(0.55, 'rgba(255,150,60,.12)'); gr.addColorStop(1, 'rgba(255,140,50,0)'); c.fillStyle = gr; c.fillRect(0, 0, 64, 64);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const haloMat = (size, opacity) => new THREE.PointsMaterial({ map: haloTex, size, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false });
+  const bulbP = [], cableP = [];
+  const strand = (a, b, sag, n) => { let prev = null; for (let k = 0; k <= n; k++) { const t = k / n, p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - sag * 4 * t * (1 - t), a[2] + (b[2] - a[2]) * t];
+    if (prev) cableP.push(...prev, ...p); prev = p; if (k > 0 && k < n) bulbP.push([p[0], p[1] - 0.06, p[2]]); } };
+  const pole = (x, z, h) => { cyl(0.04, 0.055, h, [0.66, 0.54, 0.3], x, Y + h / 2, z, 6); for (let y = 0.5; y < h; y += 0.55) cyl(0.058, 0.058, 0.04, [0.5, 0.4, 0.2], x, Y + y, z, 6); return [x, Y + h - 0.06, z]; };   // (bamboo, with its joints)
+  { const P1 = pole(B.x0 + 0.12, B.z0 + 0.12, 2.8), P2 = pole(B.x1 - 0.12, B.z0 + 0.12, 2.8), P3 = pole(B.x1 - 0.12, PL.z1 + 0.25, 2.8), P4 = pole(B.x1 - 0.12, LZ - 0.12, 2.8);
+    strand(P1, P2, 0.5, 26); strand(P2, P3, 0.45, 18); strand(P3, P4, 0.3, 10);
+    strand(P1, [V.x0 + 0.1, Y + H - 0.15, V.z0 - 0.1], 0.2, 5); strand(P2, [V.x1 + 0.1, Y + H - 0.15, V.z0 - 0.1], 0.25, 7); strand(P3, [V.x1 + 0.1, Y + H - 0.15, PL.z1 + 0.25], 0.2, 5);
+    // under the canopy: a festoon ring on the limbs, and four drops from the trunk
+    const NR = 12, ring = []; for (let k = 0; k < NR; k++) { const an = k / NR * Math.PI * 2 + 0.2; ring.push([TX + Math.cos(an) * (RD + 0.3), Y + DH + 2.6 + 0.3 * Math.sin(k * 1.7), TZ + Math.sin(an) * (RD + 0.3)]); }
+    for (let k = 0; k < NR; k++) strand(ring[k], ring[(k + 1) % NR], 0.35, 5);
+    for (let k = 0; k < NR; k += 3) strand([TX, Y + DH + 3.1, TZ], ring[k], 0.3, 5); }
+  const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.045, 6, 4), glow, bulbP.length); { const m4 = new THREE.Matrix4(); bulbP.forEach((p, i) => bulbs.setMatrixAt(i, m4.makeTranslation(p[0], p[1], p[2]))); } g.add(bulbs);
+  { const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.Float32BufferAttribute(bulbP.flat(), 3)); g.add(new THREE.Points(hg, haloMat(0.7, 0.75))); }
+  { const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(cableP, 3)); g.add(new THREE.LineSegments(cg, new THREE.LineBasicMaterial({ color: 0x1d1611 }))); }
+  // paper lanterns hung from the tree deck rail: warm orange, capped in rattan, each on its own string, swaying
+  const lanterns = [], lanternMat = new THREE.MeshBasicMaterial({ color: 0xff9a4a, toneMapped: false }), capMat = new THREE.MeshStandardMaterial({ color: 0x5a3a1c, roughness: 0.9 });
+  { const body = new THREE.SphereGeometry(0.16, 12, 8); body.scale(1, 1.25, 1); const cap = new THREE.CylinderGeometry(0.07, 0.09, 0.05, 10), str = new THREE.CylinderGeometry(0.005, 0.005, 0.28, 3);
+    const hp = [];
+    for (let k = 0; k < 8; k++) { const an = k * Math.PI / 4 + 0.35, x = TX + Math.cos(an) * (RD - 0.06), z = TZ + Math.sin(an) * (RD - 0.06), hook = new THREE.Group(); hook.position.set(x, Y + DH + 1.02, z); g.add(hook);
+      const s1 = new THREE.Mesh(str, capMat); s1.position.y = -0.14; hook.add(s1);
+      const b1 = new THREE.Mesh(body, lanternMat); b1.position.y = -0.47; hook.add(b1);
+      const c1 = new THREE.Mesh(cap, capMat); c1.position.y = -0.27; hook.add(c1); const c2 = new THREE.Mesh(cap, capMat); c2.position.y = -0.67; hook.add(c2);
+      lanterns.push({ hook, ph: k * 1.9 }); hp.push(x, Y + DH + 0.55, z); }
+    const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.Float32BufferAttribute(hp, 3)); g.add(new THREE.Points(hg, haloMat(1.5, 0.6))); }
+
+  // ---- the infinity pool: a long teak-and-stone basin cantilevered off the east balcony on raking brackets, its outer
+  // edge a knife-edge weir, so from the loungers the water runs straight into the sea and the break beyond it
+  { const STONE = [0.33, 0.31, 0.29], TILE = [0.42, 0.72, 0.74], d = 1.2, wx = PL.x1 - PL.x0, wz = PL.z1 - PL.z0, cx = (PL.x0 + PL.x1) / 2, cz = (PL.z0 + PL.z1) / 2;
+    box(wx + 0.3, 0.14, wz + 0.3, STONE, cx, Y - d - 0.07, cz);                                         // floor
+    box(wx, 0.02, wz, TILE, cx, Y - d + 0.01, cz, 0.08);                                                  // (tiled)
+    for (const zz of [PL.z0 - 0.08, PL.z1 + 0.08]) { box(wx + 0.3, d + 0.12, 0.16, STONE, cx, Y - d / 2 + 0.03, zz); box(wx + 0.3, 0.06, 0.34, [0.5, 0.36, 0.2], cx, Y + 0.12, zz); }   // end walls, teak coping
+    box(0.16, d, wz, STONE, PL.x1 + 0.08, Y - d / 2 - 0.06, cz);                                        // the weir wall (just under the water: the edge you can't see)
+    box(0.4, 0.14, wz + 0.3, STONE, PL.x1 + 0.35, Y - 0.62, cz); box(0.12, 0.3, wz + 0.3, STONE, PL.x1 + 0.5, Y - 0.56, cz);   // the catch gutter, low enough under the edge that from the deck the water runs straight into the sea
+    box(0.36, 0.12, wz, [0.5, 0.36, 0.2], PL.x0 + 0.02, Y + 0.02, cz);                                  // teak coping along the balcony side
+    for (let k = 0; k < 4; k++) { const z = PL.z0 + 0.8 + k * (wz - 1.6) / 3; beam(PL.x1, Y - d - 0.1, z, PL.x0 - 2.6, Y - d - 3.6, z, 0.12); }   // brackets back into the rock
+    // the water: the same water as the sea (sky in it, ripples, the sun's sparkle), in the pool's clear turquoise
+    const wm = waterMaterial(); wm.uniforms.uDeep = { value: new THREE.Color(0.1, 0.46, 0.52) }; wm.uniforms.uTurq = { value: new THREE.Color(0.3, 0.8, 0.8) }; wm.uniforms.uReef = { value: 0 };
+    const wg = new THREE.PlaneGeometry(wx + 0.12, wz); wg.rotateX(-Math.PI / 2); const w = new THREE.Mesh(wg, wm); w.position.set(cx + 0.06, Y - 0.04, cz); g.add(w); root.userData.pool = w; }
+
+  // ---- the fire's sparks, and fireflies over the garden: points of light, coloured as they fade
+  const sparkN = 36, sparkP = new Float32Array(sparkN * 3), sparkC = new Float32Array(sparkN * 3), sparkV = new Float32Array(sparkN * 3), sparkL = new Float32Array(sparkN);
+  const sparks = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ map: haloTex, size: 0.14, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  sparks.geometry.setAttribute('position', new THREE.BufferAttribute(sparkP, 3)); sparks.geometry.setAttribute('color', new THREE.BufferAttribute(sparkC, 3)); sparks.frustumCulled = false; g.add(sparks);
+  const flyN = 22, flyP = new Float32Array(flyN * 3), flyC = new Float32Array(flyN * 3), fly = [];
+  const flies = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ map: haloTex, size: 0.22, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  flies.geometry.setAttribute('position', new THREE.BufferAttribute(flyP, 3)); flies.geometry.setAttribute('color', new THREE.BufferAttribute(flyC, 3)); flies.frustumCulled = false; g.add(flies);
+  for (let i = 0; i < flyN; i++) fly.push({ x: G.x0 + 1 + Math.random() * (G.x1 - G.x0 - 2), z: G.z0 + Math.random() * (G.z1 - G.z0), y: GY + 0.4 + Math.random() * 1.6, a: Math.random() * 6.3, ph: Math.random() * 20, sp: 0.25 + Math.random() * 0.3 });
+
+  // ---- the house dog: a lean ginger Sumba village dog who lives in the garden. Trots about, sits, lies down by the
+  // fire, and comes over to see you (tail going) when you're near
+  const dog = (() => {
+    const GING = [0.7, 0.45, 0.24], PALE = [0.9, 0.8, 0.64], DARK = [0.22, 0.15, 0.1];
+    const root2 = new THREE.Group(); g.add(root2); const body = new THREE.Group(); body.position.y = 0.42; root2.add(body);
+    const part = (geo, c, par, x, y, z) => { const m = new THREE.Mesh(tint(geo, c, 0.08), mat); m.position.set(x, y, z); par.add(m); return m; };
+    const cap = (r, len) => new THREE.CapsuleGeometry(r, len, 4, 10);
+    part(cap(0.1, 0.36).rotateX(Math.PI / 2).scale(1, 1.12, 1), GING, body, 0, 0, 0);                     // lean body, deep chest
+    part(cap(0.085, 0.14).rotateX(Math.PI / 2).scale(0.95, 1, 1), PALE, body, 0, -0.035, 0.13);            // (pale chest and belly)
+    part(new THREE.SphereGeometry(0.09, 10, 8).scale(1, 0.95, 1.1), GING, body, 0, 0.01, -0.2);             // haunch
+    const head = new THREE.Group(); head.position.set(0, 0.12, 0.27); body.add(head);
+    part(cap(0.055, 0.12).rotateX(0.9), GING, head, 0, 0.0, 0.0);                                           // neck
+    part(new THREE.SphereGeometry(0.075, 12, 10).scale(1, 0.92, 1.05), GING, head, 0, 0.1, 0.07);          // skull
+    part(new THREE.CylinderGeometry(0.03, 0.05, 0.12, 10).rotateX(Math.PI / 2), PALE, head, 0, 0.075, 0.16);   // muzzle, tapering
+    part(new THREE.SphereGeometry(0.018, 8, 6), DARK, head, 0, 0.085, 0.225);                               // nose
+    for (const sx of [-1, 1]) { const e = part(new THREE.ConeGeometry(0.035, 0.09, 6), GING, head, sx * 0.045, 0.18, 0.05); e.rotation.set(-0.15, 0, -sx * 0.3); part(new THREE.SphereGeometry(0.011, 6, 4), DARK, head, sx * 0.03, 0.12, 0.135); }   // ears up, eyes
+    const legs = []; for (const [x, z] of [[-0.065, 0.17], [0.065, 0.17], [-0.065, -0.2], [0.065, -0.2]]) { const hip = new THREE.Group(); hip.position.set(x, -0.04, z); body.add(hip);
+      part(cap(0.03, 0.26), GING, hip, 0, -0.17, 0); part(new THREE.SphereGeometry(0.03, 6, 4).scale(1, 0.6, 1.4), PALE, hip, 0, -0.34, 0.015); legs.push(hip); }   // (white socks)
+    // the tail: curled up over the back, the way Sumba's village dogs carry it
+    const tail = new THREE.Group(); tail.position.set(0, 0.06, -0.3); body.add(tail);
+    part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0.1, -0.05), new THREE.Vector3(0, 0.18, 0.02), new THREE.Vector3(0.02, 0.17, 0.1)]), 10, 0.022, 6), GING, tail, 0, 0, 0);
+    return { root: root2, body, head, legs, tail, x: -91, z: 51.8, hd: 0, st: 'walk', t: 0, tx: -95, tz: 47, gait: 0, cool: 0 };
+  })();
+  const dogOK = (x, z) => x > G.x0 + 0.8 && x < G.x1 - 0.6 && z > G.z0 + 0.5 && z < G.z1 - 0.5 && Math.hypot(x - fire.x, z - fire.z) > 2.9 && !(x < -100.6 && z > 46.3 && z < 52.3) && !(x > -89 && z < 47);
+  const dogPick = () => { if (Math.random() < 0.35) { const an = Math.random() * 6.3; return [fire.x + Math.cos(an) * 3.2, fire.z + Math.sin(an) * 3.2]; }   // (a warm spot by the fire)
+    for (let k = 0; k < 20; k++) { const x = G.x0 + 1 + Math.random() * (G.x1 - G.x0 - 2), z = G.z0 + 0.6 + Math.random() * (G.z1 - G.z0 - 1.2); if (dogOK(x, z)) return [x, z]; } return [-94, 51.5]; };
   let fT = 0;
-  function tick(dt, beat = 0) {
-    fT += dt;
+  function tick(dt, beat = 0, wx, wz, wfoot) {
+    fT += dt; swayT.value = fT;
+    for (const L of lanterns) { L.hook.rotation.z = 0.08 * Math.sin(fT * 1.1 + L.ph) + 0.03 * Math.sin(fT * 2.7 + L.ph); L.hook.rotation.x = 0.06 * Math.sin(fT * 0.9 + L.ph * 1.3); }
+    // sparks: born in the flames, rising on the heat, drifting, fading from yellow to red
+    for (let i = 0; i < sparkN; i++) { const j = i * 3; sparkL[i] -= dt;
+      if (sparkL[i] <= 0) { if (Math.random() > 0.05) { sparkC[j] = sparkC[j + 1] = sparkC[j + 2] = 0; continue; }
+        sparkL[i] = 0.7 + Math.random() * 1.5; sparkP[j] = fire.x + (Math.random() - 0.5) * 0.4; sparkP[j + 1] = GY + 0.45; sparkP[j + 2] = fire.z + (Math.random() - 0.5) * 0.4;
+        sparkV[j] = (Math.random() - 0.5) * 0.5; sparkV[j + 1] = 1.1 + Math.random() * 1.8; sparkV[j + 2] = (Math.random() - 0.5) * 0.5; }
+      sparkV[j] += Math.sin(fT * 3 + i) * 0.8 * dt; sparkV[j + 2] += Math.cos(fT * 2.3 + i) * 0.8 * dt; sparkV[j + 1] -= 0.4 * dt;
+      sparkP[j] += sparkV[j] * dt; sparkP[j + 1] += sparkV[j + 1] * dt; sparkP[j + 2] += sparkV[j + 2] * dt;
+      const k = Math.min(1, sparkL[i] * 1.5) * (0.7 + 0.3 * Math.sin(fT * 30 + i)); sparkC[j] = k; sparkC[j + 1] = 0.35 + 0.3 * k * k; sparkC[j + 1] *= k; sparkC[j + 2] = 0.12 * k; }
+    sparks.geometry.attributes.position.needsUpdate = true; sparks.geometry.attributes.color.needsUpdate = true;
+    // fireflies: drifting lazily over the grass, each glowing and going dark on its own slow beat
+    fly.forEach((f, i) => { const j = i * 3; f.a += Math.sin(fT * 0.7 + f.ph) * 1.4 * dt; let nx = f.x + Math.cos(f.a) * f.sp * dt, nz = f.z + Math.sin(f.a) * f.sp * dt;
+      if (nx < G.x0 + 0.5 || nx > G.x1 - 0.5 || nz < G.z0 || nz > G.z1) { f.a += Math.PI; nx = f.x; nz = f.z; } f.x = nx; f.z = nz; f.y = Math.min(GY + 2.2, Math.max(GY + 0.3, f.y + Math.sin(fT * 1.3 + f.ph) * 0.25 * dt));
+      flyP[j] = f.x; flyP[j + 1] = f.y; flyP[j + 2] = f.z; let b = Math.max(0, Math.sin(fT * 1.6 + f.ph)); b = b * b * b; flyC[j] = 0.75 * b; flyC[j + 1] = b; flyC[j + 2] = 0.3 * b; });
+    flies.geometry.attributes.position.needsUpdate = true; flies.geometry.attributes.color.needsUpdate = true;
+    dogTick(dt, wx, wz, wfoot);
     for (const w of woofers) { w.position.z = w.userData.z0 + beat * 0.02; }   // (the cones pump with the bass)
-    const fl = 1 + 0.18 * Math.sin(fT * 13) + 0.1 * Math.sin(fT * 23 + 1); flame.scale.set(1, fl, 1); flame2.scale.set(1, 2 - fl, 1);
-    BD.forEach((b, i) => { b.a += b.w * dt; const flap = Math.sin(fT * 2.2 + b.f) > 0.6 ? Math.sin(fT * 9 + b.f) : 0.25;
-      bp.set(OX + 93 + Math.cos(b.a) * b.r, b.h + Math.sin(fT * 0.3 + i) * 3, 37 + OZ + 60 + Math.sin(b.a) * b.r);   // (in the coast frame's world: root sits at the spot's dz)
-      be.set(0, -b.a - (b.w > 0 ? 0 : Math.PI), (b.w > 0 ? -1 : 1) * 0.35); bq.setFromEuler(be); birds.setMatrixAt(i, bm.compose(bp.sub(root.position), bq, bs.set(1.6, 1.6 * flap, 1.6))); });
-    birds.instanceMatrix.needsUpdate = true;
+    const fl = 1 + 0.16 * Math.sin(fT * 13) + 0.09 * Math.sin(fT * 23 + 1) + 0.05 * Math.sin(fT * 41); flame.scale.set(1 + 0.06 * Math.sin(fT * 17), fl, 1); flame2.scale.set(1, 2.05 - fl, 1); flame.rotation.y = fT * 0.7; flame2.rotation.y = -fT * 1.1;
     const ch = root.userData.chime; if (ch) { ch.rotation.z = 0.06 * Math.sin(fT * 1.7) + 0.03 * Math.sin(fT * 4.1); ch.rotation.x = 0.05 * Math.sin(fT * 1.3 + 1); }
+  }
+
+  // the dog's day: walk somewhere, sit or lie down a while (often by the fire), and trot over to you when you come near
+  function dogTick(dt, wx, wz, wfoot) {
+    const d = dog; d.t -= dt; let px = null, pz = null;
+    if (wx !== undefined && wfoot < Y + 0.5) { const [lx, lz] = toL(wx, wz); if (Math.hypot(lx - d.x, lz - d.z) < 6 && lx < G.x1 + 3.5 && lz > G.z0 - 3) { px = lx; pz = lz; } }   // (you, on the ground nearby)
+    if (px !== null && d.st !== 'come' && d.st !== 'greet' && d.cool <= 0) { d.st = 'come'; }
+    d.cool = (d.cool || 0) - dt;
+    let speed = 0;
+    if (d.st === 'come') { if (px === null) { d.st = 'walk'; } else { const dx = px - d.x, dz = pz - d.z, dd = Math.hypot(dx, dz); d.tx = px - dx / dd * 0.9; d.tz = pz - dz / dd * 0.9; speed = 1.9; if (dd < 1.3) { d.st = 'greet'; d.t = 5 + Math.random() * 3; } } }
+    else if (d.st === 'walk') speed = 1.1;
+    else if (d.t <= 0) { if (d.st === 'greet') d.cool = 15; d.st = 'walk'; [d.tx, d.tz] = dogPick(); }
+    if (d.st === 'greet' && px !== null) { const a = Math.atan2(px - d.x, pz - d.z); d.hd += Math.atan2(Math.sin(a - d.hd), Math.cos(a - d.hd)) * Math.min(1, dt * 3); }   // (sitting there looking up at you)
+    if (speed > 0) { const dx = d.tx - d.x, dz = d.tz - d.z, dd = Math.hypot(dx, dz);
+      if (dd < 0.3 && d.st === 'walk') { const byFire = Math.hypot(d.x - fire.x, d.z - fire.z) < 3.6; d.st = byFire || Math.random() < 0.3 ? 'lie' : 'sit'; d.t = d.st === 'lie' ? 10 + Math.random() * 14 : 4 + Math.random() * 6; speed = 0; }
+      else { const want = Math.atan2(dx, dz), turn = Math.atan2(Math.sin(want - d.hd), Math.cos(want - d.hd)); d.hd += Math.max(-3.5 * dt, Math.min(3.5 * dt, turn)); if (Math.abs(turn) > 1.2) speed *= 0.4;
+        // (something in the way, the fire or the hammock: go round it, trying a little to either side, then more)
+        let hd = d.hd; const free = !dogOK(d.x, d.z);   // (and never stuck: from anywhere it shouldn't be, it can always walk out)
+        for (const off of [0, 0.5, -0.5, 1, -1, 1.6, -1.6]) { const h2 = d.hd + off; if (free || dogOK(d.x + Math.sin(h2) * 0.4, d.z + Math.cos(h2) * 0.4)) { hd = h2; break; } }
+        const nx = d.x + Math.sin(hd) * speed * dt, nz = d.z + Math.cos(hd) * speed * dt;
+        if (free || dogOK(nx, nz)) { d.x = nx; d.z = nz; d.hd += (hd - d.hd) * Math.min(1, dt * 6); } else if (d.st === 'walk') [d.tx, d.tz] = dogPick(); } }
+    // the pose
+    const sit = d.st === 'sit' || d.st === 'greet', lie = d.st === 'lie', k = Math.min(1, dt * 5);
+    d.gait += speed * dt * 8.5; d.pose = (d.pose || 0) + ((lie ? 2 : sit ? 1 : 0) - (d.pose || 0)) * k;
+    const sitK = Math.max(0, 1 - Math.abs(d.pose - 1)), lieK = Math.max(0, d.pose - 1), swing = speed > 0 ? Math.min(0.7, speed * 0.4) : 0;
+    d.body.position.y = 0.42 - 0.06 * sitK - 0.26 * lieK; d.body.rotation.x = -0.42 * sitK;
+    d.legs.forEach((L, i) => { const front = i < 2, ph = (i === 0 || i === 3) ? 0 : Math.PI; L.rotation.x = Math.sin(d.gait + ph) * swing + (front ? 0.42 * sitK : -1.25 * sitK) + (front ? -1.45 : -1.35) * lieK; L.rotation.z = front ? 0 : (i === 2 ? -0.5 : 0.5) * lieK; });   // (lying like a sphinx: front paws out, back legs tucked under to the side)
+    let look = 0; if (px !== null) { const a = Math.atan2(px - d.x, pz - d.z); look = Math.max(-0.9, Math.min(0.9, Math.atan2(Math.sin(a - d.hd), Math.cos(a - d.hd)))); }
+    d.head.rotation.y += (look - d.head.rotation.y) * k; d.head.rotation.x = 0.25 * lieK + 0.2 * sitK;
+    const wagF = d.st === 'greet' || d.st === 'come' ? 16 : lie ? 3 : 7, wagA = d.st === 'greet' || d.st === 'come' ? 0.6 : lie ? 0.15 : 0.3;
+    d.tail.rotation.z = Math.sin(fT * wagF) * wagA; d.tail.rotation.x = -0.9 * lieK + 0.4 * sitK;
+    d.root.position.set(d.x, GY, d.z); d.root.rotation.y = d.hd;
   }
 
   // join everything that doesn't move into one mesh per material (a phone draws each in one go instead of hundreds of
   // little pieces): the timber, the furniture, the speakers' cabinets, lamps, tub... Not the moving parts (speaker cones,
   // the fire, the boards you pick from the rack) and not anything drawn mirrored, which would turn inside out merged
   { g.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), rel = new THREE.Matrix4();
-    const keep = new Set([...woofers, flame, flame2]); for (const b of rack) b.traverse((o) => keep.add(o));
+    const keep = new Set([...woofers]); flame.traverse((o) => keep.add(o)); flame2.traverse((o) => keep.add(o)); for (const b of rack) b.traverse((o) => keep.add(o)); for (const L of lanterns) L.hook.traverse((o) => keep.add(o)); dog.root.traverse((o) => keep.add(o));
     const byMat = new Map(); g.traverse((o) => { if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || keep.has(o)) return; rel.multiplyMatrices(inv, o.matrixWorld); if (rel.determinant() < 0) return;
       if (!byMat.has(o.material)) byMat.set(o.material, []); byMat.get(o.material).push(o); });
     for (const [M, parts] of byMat) { if (parts.length < 2) continue;
-      const want = ['position', 'normal', ...(M.vertexColors ? ['color'] : []), ...(M.map ? ['uv'] : [])], ok = [], geos = [];
+      const want = ['position', 'normal', ...(M.vertexColors || parts.every((o) => o.geometry.attributes.color) ? ['color'] : []), ...(M.map ? ['uv'] : [])], ok = [], geos = [];   // (colours kept for the land's own shader too: dropped, the garden came out white)
       for (const o of parts) { let q = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); if (!q.attributes.normal) q.computeVertexNormals();
         if (!want.every((k) => q.attributes[k])) continue; for (const k of Object.keys(q.attributes)) if (!want.includes(k)) q.deleteAttribute(k);
         rel.multiplyMatrices(inv, o.matrixWorld); q.applyMatrix4(rel); geos.push(q); ok.push(o); }
@@ -485,10 +620,10 @@ export function villa(scene) {
   const walk = { x0: OX - Math.max(B.x1, TX + RD), x1: OX - G.x0, z0: B.z0 + OZ, z1: Math.max(TZ + RD, G.z1) + OZ };
   // places to sit (or lie), each with the view it frames: [x, z, eye height, look direction, look pitch, what it is]
   const seatL = [
-    [-84.7, 34.4, Y + 0.95, 0.35, -0.08, 'LIE BACK'], [-84.7, 39.6, Y + 0.95, -0.2, -0.08, 'LIE BACK'], [-88.1, 32.3, Y + 1.15, -0.75, -0.06, 'SIT'],
+    [-84.7, 34.4, Y + 0.95, 0.35, -0.08, 'LIE BACK'], [-84.7, 39.6, Y + 0.95, -0.2, -0.08, 'LIE BACK'], [-88.1, 32.3, Y + 1.15, -0.3, -0.06, 'SIT'],
     [-90.2, 41.5, Y + 1.1, -Math.PI / 2 + 0.25, -0.05, 'SIT'], [tub.x, tub.z, Y + 1.38, -0.55, -0.08, 'SOAK'],
-    [TX + 2.75, TZ - 0.3, Y + DH + 1.1, 0, -0.15, 'SIT'], [TX - 0.3, TZ - 2.75, Y + DH + 1.1, -Math.PI / 2 + 0.3, -0.15, 'SIT'],
-    [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'],
+    [TX + 2.5, TZ - 0.3, Y + DH + 1.4, 0, -0.3, 'SIT'], [TX - 0.3, TZ - 2.5, Y + DH + 1.4, -Math.PI / 2 + 0.3, -0.3, 'SIT'],   // (perched up on the bench back, looking down over the rail at the break)
+    [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'], [PL.x0 + 1.3, 34.5, Y + 0.28, 0.05, -0.02, 'SWIM'],   // (in the pool, arms on the edge, the break right there over the water)
     ...[0.5, 2.2, 3.9].map((an) => [fire.x + Math.cos(an) * 2.1, fire.z + Math.sin(an) * 2.1, GY + 1.0, an + Math.PI, -0.25, 'SIT BY THE FIRE'])];
   const seats = seatL.map(([x, z, eye, a, pitch, name]) => ({ x: OX - x, z: z + OZ, eye, yaw: Math.PI - a, pitch, name }));
   for (const [x, z, y] of speakersL) seats.push({ x: OX - x, z: z + OZ, eye: y + 1.1, radio: true, name: 'MUSIC' });
@@ -497,5 +632,5 @@ export function villa(scene) {
     const bm = new THREE.MeshStandardMaterial({ color: 0xb89a62, roughness: 0.6 }); const top = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12), bm); ch.add(top);
     for (let k = 0; k < 6; k++) { const an = k / 6 * Math.PI * 2, L = 0.28 + (k % 3) * 0.1, c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, L, 6), bm); c.position.set(Math.cos(an) * 0.12, -0.12 - L / 2, Math.sin(an) * 0.12); ch.add(c); }
     root.userData.chime = ch; }
-  return { group: root, rack, colliders, walk, floorAt, solid, fix, tick, seats, sounds, setSong, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.2 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
+  return { group: root, rack, colliders, walk, floorAt, solid, fix, tick, seats, sounds, setSong, dog, spawn: { x: OX + 91, z: 37.5 + OZ, yaw: Math.PI + 0.2 }, rackAt: { x: OX - (V.x0 + 0.6), z: 37 + OZ } };
 }

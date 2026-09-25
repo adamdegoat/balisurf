@@ -349,7 +349,7 @@ export const WEATHER = {
   medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2562ab, hor: 0xacd4e8, sunCol: 0xfff7e6, fog: 0xbadae9, deep: 0x08527c, turq: 0x18c2b3, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
   hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2158a6, hor: 0xa6cde3, sunCol: 0xffe6bf, fog: 0xb4d4e3, deep: 0x07496e, turq: 0x16b2a5, cloud: 0.2, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
   extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
-  villa:   { sun: [-0.35, 0.22, -0.9], zen: 0x3a64a8, hor: 0xf0c9a2, sunCol: 0xffc68a, fog: 0xe8c9ac, deep: 0x0a4a62, turq: 0x15a39a, cloud: 0.25, chop: 0.9, fogFar: 1100, rain: 0, sunVis: 1 },   // golden hour at the villa: the sun going down over the sea
+  villa:   { gold: 1, sun: [-0.35, 0.22, -0.9], zen: 0x3a64a8, hor: 0xf0c9a2, sunCol: 0xffc68a, fog: 0xf0c6a0, deep: 0x0a4a62, turq: 0x15a39a, cloud: 0.18, chop: 0.9, fogFar: 1100, rain: 0, sunVis: 1 },   // golden hour at the villa: the sun going down over the sea
   ranch:   { sun: [0.45, 0.72, -0.5], zen: 0x2a6cb8, hor: 0xcfe2ea, sunCol: 0xfff3dd, fog: 0xd4e5ec, deep: 0x1a8ea0, turq: 0x3fd6c8, cloud: 0.08, chop: 0.3, fogFar: 700, rain: 0, sunVis: 1 },   // dry, clear country sky; calm pool water
   random:  { sun: [0.3, 0.7, -0.6],  zen: 0x2766ae, hor: 0xabd3e7, sunCol: 0xfff3dc, fog: 0xb9d9e8, deep: 0x09547e, turq: 0x19bdb2, cloud: 0.32, chop: 1.1, fogFar: 310, rain: 0, sunVis: 1 },
 };
@@ -360,12 +360,14 @@ export const ENV = {
   uCloud: { value: 0.3 }, uChop: { value: 1 }, uFogFar: { value: 260 }, uSunVis: { value: 1 }, uFlash: { value: 0 },
   uPool: { value: new THREE.Vector4(-1e6, 1e6, -1e6, 1e6) },   // water only inside this box (x0, x1, z0, z1): the wave pool
   uReef: { value: 1 },
+  uGold: { value: 0 },                                // golden hour (the villa's evening): 0 = plain day
   uReefEnd: { value: 190 }, uReefTint: { value: new THREE.Color(1, 1, 1) },   // where the shallows stop (the beach), and each spot's reef colour                                           // 0 = no reef under the water (a concrete pool)
 };
 export function setWeather(name) {
   const w = WEATHER[name]; ENV.weather = w; ENV.name = name;
   ENV.uSun.value.set(...w.sun).normalize();
   for (const k of ['zen', 'hor', 'sunCol', 'fog', 'deep', 'turq']) ENV['u' + k[0].toUpperCase() + k.slice(1)].value.setHex(w[k]);
+  ENV.uGold.value = w.gold || 0;
   ENV.uCloud.value = w.cloud; ENV.uChop.value = w.chop; ENV.uFogFar.value = w.fogFar; ENV.uSunVis.value = w.sunVis;
 }
 setWeather('medium');
@@ -376,6 +378,20 @@ const NOISE = /* glsl */`
   float fbm(vec2 p){ float a=.5, s=0.; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=.5; } return s; }
 `;
 
+// golden hour: a burning orange band low around the sun, turning rose and then lilac away from it, a deeper blue
+// overhead and a wide warm glow round the sun (on the sky, and on the sky as the water mirrors it)
+const SUNSET = /* glsl */`
+  vec3 sunset(vec3 d, vec3 c){
+    if (uGold < .01) return c;
+    float h = clamp(d.y, 0., 1.);
+    vec2 da = d.xz / max(length(d.xz), 1e-4), sa = uSun.xz / max(length(uSun.xz), 1e-4);
+    float az = dot(da, sa) * .5 + .5;
+    vec3 horz = mix(vec3(.7, .42, .6), mix(vec3(.92, .36, .3), vec3(.95, .45, .1), az), smoothstep(.15, .8, az));   // (kept below full brightness: the filmic curve turns near-white orange into pastel)
+    c = mix(c, horz, exp(-h * 5.) * uGold * .92);
+    c = mix(c, c * vec3(.72, .78, 1.08), smoothstep(.2, .75, h) * uGold);
+    return c + uSunCol * pow(max(dot(d, uSun), 0.), 5.) * .4 * uGold;
+  }
+`;
 export function waterMaterial({ wave = false } = {}) {
   return new THREE.ShaderMaterial({
     side: wave ? THREE.DoubleSide : THREE.FrontSide,
@@ -395,9 +411,9 @@ export function waterMaterial({ wave = false } = {}) {
       }`,
     fragmentShader: /* glsl */`
       precision highp float;
-      uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash, uReef, uReefEnd; uniform vec3 uReefTint; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq; uniform vec4 uPool;
+      uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash, uReef, uReefEnd, uGold; uniform vec3 uReefTint; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq; uniform vec4 uPool;
       varying vec3 vW; varying vec3 vN; varying vec2 vFT; varying float vAge;
-      ${NOISE}
+      ${NOISE}${SUNSET}
       vec3 sky(vec3 d){
         float h = clamp(d.y, 0., 1.);
         vec3 c = mix(uHor, uZen, pow(h, .45));
@@ -410,7 +426,7 @@ export function waterMaterial({ wave = false } = {}) {
       // smooth glow reflected through ripples smeared into white blobs beside the board)
       vec3 skyR(vec3 d){
         float h = clamp(d.y, 0., 1.);
-        vec3 c = mix(uHor, uZen, pow(h, .3)) + uSunCol * pow(max(dot(d, uSun), 0.), 12.) * .08;   // (a touch more blue sky in it than the view straight at the horizon: the sea read milky)
+        vec3 c = sunset(d, mix(uHor, uZen, pow(h, .3))) + uSunCol * pow(max(dot(d, uSun), 0.), 12.) * .08;   // (a touch more blue sky in it than the view straight at the horizon: the sea read milky)
         return mix(c, uHor * .8 + uZen * .2, uCloud * .6) + uFlash;
       }
       void main(){
@@ -519,10 +535,10 @@ export function skyDome(scene) {
     side: THREE.BackSide, depthWrite: false,
     uniforms: { ...ENV, uTime: { value: 0 } },
     vertexShader: `varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
-    fragmentShader: `uniform vec3 uSun, uZen, uHor, uSunCol; uniform float uCloud, uSunVis, uTime, uFlash; varying vec3 vD; ${NOISE}
+    fragmentShader: `uniform vec3 uSun, uZen, uHor, uSunCol; uniform float uCloud, uSunVis, uTime, uFlash, uGold; varying vec3 vD; ${NOISE}${SUNSET}
       void main(){
         vec3 d = normalize(vD); float h = clamp(d.y, 0., 1.);
-        vec3 c = mix(uHor, uZen, pow(h, .45));
+        vec3 c = sunset(d, mix(uHor, uZen, pow(h, .45)));
         float s = max(dot(d, uSun), 0.);
         c += uSunCol * (pow(s, 900.) * 8. * uSunVis + pow(s, 10.) * .5 * max(uSunVis, .3));
         // clouds: thin streaks on clear days, a heavy low ceiling in a storm
@@ -530,6 +546,7 @@ export function skyDome(scene) {
         float n = fbm(p * vec2(1., 3. - uCloud * 2.));
         float cl = smoothstep(.62 - uCloud * .5, .82 - uCloud * .35, n);
         vec3 warm = mix(vec3(.95,.6,.5), vec3(.9,.92,.95), clamp(uSunVis * (1. - uCloud), 0., 1.));
+        warm = mix(warm, mix(vec3(.95, .55, .6), vec3(1., .66, .38), pow(max(dot(normalize(d.xz + 1e-4), normalize(uSun.xz)), 0.), 2.)), uGold * .85);   // (at golden hour the clouds catch the low sun: orange near it, pink away from it)
         vec3 cloudLit = mix(vec3(.42,.47,.5), warm, clamp(uSunVis * 1.5, 0., 1.));        // no sun, no colour: storm clouds are grey
         vec3 cloudCol = mix(cloudLit, vec3(.12,.14,.16), uCloud * .85) * (.75 + .25 * n);
         cloudCol += uSunCol * pow(s, 6.) * .4 * uSunVis;                       // silver lining near the sun
