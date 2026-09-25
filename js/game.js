@@ -117,7 +117,14 @@ function updateWaves(dt) {
     // the break doesn't peel at one steady speed: sections race ahead and slow down (more so in heavy surf), so a tube
     // opens and pinches and you have to keep adjusting. Integrated so it stays smooth.
     const sg = C.name === 'Hard' || C.name === 'Extreme' ? 0.3 : C.name === 'Medium' ? 0.18 : 0.06;
-    const rate = C.peel * (1 + sg * (0.6 * Math.sin(t * 0.55 + w.seed) + 0.4 * Math.sin(t * 1.3 + w.seed * 2.1)));
+    let rate = C.peel * (1 + sg * (0.6 * Math.sin(t * 0.55 + w.seed) + 0.4 * Math.sin(t * 1.3 + w.seed * 2.1)));
+    // sections: every few seconds a stretch ahead of the curl throws all at once, so the break races ahead for about a
+    // second (the curl jumps 1.5-2 wave heights down the line), then eases while it recovers. You race it, or pull in.
+    if (t > 0 && C.name !== 'Easy') {
+      if (w.secT === undefined) w.secT = 3 + Math.random() * 4;
+      if (w.secK === undefined || w.secK <= 0) { w.secT -= dt; if (w.secT <= 0) { w.secK = 1.1; w.secT = 5 + Math.random() * 5; if (w.spitT !== undefined) w.spitT = 0.25; } }
+      else { w.secK -= dt; const ph = 1 - w.secK / 1.1, A = C.name === 'Medium' ? 1.5 : 2.1; rate *= ph < 0.75 ? 1 + A * Math.sin(Math.PI * ph / 0.75) : 0.6; }
+    }
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
     w.peelRate = rate;   // the physics uses the peel speed right now (not the average), so the wave's push matches what you see
     w.place(w.px, C.speed * t);
