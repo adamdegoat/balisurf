@@ -1255,7 +1255,9 @@ const vSitB = document.getElementById('vSit');
 const SONGS = { 'we-dub-a-long-way': ['We Dub A Long Way', 'Brotheration Records'], 'reggae-dub-1': ['Reggae Dub One', 'Pietix'], 'dreaming-of-reggae': ['Dreaming of Reggae', 'Figaro Reggae Music'],
   'roots-reggae': ['Roots Reggae', 'MrBAS Music Labs'], 'roots-guitare-tamtam': ['Roots Guitare Tamtam', 'Acoostika Beat'], 'feel-the-vibe': ['Feel the Vibe in Here', 'Figaro Reggae Music'],
   'barefoot-in-the-breeze': ['Barefoot in the Breeze', 'OpenMindAudio'], 'island-vibes': ['Reggae Island Vibes', 'Alex Morgan'], 'everyday-is-a-holiday': ['Everyday Is a Holiday', 'Brotheration Records'],
-  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'] };
+  'stand-firm-like-a-tree': ['Stand Firm Like a Tree', 'OpenMindAudio'], 'relaxing-island-reggae': ['Relaxing Island Reggae', 'Brotheration Records'], 'locust-chill-rasta': ['Locust', 'Brotheration Records'],
+  'sinim-riddim': ['Sinim Riddim', 'Brotheration Records'], 'dub-you-dub': ['Dub You Dub', 'Rupert Asher'], 'africa-departure-dub': ['Africa Departure Dub', 'Brotheration Records'], 'su-su-riddim': ['Su-Su Riddim', 'Brotheration Records'],
+  'happy-feet': ['Happy Feet', 'Brotheration Records'], 'happy-upbeat-marley': ['Happy Upbeat Marley Reggae', 'Brotheration Records'], 'love-is-gonna-stay': ['Love Is Gonna Stay', 'Rupert Asher'], 'we-come-a-long-way': ['We Come A Long Way', 'Vernon Maytone'] };
 const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] || ['Island radio', ''];
 // the Now playing box: tap it and back / next buttons open under the song (they fold away again after a few seconds)
 { const box = document.getElementById('vSong'); let shut = null; const later = () => { clearTimeout(shut); shut = setTimeout(() => box.classList.remove('open'), 6000); };
@@ -1264,7 +1266,8 @@ const songOf = (src) => SONGS[(src || '').split('/').pop().replace('.mp3', '')] 
   for (const [id, f] of [['mPrev', () => audio.musicPrev()], ['mNext', () => audio.musicNext()]]) { const b = document.getElementById(id), go = (e) => { e.preventDefault(); e.stopPropagation(); f(); audio.musicKick(); later(); };
     b.addEventListener('click', go); b.addEventListener('touchstart', go, { passive: false }); } }
 audio.onTrack = (src) => { const [t, a] = songOf(src); if (villaW) villaW.setSong(t, a); document.getElementById('vSongT').textContent = t; document.getElementById('vSongA').textContent = a ? 'by ' + a : ''; };
-const MUSIC = ['we-dub-a-long-way', 'reggae-dub-1', 'dreaming-of-reggae', 'roots-reggae', 'roots-guitare-tamtam', 'feel-the-vibe', 'barefoot-in-the-breeze', 'island-vibes', 'everyday-is-a-holiday', 'stand-firm-like-a-tree'].map((n) => 'music/' + n + '.mp3');
+const MUSIC = ['we-dub-a-long-way', 'reggae-dub-1', 'dreaming-of-reggae', 'roots-reggae', 'roots-guitare-tamtam', 'feel-the-vibe', 'barefoot-in-the-breeze', 'island-vibes', 'everyday-is-a-holiday', 'stand-firm-like-a-tree',
+  'relaxing-island-reggae', 'locust-chill-rasta', 'sinim-riddim', 'dub-you-dub', 'africa-departure-dub', 'su-su-riddim', 'happy-feet', 'happy-upbeat-marley', 'love-is-gonna-stay', 'we-come-a-long-way'].map((n) => 'music/' + n + '.mp3');
 let radioOn = true;   // (the villa's speakers, all together)
 let earOn = false; try { earOn = localStorage.getItem('sumbasurf.ear') === '1'; } catch (e) {}   // an earpiece while you surf: your call, remembered
 { const eb = document.getElementById('ear'), show = () => { eb.classList.toggle('on', earOn); eb.querySelector('span').textContent = earOn ? 'EARPIECE ON' : 'EARPIECE'; };
