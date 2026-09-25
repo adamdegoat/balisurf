@@ -1201,11 +1201,12 @@ function vTap(cx, cy) {
 }
 // left thumb: a stick where you put it down; right thumb: drag to look, a quick tap picks
 const vm = document.getElementById('vMove'), vl = document.getElementById('vLook');
-vm.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); const t = e.changedTouches[0]; vMoveT = { id: t.identifier, x0: t.clientX, y0: t.clientY }; vStick.style.left = t.clientX + 'px'; vStick.style.top = t.clientY + 'px'; vStick.classList.add('live'); }, { passive: false });
+vm.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); const t = e.changedTouches[0]; vMoveT = { id: t.identifier, x0: t.clientX, y0: t.clientY, t0: performance.now() }; vStick.style.left = t.clientX + 'px'; vStick.style.top = t.clientY + 'px'; vStick.classList.add('live'); }, { passive: false });
 vm.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (vMoveT && t.identifier === vMoveT.id && walker) {
   const dx = (t.clientX - vMoveT.x0) / 55, dy = (t.clientY - vMoveT.y0) / 55, l = Math.hypot(dx, dy), k = l > 1 ? 1 / l : 1; walker.mx = dx * k; walker.mz = -dy * k;
   vStick.querySelector('b').style.transform = `translate(${dx * k * 30}px, ${dy * k * 30}px)`; } }, { passive: false });
-const vmEnd = (e) => { e.preventDefault(); for (const t of e.changedTouches) if (vMoveT && t.identifier === vMoveT.id) { vMoveT = null; if (walker) walker.mx = walker.mz = 0; vStick.classList.remove('live'); vStick.querySelector('b').style.transform = ''; } };
+const vmEnd = (e) => { e.preventDefault(); for (const t of e.changedTouches) if (vMoveT && t.identifier === vMoveT.id) { if (Math.hypot(t.clientX - vMoveT.x0, t.clientY - vMoveT.y0) < 10 && performance.now() - vMoveT.t0 < 350) vTap(t.clientX, t.clientY);   // (a quick tap on the walk side picks too)
+  vMoveT = null; if (walker) walker.mx = walker.mz = 0; vStick.classList.remove('live'); vStick.querySelector('b').style.transform = ''; } };
 vm.addEventListener('touchend', vmEnd, { passive: false }); vm.addEventListener('touchcancel', vmEnd, { passive: false });
 const lookStart = (id, x, y) => { vLookT = { id, x, y, x0: x, y0: y, t0: performance.now() }; };
 const lookMove = (id, x, y) => { if (!vLookT || vLookT.id !== id || !walker) return; walker.yaw += (x - vLookT.x) * 0.0055; walker.pitch = Math.max(-1.1, Math.min(0.9, walker.pitch - (y - vLookT.y) * 0.0045)); vLookT.x = x; vLookT.y = y; };
@@ -1214,6 +1215,7 @@ vl.addEventListener('touchstart', (e) => { e.preventDefault(); audio.wake(); con
 vl.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) lookMove(t.identifier, t.clientX, t.clientY); }, { passive: false });
 vl.addEventListener('touchend', (e) => { e.preventDefault(); for (const t of e.changedTouches) lookEnd(t.identifier, t.clientX, t.clientY); }, { passive: false });
 vl.addEventListener('mousedown', (e) => lookStart('m', e.clientX, e.clientY));
+vm.addEventListener('mousedown', (e) => lookStart('m', e.clientX, e.clientY));   // (with a mouse, either side drags to look and clicks to pick)
 addEventListener('mousemove', (e) => lookMove('m', e.clientX, e.clientY));
 addEventListener('mouseup', (e) => lookEnd('m', e.clientX, e.clientY));
 function villaTick(dt) {
@@ -1221,7 +1223,7 @@ function villaTick(dt) {
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid
   const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), kz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
-  const mx = W_.mx || kx, mz = W_.mz || kz, fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), sp = 1.8 * dt;
+  const mx = W_.mx || kx, mz = W_.mz || kz, fx = Math.cos(W_.yaw), fz = Math.sin(W_.yaw), sp = 2.7 * dt;
   let nx = W_.x + (fx * mz - fz * mx) * sp, nz = W_.z + (fz * mz + fx * mx) * sp;
   const r = 0.3, A = V.walk;
   nx = Math.min(A.x1, Math.max(A.x0, nx)); nz = Math.min(A.z1, Math.max(A.z0, nz));
@@ -1232,6 +1234,11 @@ function villaTick(dt) {
     }
   }
   W_.x = nx; W_.z = nz;
+  // look at a board in the rack and its card comes up by itself (no need to tap); look away and it goes
+  W_.gazeT = (W_.gazeT || 0) - dt;
+  if (W_.gazeT <= 0) { W_.gazeT = 0.2; _vp.set(0, -0.1); _vr.setFromCamera(_vp, camera); _vr.far = 4.5;
+    const hit = _vr.intersectObjects(V.rack, true)[0], t = hit ? hit.object.userData.type : null;
+    if (t) { W_.gazeOff = 0; if (t !== vPickType) vPick(t); } else if (vPickType && (W_.gazeOff = (W_.gazeOff || 0) + 0.2) > 1.2 && Math.hypot(W_.x - (-113), W_.z - 251) > 5) vPick(null); }
   const moving = Math.hypot(mx, mz) > 0.1; W_.bob = (W_.bob || 0) + (moving ? dt * 8 : 0);
   W_.y += (V.floorAt(W_.x, W_.z) + 1.65 + (moving ? Math.sin(W_.bob) * 0.025 : 0) - W_.y) * Math.min(1, dt * 10);
   camera.position.set(W_.x, W_.y, W_.z + SPOTS.medium.dz);
