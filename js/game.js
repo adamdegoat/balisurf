@@ -7,7 +7,7 @@ import { Rider, Profile, waterAt, heightAt, RIDE } from './surf.js?v=111';
 import { makeBoard } from './board.js?v=6';
 import { SurfAudio } from './audio.js?v=8';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=6';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=7';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
