@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { brain, carveBrain } from './sim2.js';
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const G = () => window.__g;
+const NATIVE_RANDOM = window.__nativeRandom || (window.__nativeRandom = Math.random);   // (the browser's own, kept the first time this loads: a take seeds Math.random and must hand the real one back)
 let W = 1080, H = 1920; const FPS = 30;
 const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const cx = cv.getContext('2d');
 let saved = null;
@@ -17,8 +18,18 @@ export function setup(w = 1080, h = 1920) {
 }
 export function teardown() { const g = G(), r = g.renderer; r.setPixelRatio(saved ? saved.pr : devicePixelRatio); r.setSize(innerWidth, innerHeight, false); g.paused = false; saved = null; }
 // draw the world through the camera (and your own arms and board through their own lens, like the game does)
-function draw(fov, body, crop) {
+function draw(fov, body, crop, chase) {
   const g = G(), r = g.renderer, c = g.camera, a = g.armCam;
+  if (chase) {   // (from outside: the surfer drawn whole on the main camera, legs and all, no first-person cut)
+    if (r.domElement.width !== W || r.domElement.height !== H) { r.setPixelRatio(1); r.setSize(W, H, false); }
+    c.aspect = W / H; c.fov = fov; c.updateProjectionMatrix(); c.updateMatrixWorld(); c.layers.enable(1); const hl = g.HIDELEGS.value, wy = g.WATERY.value, ac = g.ARMCUT.value, cut = g.CUT.value;
+    g.HIDELEGS.value = 0; g.WATERY.value = -99; g.ARMCUT.value = 0; g.CUT.value = 0;
+    let head = null; g.surfer.traverse((o) => { if (o.isBone && o.name === 'head') head = o; }); const hs = head && head.scale.x; if (head) { head.scale.setScalar(1); head.updateMatrixWorld(true); }   // (your own head, shrunk away for first person, back on)
+    const mir = g.mirror; if (mir) g.flipProj(c); r.render(g.scene, c); if (mir) g.flipProj(c);
+    if (head) { head.scale.setScalar(hs); head.updateMatrixWorld(true); }
+    g.HIDELEGS.value = hl; g.WATERY.value = wy; g.ARMCUT.value = ac; g.CUT.value = cut; c.layers.disable(1);
+    if (Array.isArray(chase)) { c.position.copy(chase[0]); c.quaternion.copy(chase[1]); c.updateMatrixWorld(); }
+    cx.drawImage(r.domElement, 0, 0, W, H); return; }
   if (r.domElement.width !== W || r.domElement.height !== H) { r.setPixelRatio(1); r.setSize(W, H, false); }   // (the page may have resized it under us)
   // crop: a vertical slice of the game's own landscape view (a phone on its side, 2.16:1), the slice centred at crop
   // (0..1 across it). The camera and its lens are exactly the game's; only the window onto them is tall
@@ -84,7 +95,7 @@ function rideTake(mode, seed, n, boardT = 'short', line = false) {
           if (rs.dir) { const q0 = c.quaternion.clone(), tg = c.position.clone().addScaledVector(rs.dir, 10); tg.y = c.position.y - 1.9; c.lookAt(tg); c.quaternion.copy(q0.slerp(c.quaternion.clone(), rs.k)); c.updateMatrixWorld(); } }
         return { fov: 74, body: 62, crop: 0.5 }; }
       return { fov: 70, body: 62, crop: rs.pan }; },   // (the game's own camera, untouched)
-    done() { const g = G(); if (boardT !== 'short') g.useBoard('short'); Math.random = rnd0; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; } };
+    done() { const g = G(); if (boardT !== 'short') g.useBoard('short'); Math.random = typeof rnd0 === 'function' ? rnd0 : NATIVE_RANDOM; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; } };
 }
 T.ride = rideTake('medium', 3, 600);
 // the reel: the other breaks, each in the game's own first-person view
@@ -94,13 +105,13 @@ T.rHard.keep = [[120, 300]]; T.rHiu.keep = [[125, 250]]; T.rKanan.keep = [[150, 
 T.giant = rideTake('extreme', 7, 300, 'gun'); T.giant.keep = [[110, 300]];
 // the landscape trailer: a pro in the game's own first-person view (your arms and board, the game's lens), paddling
 // in and riding like a pro: 'carve' (snaps off the top), 'cut' (cutbacks), 'barrel' (sets up and pulls in), 'air'
-const LOG = {}; window.__filmLog = LOG;
-export function addPro(name, mode, seed, n, boardT, plan, cbo, keep) { T[name] = proTake(name, mode, seed, n, boardT, plan, cbo); if (keep) T[name].keep = keep; return name; }
-function proTake(name, mode, seed, n, boardT, plan, cbo) {
+const LOG = {}; window.__filmLog = LOG; const CH = {};
+export function addPro(name, mode, seed, n, boardT, plan, cbo, keep, cam) { T[name] = proTake(name, mode, seed, n, boardT, plan, cbo, cam); if (keep) T[name].keep = keep; return name; }
+function proTake(name, mode, seed, n, boardT, plan, cbo, cam) {
   let br, cb, rnd0, armK = 0, cut = 0, lastCut = -9, i0 = 0;
   const gameFov = (asp) => THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(50)) / Math.min(asp, 2)));
   return { n, init() { const g = G(); rnd0 = Math.random; Math.random = seeded(seed); g.setMode(mode); document.getElementById('start').style.display = 'none'; document.body.classList.add('playing');
-      g.useBoard(boardT); g.spawnRider(); br = brain({}); cb = carveBrain(cbo || (plan === 'air' ? { hi: 0.97, lo: 0.12, gain: 4 } : { hi: 0.8, lo: 0.16, gain: 3.4 })); const r = g.rider; LOG[name] = []; CALL.a = 0; CALL.tubeT = 0;
+      g.useBoard(boardT); g.spawnRider(); br = brain({}); cb = carveBrain(cbo || (plan === 'air' ? { hi: 0.97, lo: 0.12, gain: 4 } : { hi: 0.8, lo: 0.16, gain: 3.4 })); const r = g.rider; LOG[name] = []; CALL.a = 0; CALL.tubeT = 0; CH.p = CH.l = null;
       for (let i = 0; i < 60 * 90; i++) { const o = br(r); g.input.test = o.steer; g.input.paddleBtn = r.standing ? !!o.pump : !!o.paddle; g.step(1 / 60, 1 / 60, false); if (r.state === 'LIE' && g.incoming().t < 3.4) break; } },
     frame(i) { const g = G(), r = g.rider;
       for (let k = 0; k < 2; k++) {
@@ -111,10 +122,10 @@ function proTake(name, mode, seed, n, boardT, plan, cbo) {
             const err = yH - 0.35 + (r.stalling ? 0.12 : 0), sn = Math.max(-0.6, Math.min(0.97, w.cond.speed / Math.max(r.v, 1) + err * 0.9)), a0 = Math.asin(sn);
             const steer = Math.max(-1, Math.min(1, wrapA(a0 - r.th) * 3)), stall = !r.inBarrel && sH > -0.2 && !(r.spitOut > 0);
             o = { steer: stall ? null : steer, pump: !stall && sH < -1.2 }; if (stall) stick = { x: steer, y: 1 };
-          } else if (plan === 'cut' && (cut || (r.stateT > 2.5 && r.stateT - lastCut > 4 && sH > 0.7 && r.v > w.cond.speed * 0.75))) {   // out on the shoulder with speed: swing back round to the curl
+          } else if (plan === 'cut' && (cut || (r.stateT > 4 && r.stateT - lastCut > 4 && sH > 2.0 && r.v > w.cond.speed * 0.85))) {   // (well out on the shoulder, flying: closer in, the curl lands on you as you come round)   // out on the shoulder with speed: swing back round to the curl
             if (!cut) cut = 1;
-            if (cut === 1) { o = { steer: -1, pump: false }; if (Math.cos(r.th) < -0.5) cut = 2; }
-            else { o = { steer: 1, pump: false }; if (Math.cos(r.th) > 0.35) { cut = 0; lastCut = r.stateT; } }
+            if (cut === 1) { o = { steer: 1, pump: false }; if (Math.cos(r.th) < -0.5) cut = 2; }   // (round through the face and back toward the curl...)
+            else { o = { steer: -1, pump: false }; if (Math.cos(r.th) > 0.35) { cut = 0; lastCut = r.stateT; } }   // (...then rebound back down the line)
           } else if (plan === 'snap') {   // bottom turn, drive hard up to the lip, whip it back down at full lock, again
             const sl = w.prof.slice(r.s), hT = r.y / Math.max(sl.top, 0.3), c = w.cond.speed, relVz = r.vz - c;
             const aim = (vz) => wrapA(Math.asin(Math.max(-0.95, Math.min(0.97, vz / Math.max(r.v, 0.5)))) - r.th);
@@ -128,10 +139,15 @@ function proTake(name, mode, seed, n, boardT, plan, cbo) {
         g.step(1 / 60, 1 / 60, false);
       }
       callout(r, 1 / FPS);
-      LOG[name].push([i, r.state, r.inBarrel ? 1 : 0, r.trick && r.trick.t < 0.05 ? r.trick.name : '', r.air ? 1 : 0]);
+      LOG[name].push([i, r.state, r.inBarrel ? 1 : 0, r.trick && r.trick.t < 0.05 ? r.trick.name : '', r.air ? 1 : 0, r.why || '', cut]);
       armK += ((r.standing ? 1 : 0) - armK) * Math.min(1, 4 / FPS);
+      if (cam && r.wave) {   // a filmer in the channel on a jet ski: out in front of the wave and ahead on the shoulder, keeping pace, long lens on the surfer
+        const Hh = r.wave.cond.H, c = g.camera, want = new THREE.Vector3(r.x + cam.ahead * Hh, Math.max(1.2, cam.up * Hh), r.z + cam.out * Hh);
+        CH.p = CH.p ? CH.p.lerp(want, 0.08) : want.clone(); CH.l = CH.l ? CH.l.lerp(new THREE.Vector3(r.x, r.y + 1, r.z), 0.25) : new THREE.Vector3(r.x, r.y + 1, r.z);
+        const pov = [c.position.clone(), c.quaternion.clone()];   // (the game lines your body up under its own camera next frame: it gets its camera back after the shot)
+        c.position.copy(CH.p); c.lookAt(CH.l); c.updateMatrixWorld(); return { fov: cam.fov, chase: pov }; }
       const fov = gameFov(W / H); return { fov, body: fov + (62 - fov) * armK }; },
-    done() { const g = G(); Math.random = rnd0; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; if (boardT !== 'short') g.useBoard('short'); CALL.a = 0; } };
+    done() { const g = G(); Math.random = typeof rnd0 === 'function' ? rnd0 : NATIVE_RANDOM; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; if (boardT !== 'short') g.useBoard('short'); CALL.a = 0; } };
 }
 T.pUma = proTake('pUma', 'medium', 3, 900, 'short', 'barrel'); T.pUmaC = proTake('pUmaC', 'medium', 9, 900, 'short', 'carve');
 T.pHard = proTake('pHard', 'hard', 11, 800, 'short', 'carve'); T.pHardB = proTake('pHardB', 'hard', 11, 700, 'short', 'barrel');
@@ -174,7 +190,7 @@ T.ride2 = (() => { let br, cb, rnd0; const rs = { w: 0, pan: 0.5 }; return { n: 
     const c = g.camera, lip = new THREE.Vector3(); if (r.wave && r.state === 'RIDE') { const L = r.wave.lipAt(r.s + 2); lip.set(L[0], L[1] * (r.wave.fade || 1), L[2]); c.updateMatrixWorld();
       const sp = lip.clone().project(c); const fx = 0.5 + sp.x * 0.5 * (1 / 2.16) * 2.16; rs.pan += (Math.max(0.33, Math.min(0.67, 0.5 + (fx - 0.5) * 0.55)) - rs.pan) * 0.05; } else rs.pan += (0.5 - rs.pan) * 0.05;
     return { fov: 70, body: 62, crop: rs.pan }; },   // (the game's own first-person camera and lenses; the frame is a tall slice of it that leans toward the wave)
-  done() { const g = G(); Math.random = rnd0; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; } }; })();
+  done() { const g = G(); Math.random = typeof rnd0 === 'function' ? rnd0 : NATIVE_RANDOM; g.input.test = null; g.input.stick = null; g.input.paddleBtn = false; } }; })();
 // in the villa, as you: walking from the board room through the living room, out through the open doors to the balcony
 // and the view; and reaching for a board in the rack
 function walkTake(n, start, pts, pitch0, pitch1, cropX = 0.5) { let wi = 0; return { n,
@@ -199,17 +215,17 @@ export async function run(name, budget = 36000) {
   const t = T[name]; if (!t) return 'no take ' + name;
   if (!S[name]) { S[name] = { i: 0 }; t.init(); }
   const s = S[name], t0 = performance.now();
-  while (s.i < t.n && performance.now() - t0 < budget) { const o = t.frame(s.i); if (!t.keep || t.keep.some(([a, b]) => s.i >= a && s.i <= b)) { draw(o.fov, o.body, o.crop); await grab(name, s.i); } s.i++; }   // (keep: only the stretches the edit uses get drawn)
+  while (s.i < t.n && performance.now() - t0 < budget) { const o = t.frame(s.i); if (!t.keep || t.keep.some(([a, b]) => s.i >= a && s.i <= b)) { draw(o.fov, o.body, o.crop, o.chase); await grab(name, s.i); } s.i++; }   // (keep: only the stretches the edit uses get drawn)
   await flush();
   if (s.i >= t.n) { if (t.done) t.done(); return `${name}: done (${t.n} frames)`; }
   return `${name}: ${s.i}/${t.n}`;
 }
 export function reset(name) { delete S[name]; }
 // one test frame of a take (after k frames), saved as frames/_peek/<name>.jpg, to judge the framing before filming it all
-export async function peek(name, k = 0) { const t = T[name]; delete S[name]; t.init(); let o; for (let i = 0; i <= k; i++) o = t.frame(i); draw(o.fov, o.body, o.crop);
+export async function peek(name, k = 0) { const t = T[name]; delete S[name]; t.init(); let o; for (let i = 0; i <= k; i++) { o = t.frame(i); if (i < k && Array.isArray(o.chase)) { const c = G().camera; c.position.copy(o.chase[0]); c.quaternion.copy(o.chase[1]); } } draw(o.fov, o.body, o.crop, o.chase);
   const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.85)); await fetch(`http://127.0.0.1:8799/f?shot=_peek_${name}&i=${k}`, { method: 'POST', body: blob }); return 'peeked ' + name; }
 // dry run of a take (no drawing): the rider's line every few frames, to set a take up before filming it
 export function sim(name, n, every = 20) { const t = T[name], g = G(); delete S[name]; t.init(); const out = [];
-  for (let i = 0; i < n; i++) { t.frame(i); if (i % every === 0) { const r = g.rider; if (!r) continue; const w = r.wave, H = w ? w.cond.H : 1;
+  for (let i = 0; i < n; i++) { const o = t.frame(i); if (o && Array.isArray(o.chase)) { g.camera.position.copy(o.chase[0]); g.camera.quaternion.copy(o.chase[1]); } if (i % every === 0) { const r = g.rider; if (!r) continue; const w = r.wave, H = w ? w.cond.H : 1;
     out.push(`${i} ${r.state} t${r.stateT.toFixed(1)} s${w ? (r.s / H).toFixed(2) : '-'} y${w ? (r.y / H).toFixed(2) : '-'}${r.inBarrel ? ' B' : ''}${w && w.endK < 1 ? ' end' + (w.endK * 100 | 0) : ''}`); } }
   return out.join(' | '); }
