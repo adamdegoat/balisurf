@@ -468,6 +468,59 @@ function showBests() {
   }
 }
 showBests();
+// ---------- challenges: three per spot, each suited to that wave. Nothing unlocks: they're just there to try hard at.
+// Kept on this phone. On the menu each spot shows three dots (lit when done); arriving at a spot the three show for a few
+// seconds; finishing one shows a banner where the move callouts go; the score screen says how many of the three are done
+const CHAL = {
+  easy: [['Ride one wave for 20 seconds', (c) => c.t >= 20], ['Land 3 snaps on one wave', (c) => c.snaps >= 3], ['Ride one all the way to the end', (c) => c.end]],
+  medium: [['Get barrelled for 8 seconds', (c) => c.tube >= 8], ['2 cutbacks on one wave', (c) => c.cutbacks >= 2], ['Score 8.5 or more on a wave', (c) => c.final && c.score >= 8.5]],
+  hard: [['Make the drop and ride 15 seconds', (c) => c.t >= 15], ['Hit 65 km/h', (c) => c.top >= 65], ['Come out of a 5 second barrel', (c) => c.out && c.tube >= 5]],
+  extreme: [['Ride the giant for 20 seconds', (c) => c.t >= 20], ['An 8 second barrel inside the giant', (c) => c.tube >= 8], ['Hit 90 km/h', (c) => c.top >= 90]],
+  kanan: [['Get barrelled for 10 seconds', (c) => c.tube >= 10], ['Snap, cutback and barrel on one wave', (c) => c.snaps >= 1 && c.cutbacks >= 1 && c.out], ['A heat score of 16', (c) => c.final && c.heat >= 16]],
+  hiu: [['Hit 70 km/h', (c) => c.top >= 70], ['Ride one wave for 20 seconds', (c) => c.t >= 20], ['A 5 second barrel on the longboard', (c) => c.board === 'long' && c.tube >= 5]],
+  ranch: [['8 turns on one wave', (c) => c.turns >= 8], ['Get barrelled for 10 seconds', (c) => c.tube >= 10], ['Ride all three wave settings in one visit', (c) => c.kinds >= 3]],
+};
+const chalDone = (() => { try { return JSON.parse(localStorage.getItem('sumbasurf.chal') || '{}') || {}; } catch (e) { return {}; } })();
+const chalHas = (m, i) => !!(chalDone[m] && chalDone[m][i]);
+const chalCount = (m) => (CHAL[m] || []).filter((_, i) => chalHas(m, i)).length;
+function chalDots() {
+  for (const b of document.querySelectorAll('[data-mode]')) {
+    const m = b.dataset.mode; if (!CHAL[m]) continue;
+    let el = b.querySelector('.chd'); if (!el) { el = document.createElement('i'); el.className = 'chd'; el.setAttribute('aria-hidden', 'true'); el.innerHTML = '<b></b><b></b><b></b>'; b.appendChild(el); }
+    [...el.children].forEach((d, i) => d.classList.toggle('on', chalHas(m, i)));
+  }
+}
+chalDots();
+const chalBox = document.getElementById('chal'), chalBan = document.getElementById('chalDone');
+const TICK = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.8 8.3l2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const RING = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+let chalHideT = null;
+// arriving at a spot: its three challenges, for a few seconds, then out of the way
+function chalIntro(m) {
+  const L = CHAL[m]; if (!L || !chalBox) return;
+  chalBox.innerHTML = `<b>${modeName(m)} challenges</b>` + L.map(([t], i) => `<div class="${chalHas(m, i) ? 'ok' : ''}">${chalHas(m, i) ? TICK : RING}<span>${t}</span></div>`).join('');
+  chalBox.classList.add('on'); clearTimeout(chalHideT); chalHideT = setTimeout(() => chalBox.classList.remove('on'), 6500);
+}
+function chalHide() { if (chalBox) chalBox.classList.remove('on'); clearTimeout(chalHideT); }
+let chalBanT = null;
+function chalWin(text) {
+  if (!chalBan) return;
+  chalBan.innerHTML = `<small>Challenge done</small>${text}`; chalBan.classList.remove('on'); void chalBan.offsetWidth; chalBan.classList.add('on');
+  clearTimeout(chalBanT); chalBanT = setTimeout(() => chalBan.classList.remove('on'), 2600);
+  audio.tone(784, 0.07, 0.35); audio.tone(1047, 0.07, 0.5, { delay: 0.12 });   // (a small two-note chime)
+}
+// the ride so far (and, at the end, its score and your heat), checked against the spot's three
+let chalRide = null, chalTube = 0, chalKinds = new Set();
+function chalCheck(final, heat = 0) {
+  const L = CHAL[mode]; if (!L || !rider) return;
+  if (chalRide !== rider.ride) { chalRide = rider.ride; chalTube = 0; }
+  const r = rider.ride; if (rider.inBarrel) chalTube = Math.max(chalTube, r.tubeT);
+  const names = r.moves.map((x) => x.name);
+  const c = { final, t: r.t, top: r.top, snaps: r.snaps, cutbacks: r.cutbacks, turns: r.turns, tube: chalTube, out: names.includes('BARREL'), end: !!r.end, score: r.score || 0, heat, board: boardType, kinds: chalKinds.size };
+  L.forEach(([text, ok], i) => { if (chalHas(mode, i) || !ok(c)) return;
+    (chalDone[mode] ||= [])[i] = 1; try { localStorage.setItem('sumbasurf.chal', JSON.stringify(chalDone)); } catch (e) {}
+    chalWin(text); chalDots(); });
+}
 // the spots only select (the one you'll surf lights up and is remembered); START SURFING takes you there
 let spotSel = 'easy'; try { const v = localStorage.getItem('sumbasurf.spot'); if (v && document.querySelector(`[data-mode="${v}"]`)) spotSel = v; } catch (e) {}
 const spotLabel = (m) => m === 'ranch' ? 'Surf Ranch' : (SPOTS[m] && SPOTS[m].name) || m;
@@ -489,7 +542,7 @@ for (const b of document.querySelectorAll('[data-board]')) b.addEventListener('c
 let starting = false;
 // back to the level select: stop the game behind the menu (you pick a level again to restart)
 function toMenu() {
-  starting = false; if (drone.on) droneSet(false); audio.quiet(true);
+  starting = false; chalHide(); if (drone.on) droneSet(false); audio.quiet(true);
   // clear the session: the menu gets its slow drifting wave behind it again (and nothing of the old ride keeps running)
   if (surfer) endWipe(); rider = null; rig.visible = false; endT = -1;
   for (const w of waves) w.dispose(scene); waves = [];
@@ -525,6 +578,7 @@ async function start(m) {
   ui.load.textContent = ''; document.getElementById('goSurf').classList.remove('wait');
   ui.start.style.display = 'none'; document.body.classList.add('playing');
   session = { waves: 0, total: 0, best: 0, scores: [], barrels: 0 };
+  chalKinds = new Set(); chalIntro(m);   // (this spot's three challenges, shown for a few seconds as you arrive)
   setLeft = 0; setPos = 0;
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 15;   // a calm start: time to look around and find the set
   updateWaves(0); spawnRider(); warmShaders();
@@ -1325,6 +1379,7 @@ function updateHUD(dt) {
   const call = st !== 'RIDE' ? '' : tubeShowT > 0 ? 'BARREL' : rider.trick ? rider.trick.name : '';
   if (call) setText(ui.tube, call);
   ui.tube.style.opacity = call ? 1 : 0;
+  if (st === 'RIDE') { if (isRanch() && ranchKind && rider.stateT > 1.5) chalKinds.add(ranchKind); chalCheck(false); }   // (challenges done mid-ride show the moment they happen)
   setText(ui.score, st === 'RIDE' ? rider.liveScore().toFixed(1) : '');
   if ((st === 'WIPE' || st === 'OUT') && endT < 0) {
     endT = 0;
@@ -1339,6 +1394,7 @@ function updateHUD(dt) {
     const stat = (v, l) => `<div>${v}<span>${l}</span></div>`;
     ui.msgS.innerHTML = r.t > 0 ? stat(`${r.t.toFixed(1)}s`, 'RIDE') + stat(`${Math.round(r.top)}`, 'TOP KM/H') + stat(r.turns, 'TURNS') + (r.cutbacks ? stat(r.cutbacks, r.cutbacks > 1 ? 'CUTBACKS' : 'CUTBACK') : '') + (r.snaps ? stat(r.snaps, r.snaps > 1 ? 'SNAPS' : 'SNAP') : '') + (r.barrel > 0.2 ? stat(`${r.barrel.toFixed(1)}s`, 'BARREL') : '') : '';
     ui.sess.textContent = session.waves ? `Heat ${heat.toFixed(2)} / 20 ${session.waves > 1 ? `(your best two of ${session.waves} waves)` : '(your best two waves count)'}  ·  best wave ever ${Math.max(bestFor(mode), r.score).toFixed(1)}` : '';
+    chalCheck(true, heat); if (CHAL[mode]) ui.sess.textContent += `${ui.sess.textContent ? '  ·  ' : ''}Challenges ${chalCount(mode)}/3`;   // (the ones that need the finished ride: its score, your heat)
   }
   // a wipeout plays out first (you see yourself go over), then the summary fades in
   if (endT >= 0) {
@@ -1472,6 +1528,7 @@ function warmAll() {
 { const idle = (f) => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 2500 }) : setTimeout(f, 60));
   ready.then(() => setTimeout(() => idle(() => { if (mode === 'villa' || starting) return; prepVilla(); if (villaW) { villaW.group.visible = false; crewW.group.visible = false; wildW.group.visible = false; } idle(() => { if (!starting) warmAll(); }); }), 1800)).catch(() => {}); }
 function startVilla() {
+  chalHide();
   if (starting) return;
   hello('the villa');
   mode = 'villa'; setWeather('villa'); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
