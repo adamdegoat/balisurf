@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, RANCH_CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=148';
+import { Wave, CONDITIONS, RANCH_CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=156';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=121';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
 import { SurfAudio } from './audio.js?v=17';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=55';
-import { villa, VILLA } from './villa.js?v=110';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=63';
+import { villa, VILLA } from './villa.js?v=118';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=22';
 import { crew } from './crew.js?v=11';
@@ -266,8 +266,8 @@ function setSpot(m) {
   if (!r) spotGroup(scene, key).visible = true;
   ranchW.group.visible = r;
   if (villaW) villaW.group.visible = m === 'villa'; if (crewW) crewW.group.visible = m === 'villa'; if (wildW) wildW.group.visible = m === 'villa'; if (friendsW) { friendsW.group.visible = m === 'villa'; if (m !== 'villa') friendsW.hide(); }
-  { const warm = m === 'villa'; hemi.color.set(warm ? 0xfff0dc : 0xcfe6ff); hemi.groundColor.set(warm ? 0x5a4030 : 0x3a4a48); sunLight.color.set(warm ? 0xffdcb0 : 0xfff0dd); }   // (the villa in warm evening light, reflected off the wood; the surf spots keep their clear daylight)
-  ENV.uReefEnd.value = 190 + S.dz; ENV.uReefTint.value.setRGB(...S.reefTint);
+  { const warm = m === 'villa', W = ENV.weather || {}; hemi.color.set(warm ? 0xfff0dc : W.hemi || 0xcfe6ff); hemi.groundColor.set(warm ? 0x5a4030 : W.hemiGround || 0x3a4a48); sunLight.color.set(warm ? 0xffdcb0 : W.light || 0xfff0dd); }   // (a spot's own light on the land: its weather can warm it or grey it)   // (the villa in warm evening light, reflected off the wood; the surf spots keep their clear daylight)
+  ENV.uReefEnd.value = 190 + S.dz; ENV.uReefTint.value.setRGB(...S.reefTint); ENV.uReefK.value = S.reefK || 0.38;
   if (r) ENV.uPool.value.set(POOL.x0, POOL.x1, POOL.z0, POOL.z1); else ENV.uPool.value.set(-1e6, 1e6, -1e6, 1e6);
   ENV.uReef.value = r ? 0 : 1;
   REEF = r ? RANCH_REEF : { xEnd: S.xEnd || OCEAN_REEF.xEnd, zBeach: OCEAN_REEF.zBeach + S.dz };   // (each spot's beach is further back or closer in)

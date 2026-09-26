@@ -382,11 +382,11 @@ export const SUN_DIR = new THREE.Vector3(0.25, 0.1, -1).normalize();   // low su
 // Weather follows the difficulty. Every water/sky material shares these uniforms, so switching weather is instant.
 export const WEATHER = {
   // good weather on the three normal levels (his call): morning, midday, afternoon sun; the storm is Extreme only
-  easy:    { sun: [0.35, 0.62, -0.7], zen: 0x2a6cb8, hor: 0xa9d5ec, sunCol: 0xfff4dc, fog: 0xb6daeb, deep: 0x0a5a84, turq: 0x1ccabb, cloud: 0.18, chop: 0.8, fogFar: 320, rain: 0, sunVis: 1 },
-  medium:  { sun: [0.2, 0.85, -0.45], zen: 0x2562ab, hor: 0xacd4e8, sunCol: 0xfff7e6, fog: 0xbadae9, deep: 0x08527c, turq: 0x18c2b3, cloud: 0.22, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1 },
-  hard:    { sun: [0.55, 0.42, -0.72], zen: 0x2158a6, hor: 0xa6cde3, sunCol: 0xffe6bf, fog: 0xb4d4e3, deep: 0x07496e, turq: 0x16b2a5, cloud: 0.2, chop: 1.5, fogFar: 300, rain: 0, sunVis: 1 },
-  kanan:   { sun: [-0.45, 0.5, -0.75], zen: 0x2a66b0, hor: 0xb4d8e8, sunCol: 0xffefd2, fog: 0xc0dbe8, deep: 0x075a7a, turq: 0x1ec8b4, cloud: 0.26, chop: 0.9, fogFar: 320, rain: 0, sunVis: 1 },   // late morning, a few puffy clouds
-  hiu:     { sun: [0.35, 0.62, -0.7], zen: 0x1f5aa8, hor: 0xa2cde6, sunCol: 0xfff3dc, fog: 0xb0d4e6, deep: 0x06466e, turq: 0x12c4c4, cloud: 0.12, chop: 1.3, fogFar: 300, rain: 0, sunVis: 1 },   // clear and windy, glassy blue over the coral
+  easy:    { sun: [0.25, 0.9, -0.4],  zen: 0x4a92d8, hor: 0xd2ecf6, sunCol: 0xfffaf0, fog: 0xd0e8f2, deep: 0x137aa0, turq: 0x46e2d0, cloud: 0.14, chop: 0.7, fogFar: 340, rain: 0, sunVis: 1 },   // bright midday over a pale turquoise bay
+  medium:  { sun: [0.6, 0.38, -0.7],  zen: 0x2c64b0, hor: 0xbfd8e2, sunCol: 0xffd8a0, fog: 0xc8d8dc, deep: 0x0b5074, turq: 0x1cb4a4, cloud: 0.24, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1, light: 0xffe2b8, hemi: 0xf0e4d2 },   // clear blue afternoon, the sun low and golden on the limestone
+  hard:    { sun: [0.3, 0.6, -0.6],   zen: 0x56636e, hor: 0x98a4ab, sunCol: 0xc9ced2, fog: 0x8e9aa1, deep: 0x062f3c, turq: 0x1a7a72, cloud: 0.8, chop: 1.6, fogFar: 260, rain: 0, sunVis: 0.3, light: 0xc4ccd2, hemi: 0xa8b4bc },   // grey overcast, dark heavy water off the black rock
+  kanan:   { sun: [-0.5, 0.24, -0.85], zen: 0x3462a8, hor: 0xe8dcc4, sunCol: 0xffb878, fog: 0xead6ba, deep: 0x0b4660, turq: 0x17a094, cloud: 0.3, chop: 0.9, fogFar: 320, rain: 0, sunVis: 1, light: 0xffd6b0, hemi: 0xf2dcc8, hemiGround: 0x4a3a30 },   // late sun low over the sea, lighting up the red cliffs
+  hiu:     { sun: [0.2, 0.92, -0.35], zen: 0x1858c2, hor: 0x9fd2ee, sunCol: 0xfffaf0, fog: 0xa8d6ee, deep: 0x09527e, turq: 0x1fd0c6, cloud: 0.04, chop: 1.0, fogFar: 380, rain: 0, sunVis: 1 },   // crystal clear, the sun overhead, the reef showing through the shallows
   extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
   villa:   { gold: 1, sun: [-0.35, 0.22, -0.9], zen: 0x3a64a8, hor: 0xf0c9a2, sunCol: 0xffc68a, fog: 0xf0c6a0, deep: 0x0a4a62, turq: 0x15a39a, cloud: 0.18, chop: 0.9, fogFar: 1100, rain: 0, sunVis: 1 },   // golden hour at the villa: the sun going down over the sea
   ranch:   { sun: [0.45, 0.72, -0.5], zen: 0x2a6cb8, hor: 0xcfe2ea, sunCol: 0xfff3dd, fog: 0xd4e5ec, deep: 0x1a8ea0, turq: 0x3fd6c8, cloud: 0.08, chop: 0.3, fogFar: 700, rain: 0, sunVis: 1 },   // dry, clear country sky; calm pool water
@@ -400,6 +400,7 @@ export const ENV = {
   uPool: { value: new THREE.Vector4(-1e6, 1e6, -1e6, 1e6) },   // water only inside this box (x0, x1, z0, z1): the wave pool
   uReef: { value: 1 },
   uGold: { value: 0 },                                // golden hour (the villa's evening): 0 = plain day
+  uReefK: { value: 0.38 },                            // how clearly the reef shows through the shallows (each spot's own)
   uReefEnd: { value: 190 }, uReefTint: { value: new THREE.Color(1, 1, 1) },   // where the shallows stop (the beach), and each spot's reef colour                                           // 0 = no reef under the water (a concrete pool)
 };
 export function setWeather(name) {
@@ -450,7 +451,7 @@ export function waterMaterial({ wave = false } = {}) {
       }`,
     fragmentShader: /* glsl */`
       precision highp float;
-      uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash, uReef, uReefEnd, uGold; uniform vec3 uReefTint; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq; uniform vec4 uPool;
+      uniform float uTime, uH, uCloud, uChop, uFogFar, uSunVis, uFlash, uReef, uReefEnd, uReefK, uGold; uniform vec3 uReefTint; uniform vec3 uSun, uZen, uHor, uSunCol, uFog, uDeep, uTurq; uniform vec4 uPool;
       varying vec3 vW; varying vec3 vN; varying vec2 vFT; varying float vAge;
       ${NOISE}${SUNSET}
       vec3 sky(vec3 d){
@@ -528,7 +529,7 @@ export function waterMaterial({ wave = false } = {}) {
         if (reefK > .001) {
           float rn = fbm(vW.xz * .06), rn2 = fbm(vW.xz * .27 + 3.1), sandy = smoothstep(.56, .8, zone), coral = smoothstep(.42, .18, zone);
           vec3 reefCol = mix(vec3(.3, .66, .62) + vec3(.06, .05, .02) * sandy, mix(vec3(.13, .25, .22), vec3(.21, .2, .13), coral * .7), clamp((smoothstep(.46, .6, rn) + .35 * (rn2 - .5)) * (1. - .85 * sandy) + coral * .4, 0., 1.));
-          body = mix(body, reefCol * uReefTint * (.55 + .45 * uSunVis), reefK * .38);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
+          body = mix(body, reefCol * uReefTint * (.55 + .45 * uSunVis), reefK * uReefK);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
         }
         ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);\n        // the throwing lip is a moving sheet: light and dark streaks run through it, and its thinnest edge glows palest\n        if (glow > .001) {   // (the upper face and lip only)\n          vec2 shq = vec2(vW.x * .9, (vW.y - vW.z) * .3 + uTime * 1.2); float sheet = vnoise(shq) * .62 + vnoise(shq * 2.3 + 1.7) * .38;   // (two layers of noise: plenty for a streak, half the cost of the full four)\n          body *= 1. + (sheet - .5) * 1.4 * glow;\n          body += vec3(.3, .55, .5) * smoothstep(.8, 1., vFT.y) * glow * .25 * (.4 + .6 * uSunVis);\n          // sunlight through the thin lip: a bright, uneven band of pale green-gold where the water is thinnest, broken by the streaks\n          float thru = smoothstep(.55, .95, vFT.y) * glow * smoothstep(.3, .75, sheet);\n          body += (vec3(.35, .62, .5) + uSunCol * .18) * thru * (.35 + .65 * uSunVis);\n        }\n        // water drawn up the face: long vertical streaks, lighter and darker, running up the wall as it feeds the lip\n        float faceSt = 0.; { float faceK = smoothstep(.9, .45, abs(normalize(vN).y)) * smoothstep(40., 8., length(cameraPosition - vW)) * smoothstep(.05, .3, vW.y / max(uH, .5));\n          if (faceK > .001) { vec2 sq = vec2(vW.x * 2.4 + vW.z * .8, vW.y * .14 - uTime * .6); float st = smoothstep(.32, .68, vnoise(sq) * .6 + vnoise(sq * vec2(2.7, 1.3) + 5.1) * .4);\n            faceSt = (st - .5) * .42 * faceK; body *= 1. + faceSt; } }\n        // the lip itself, the sheet of water thrown out and down over you: it moves, so it streaks light and dark along its\n        // throw, with lighter bands where it is thinnest and the light comes through (it was one flat colour)\n        float cK = smoothstep(.85, .98, vFT.y);\n        if (cK > .001) { vec2 cq = vec2(vW.x * 2.6 + vW.z * 1.3, vW.y * .3 + uTime * 1.4); float c1 = vnoise(cq) * .6 + vnoise(cq * vec2(3.1, 1.2) + 2.3) * .4;\n          body *= 1. + (c1 - .5) * 1.2 * cK; body += (vec3(.22, .42, .36) + uSunCol * .08) * smoothstep(.55, .8, c1) * cK * (.3 + .3 * uSunVis); }' : ''}
         ${wave ? 'if (N.y < -.15) refl = mix(refl, body * .8, smoothstep(-.15, -.55, N.y));   // (the underside of the lip mirrors the water below it, not the sky)' : ''}
