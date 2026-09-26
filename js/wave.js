@@ -284,10 +284,10 @@ export class Wave {
     this.veil.frustumCulled = false; scene.add(this.veil);
   }
   updateVeil(dt) {
-    const H = this.cond.H, P = this.vp, V = this.vv;
+    const H = this.cond.H, P = this.vp, V = this.vv, wind = ENV.weather && ENV.weather.wind !== undefined ? ENV.weather.wind : 1;   // (each spot's own wind: a glassy morning barely lifts any, a strong offshore blows it back in plumes)
     for (let i = 0; i < this.veilN; i++) {
       if (this.vl[i] <= 0) {
-        if (Math.random() > 0.75) { P[i * 3 + 1] = -99; continue; }
+        if (Math.random() > 0.75 * Math.min(1, wind)) { P[i * 3 + 1] = -99; continue; }
         // along the crest of the standing face, from the curl out onto the shoulder, where the wave is tall and steep
         const s = -H + Math.pow(Math.random(), 1.8) * 13 * H;   // thickest near the curl, where the face is steepest
         const sh = this.shapeAt(s), crest = sh.P[9];
@@ -296,8 +296,8 @@ export class Wave {
         P[i * 3] = this.peelX + s + (Math.random() - .5) * 1.5;
         P[i * 3 + 1] = (crest[1] * H * amp + Math.random() * 0.15 * H) * this.fade;
         P[i * 3 + 2] = crest[0] * H * (this.cond.width || 1) + this.zW + this.bend(s);
-        V[i * 3] = (Math.random() - .5) * 0.8; V[i * 3 + 1] = 1 + Math.random() * 1.8; V[i * 3 + 2] = this.cond.speed - 4 - Math.random() * 5;   // rides in with the wave, blown back off its top
-        this.vl[i] = 0.8 + Math.random() * 1.2;
+        V[i * 3] = (Math.random() - .5) * 0.8; V[i * 3 + 1] = 1 + Math.random() * 1.8; V[i * 3 + 2] = this.cond.speed - (4 + Math.random() * 5) * wind;   // rides in with the wave, blown back off its top
+        this.vl[i] = (0.8 + Math.random() * 1.2) * (0.6 + 0.4 * wind);
       }
       this.vl[i] -= dt;
       V[i * 3 + 1] -= 0.9 * dt;
@@ -305,7 +305,7 @@ export class Wave {
       if (this.vl[i] <= 0) P[i * 3 + 1] = -99;
     }
     this.veil.geometry.attributes.position.needsUpdate = true;
-    this.veil.material.opacity = 0.75 * this.fade;
+    this.veil.material.opacity = 0.75 * this.fade * Math.min(1.3, 0.5 + 0.5 * wind);
   }
   initSpray(scene) {
     const N = 900; this.sprayN = N;
@@ -382,11 +382,11 @@ export const SUN_DIR = new THREE.Vector3(0.25, 0.1, -1).normalize();   // low su
 // Weather follows the difficulty. Every water/sky material shares these uniforms, so switching weather is instant.
 export const WEATHER = {
   // good weather on the three normal levels (his call): morning, midday, afternoon sun; the storm is Extreme only
-  easy:    { sun: [0.25, 0.9, -0.4],  zen: 0x4a92d8, hor: 0xd2ecf6, sunCol: 0xfffaf0, fog: 0xd0e8f2, deep: 0x137aa0, turq: 0x46e2d0, cloud: 0.14, chop: 0.7, fogFar: 340, rain: 0, sunVis: 1 },   // bright midday over a pale turquoise bay
-  medium:  { sun: [0.6, 0.38, -0.7],  zen: 0x2c64b0, hor: 0xbfd8e2, sunCol: 0xffd8a0, fog: 0xc8d8dc, deep: 0x0b5074, turq: 0x1cb4a4, cloud: 0.24, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1, light: 0xffe2b8, hemi: 0xf0e4d2 },   // clear blue afternoon, the sun low and golden on the limestone
-  hard:    { sun: [0.3, 0.6, -0.6],   zen: 0x56636e, hor: 0x98a4ab, sunCol: 0xc9ced2, fog: 0x8e9aa1, deep: 0x062f3c, turq: 0x1a7a72, cloud: 0.8, chop: 1.6, fogFar: 260, rain: 0, sunVis: 0.3, light: 0xc4ccd2, hemi: 0xa8b4bc },   // grey overcast, dark heavy water off the black rock
-  kanan:   { sun: [-0.5, 0.24, -0.85], zen: 0x3462a8, hor: 0xe8dcc4, sunCol: 0xffb878, fog: 0xead6ba, deep: 0x0b4660, turq: 0x17a094, cloud: 0.3, chop: 0.9, fogFar: 320, rain: 0, sunVis: 1, light: 0xffd6b0, hemi: 0xf2dcc8, hemiGround: 0x4a3a30 },   // late sun low over the sea, lighting up the red cliffs
-  hiu:     { sun: [0.2, 0.92, -0.35], zen: 0x1858c2, hor: 0x9fd2ee, sunCol: 0xfffaf0, fog: 0xa8d6ee, deep: 0x09527e, turq: 0x1fd0c6, cloud: 0.04, chop: 1.0, fogFar: 380, rain: 0, sunVis: 1 },   // crystal clear, the sun overhead, the reef showing through the shallows
+  easy:    { sun: [0.55, 0.24, 0.6],  zen: 0x5b8fc6, hor: 0xe6e4d6, sunCol: 0xffdcb4, fog: 0xe4e2d4, deep: 0x157f8a, turq: 0x5ee6c0, cloud: 0.2, chop: 0.4, fogFar: 340, rain: 0, sunVis: 1, light: 0xffe6c8, hemi: 0xf2e8da, wind: 0.3 },   // early morning: the sun low over the land, glassy green-turquoise water, hardly a breath of wind
+  medium:  { sun: [0.6, 0.38, -0.7],  zen: 0x2c64b0, hor: 0xbfd8e2, sunCol: 0xffd8a0, fog: 0xc8d8dc, deep: 0x083e86, turq: 0x1f9fd0, cloud: 0.24, chop: 1.0, fogFar: 330, rain: 0, sunVis: 1, light: 0xffe2b8, hemi: 0xf0e4d2 },   // clear blue afternoon, deep sapphire water, the sun low and golden on the limestone
+  hard:    { sun: [0.3, 0.6, -0.6],   zen: 0x56636e, hor: 0x98a4ab, sunCol: 0xc9ced2, fog: 0x8e9aa1, deep: 0x062f3c, turq: 0x1a7a72, cloud: 0.8, chop: 1.6, fogFar: 260, rain: 0, sunVis: 0.3, light: 0xc4ccd2, hemi: 0xa8b4bc, wind: 1.3 },   // grey overcast, dark heavy water off the black rock
+  kanan:   { sun: [-0.5, 0.24, -0.85], zen: 0x3462a8, hor: 0xe8dcc4, sunCol: 0xffb878, fog: 0xead6ba, deep: 0x0c4f5e, turq: 0x2aa89a, cloud: 0.3, chop: 0.9, fogFar: 320, rain: 0, sunVis: 1, light: 0xffd6b0, hemi: 0xf2dcc8, hemiGround: 0x4a3a30, wind: 0.9 },   // late sun low over the sea, warm teal water, the red cliffs lit up
+  hiu:     { sun: [0.2, 0.92, -0.35], zen: 0x1858c2, hor: 0x9fd2ee, sunCol: 0xfffaf0, fog: 0xa8d6ee, deep: 0x0a6c9a, turq: 0x2cf0e0, cloud: 0.04, chop: 1.2, fogFar: 380, rain: 0, sunVis: 1, wind: 2 },   // crystal clear midday, electric aqua over the reef, a strong offshore blowing spray off every lip
   extreme: { sun: [0.1, 0.35, -1],    zen: 0x1a2124, hor: 0x56646a, sunCol: 0x8a9496, fog: 0x4a565b, deep: 0x07181b, turq: 0x2a6258, cloud: 0.92, chop: 2.4, fogFar: 150, rain: 1, sunVis: 0.08 },
   villa:   { gold: 1, sun: [-0.35, 0.22, -0.9], zen: 0x3a64a8, hor: 0xf0c9a2, sunCol: 0xffc68a, fog: 0xf0c6a0, deep: 0x0a4a62, turq: 0x15a39a, cloud: 0.18, chop: 0.9, fogFar: 1100, rain: 0, sunVis: 1 },   // golden hour at the villa: the sun going down over the sea
   ranch:   { sun: [0.45, 0.72, -0.5], zen: 0x2a6cb8, hor: 0xcfe2ea, sunCol: 0xfff3dd, fog: 0xd4e5ec, deep: 0x1a8ea0, turq: 0x3fd6c8, cloud: 0.08, chop: 0.3, fogFar: 700, rain: 0, sunVis: 1 },   // dry, clear country sky; calm pool water

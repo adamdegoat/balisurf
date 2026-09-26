@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, RANCH_CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=156';
+import { Wave, CONDITIONS, RANCH_CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=157';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=121';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
 import { SurfAudio } from './audio.js?v=17';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=72';
-import { villa, VILLA } from './villa.js?v=118';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=78';
+import { villa, VILLA } from './villa.js?v=119';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=22';
 import { crew } from './crew.js?v=11';
@@ -162,6 +162,9 @@ function updateLocals(dt) {
 }
 function updateScenery(dt) {
   if (jukung.visible = !!rider && !isRanch() && mode !== 'extreme') { const y = heightAt(waves, jukung.position.x, jukung.position.z); jukung.position.y += (y - 0.05 - jukung.position.y) * Math.min(1, dt * 3); jukung.rotation.x = Math.sin(T * 0.9) * 0.04; jukung.rotation.z = Math.sin(T * 0.7 + 1) * 0.03; }   // (no fishing boat out in The Mountain's storm)
+  for (const sg of builtSpots()) if (sg.visible && sg.userData.floaters) for (const f of sg.userData.floaters) {   // each spot's boats and buoys riding the swells
+    const y = heightAt(waves, f.x, f.z + sg.position.z); f.m.position.y += (y + f.dy + Math.sin(T * 1.2 + f.ph) * 0.12 - f.m.position.y) * Math.min(1, dt * 6);   // (and a gentle bob on the small sea even where no swell is passing)
+    f.m.rotation.x = Math.sin(T * 0.9 + f.ph) * f.rock; f.m.rotation.z = Math.sin(T * 1.1 + f.ph * 1.7) * f.rock; }
   for (const b of birds) { const u = b.userData; u.a += u.w * dt; b.position.set(u.cx + Math.cos(u.a) * u.r, u.h + Math.sin(T * 0.3 + u.r) * 2, u.cz + Math.sin(u.a) * u.r); b.rotation.set(0, -u.a, Math.sin(T * 0.8 + u.r) * 0.25);
     const flap = Math.sin(T * 7 + u.r) * (Math.sin(T * 0.4 + u.r) > 0.6 ? 0.5 : 0.05); b.scale.set(1.8, 1.8 + flap, 1.8); }
 }

@@ -2,7 +2,7 @@
 // landmarks of its own. Distances are in the coast's own frame: the beach is ~185-225 m in from the break, and the
 // whole coast is pushed back by dz (a longer run to the sand makes a longer ride).
 import * as THREE from 'three';
-import { coast, landMaterial } from './wave.js?v=156';
+import { coast, landMaterial } from './wave.js?v=157';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const SPOTS = {
@@ -31,6 +31,7 @@ export function spotGroup(scene, key) {
   if (key === 'kanan') redHead(g);
   if (key === 'hard') lighthouseHead(g);
   if (key === 'hiu') palmPoint(g);
+  waterProps(g, key);
   if (key === 'hard') blackRock(g);
   if (key === 'extreme') theMountain(g);
   mergeProps(g);
@@ -216,6 +217,50 @@ function palm(g, x, y, z, h, lean, dir) {
 function palmPoint(g) {
   const at = headland(g, { x: 335, tipZ: 110, baseZ: 250, w: 26, h0: 6, h1: 12, rock: [0.42, 0.42, 0.4], grass: [0.5, 0.47, 0.38] });
   for (let k = 0; k < 13; k++) { const u = 0.06 + k * 0.07, t = at(u), side = k % 2 ? 1 : -1; palm(g, 335 + side * (8 + (k % 3) * 5), t.y - 0.5, t.z, 15 + (k % 4) * 2.5, 0.22 + (k % 3) * 0.08, side > 0 ? Math.PI : 0); }
+}
+
+// things in the water down the line, where you look while you ride: each built as one piece, and the ones that float
+// ride up and over the swells (g.userData.floaters: the game moves them each frame)
+const part = (geo, rgb, x, y, z, ry = 0, rz = 0, jit = 0.06) => { tint(geo, rgb, jit); if (geo.attributes.uv) geo.deleteAttribute('uv'); if (rz) geo.rotateZ(rz); if (ry) geo.rotateY(ry); geo.translate(x, y, z); return geo.index ? geo.toNonIndexed() : geo; };
+function floater(g, parts, x, z, ry, dy = 0, rock = 0.04, sc = 1) {
+  const geo = mergeGeometries(parts); geo.scale(sc, sc, sc); geo.computeVertexNormals(); const m = new THREE.Mesh(geo, landMaterial()); m.position.set(x, dy, z); m.rotation.y = ry; g.add(m);
+  (g.userData.floaters ||= []).push({ m, x, z, dy, rock, ph: Math.random() * 6.3 }); return m;
+}
+// a jukung: slim white hull with a painted stripe and beaked ends, bamboo outriggers either side, a short mast
+function jukungParts(stripe, sail) {
+  const P = [part(new THREE.CylinderGeometry(0.42, 0.25, 7, 8, 1).scale(1, 1, 0.75), [0.95, 0.94, 0.9], 0, 0, 0, 0, Math.PI / 2),
+    part(new THREE.CylinderGeometry(0.44, 0.27, 6.4, 8, 1, true).scale(1, 1, 0.77), stripe, 0, 0.12, 0, 0, Math.PI / 2)];
+  for (const e of [-1, 1]) P.push(part(new THREE.ConeGeometry(0.28, 1.2, 6), [0.82, 0.23, 0.16], e * 4, 0.25, 0, 0, -e * Math.PI / 2));
+  for (const zs of [-1, 1]) { P.push(part(new THREE.CylinderGeometry(0.1, 0.1, 5.5, 5), [0.23, 0.19, 0.15], 0, -0.15, zs * 2.6, 0, Math.PI / 2));
+    for (const xs of [-1.4, 1.4]) P.push(part(new THREE.CylinderGeometry(0.05, 0.05, 2.7, 4).rotateX(Math.PI / 2), [0.36, 0.29, 0.21], xs, 0.35, zs * 1.3)); }
+  P.push(part(new THREE.CylinderGeometry(0.05, 0.06, 4.2, 4), [0.36, 0.29, 0.21], 0, 2.3, 0));
+  // the sail: a tall triangle of bright cloth on a raked spar, the thing you actually pick out from far across the water
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0.6, 0.06, 2.8, 1.0, 0.06, 0.2, 4.3, 0.06,  0, 0.6, -0.06, 0.2, 4.3, -0.06, 2.8, 1.0, -0.06], 3));
+  sg.computeVertexNormals(); P.push(part(sg, sail, 0.1, 0, 0));   // (normals: every part must carry the same attributes to merge)
+  return P;
+}
+function waterProps(g, key) {
+  if (key === 'easy') {   // Pantai Kuda: the village's fishing boats anchored out the back beside the lineup, where the swells pass unbroken
+    const boats = [[40, -232, 0.4, [0.12, 0.36, 0.66], [0.9, 0.24, 0.12]], [72, -246, 1.2, [0.14, 0.5, 0.24], [0.95, 0.72, 0.1]], [18, -258, -0.3, [0.74, 0.14, 0.1], [0.94, 0.9, 0.84]]];
+    for (const [x, z, ry, c, sl] of boats) floater(g, jukungParts(c, sl), x, z, ry, 0.35, 0.04, 1.6);
+  }
+  if (key === 'hard') {   // Batu Hitam: black basalt rocks standing up out of the sea off the headland, the swell washing round them
+    for (const [x, z, h, r] of [[318, 88, 7, 3.2], [300, 122, 4, 2.4], [334, 66, 5, 2.8], [292, 140, 2.5, 1.8], [326, 104, 3, 2]]) {
+      const geo = new THREE.DodecahedronGeometry(1, 1); const pp = geo.attributes.position;
+      for (let i = 0; i < pp.count; i++) { const y = pp.getY(i); pp.setXYZ(i, pp.getX(i) * r * (1 - 0.35 * Math.max(0, y)), (y + 0.35) * h, pp.getZ(i) * r * (1 - 0.35 * Math.max(0, y))); }
+      geo.computeVertexNormals(); put(g, geo, [0.13, 0.13, 0.14], x, -1.5, z, 0.3); }
+  }
+  if (key === 'hiu') {   // Karang Hiu: coral heads breaking the surface off the point, and a red and white marker buoy out the back of the reef
+    for (let k = 0; k < 9; k++) { const x = 292 + (k * 37) % 34, z = 62 + (k * 23) % 42, r = 1.2 + (k % 3) * 0.7;
+      put(g, new THREE.DodecahedronGeometry(r, 0).scale(1.4, 0.45, 1.1), k % 2 ? [0.33, 0.28, 0.2] : [0.26, 0.3, 0.22], x, -0.25, z, 0.3); }
+    floater(g, [part(new THREE.CylinderGeometry(0.55, 0.6, 1.1, 10), [0.8, 0.12, 0.1], 0, 0.2, 0), part(new THREE.CylinderGeometry(0.4, 0.55, 0.9, 10), [0.95, 0.95, 0.93], 0, 1.2, 0),
+      part(new THREE.ConeGeometry(0.4, 0.8, 10), [0.8, 0.12, 0.1], 0, 2.05, 0), part(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 4), [0.2, 0.2, 0.2], 0, 3, 0)], 30, -190, 0, 0.3, 0.08, 1.8);
+  }
+  if (key === 'extreme') {   // Gunung Laut: the rescue ski waiting out the back, beyond the lineup, its sled on the back
+    floater(g, [part(new THREE.BoxGeometry(3.2, 0.55, 1.15), [0.82, 0.14, 0.1], 0, 0.1, 0), part(new THREE.ConeGeometry(0.58, 1.1, 4).rotateY(Math.PI / 4).scale(1, 1, 0.9), [0.82, 0.14, 0.1], 2.1, 0.1, 0, 0, -Math.PI / 2),
+      part(new THREE.BoxGeometry(1.3, 0.3, 0.5), [0.1, 0.1, 0.1], -0.3, 0.52, 0), part(new THREE.BoxGeometry(0.1, 0.45, 0.8), [0.15, 0.15, 0.15], 0.6, 0.6, 0),
+      part(new THREE.BoxGeometry(2.3, 0.14, 1.3), [0.95, 0.8, 0.12], -2.7, -0.05, 0)], 45, -335, 0.6, 0.35, 0.07, 1.5);
+  }
 }
 
 function blackRock(g) {
