@@ -92,7 +92,7 @@ export class Profile {
     // the crest (a jump up to it popped you onto the back of the wave), so the height stays at the wall's top
     // (under an overhanging lip, anywhere behind the top of the face is capped at that top: the back of the wave there is
     // on the far side of the tube's roof, not a surface you can step up onto)
-    const cap = c.U && c.U.length >= 3 && c.curl > 0.3 ? F[F.length - 1][1] : Infinity;   // (only where the lip is actually throwing)
+    const cap = Infinity;   // (the cap under the lip is off: 26 Sep, the owner saw the board bob up and down in turns)
     if (zl <= B[0][0]) return 0;
     if (zl <= B[B.length - 1][0]) {
       for (let i = 1; i < B.length; i++) if (zl <= B[i][0]) { const t = (zl - B[i][0]) / (B[i - 1][0] - B[i][0] || 1e-6); return Math.min(cap, B[i][1] + (B[i - 1][1] - B[i][1]) * t); }

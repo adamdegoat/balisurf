@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=133';
-import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=118';
+import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=120';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
 import { SurfAudio } from './audio.js?v=17';
 import { ranch, POOL } from './ranch.js?v=4';
@@ -11,8 +11,8 @@ import { SPOTS, spotGroup, builtSpots } from './spots.js?v=40';
 import { villa, VILLA } from './villa.js?v=94';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=22';
-import { crew } from './crew.js?v=8';
-import { wildlife } from './wildlife.js?v=11';
+import { crew } from './crew.js?v=10';
+import { wildlife } from './wildlife.js?v=13';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
