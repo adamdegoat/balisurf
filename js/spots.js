@@ -22,6 +22,14 @@ export const SPOTS = {
 };
 
 const built = {};
+// a newer landmark: built, and joined into one piece, apart from the rest with a private dice (the shared one also
+// decides the sets, and three.js draws on it for every new object: a new landmark mustn't change which waves come)
+function ownDice(g, build, seed = 7) {
+  const shared = Math.random; let x = seed;
+  Math.random = () => { x = (x * 16807) % 2147483647; return (x - 1) / 2147483646; };
+  try { const h = new THREE.Group(); build(h); mergeProps(h); for (const m of [...h.children]) g.add(m); if (h.userData.floaters) (g.userData.floaters ||= []).push(...h.userData.floaters); }
+  finally { Math.random = shared; }
+}
 // build a spot the first time you go there (the others stay unbuilt until you visit them)
 export function spotGroup(scene, key) {
   if (built[key]) return built[key];
@@ -31,6 +39,8 @@ export function spotGroup(scene, key) {
   if (key === 'kanan') redHead(g);
   if (key === 'hard') lighthouseHead(g);
   if (key === 'hiu') palmPoint(g);
+  if (key === 'easy') ownDice(g, horseHead);
+  if (key === 'extreme') ownDice(g, seaMountain);
   waterProps(g, key);
   if (key === 'hard') blackRock(g);
   if (key === 'extreme') theMountain(g);
@@ -219,6 +229,65 @@ function palmPoint(g) {
   for (let k = 0; k < 13; k++) { const u = 0.06 + k * 0.07, t = at(u), side = k % 2 ? 1 : -1; palm(g, 335 + side * (8 + (k % 3) * 5), t.y - 0.5, t.z, 15 + (k % 4) * 2.5, 0.22 + (k % 3) * 0.08, side > 0 ? Math.PI : 0); }
 }
 
+// a Sumba clan house (uma mbatangu): a timber house on stilts under a wide thatch hip, with the tall thatch tower
+// rising out of its middle (the ancestors' loft), the shape every Sumba village is known by
+function uma(g, x, y, z, s = 1, ry = 0) {
+  const WOOD = [0.42, 0.3, 0.2], THATCH = [0.58, 0.47, 0.3];
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) put(g, new THREE.BoxGeometry(0.3 * s, 1.8 * s, 0.3 * s), [0.3, 0.22, 0.15], x + dx * 2.6 * s, y + 0.9 * s, z + dz * 2.6 * s);
+  put(g, new THREE.BoxGeometry(6 * s, 2.2 * s, 6 * s), WOOD, x, y + 2.9 * s, z, 0.12);
+  const hip = (prof, y0, y1, seg) => { const geo = new THREE.CylinderGeometry(1, 1, 1, 4, seg, false); geo.rotateY(Math.PI / 4 + ry); const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) { const t = p.getY(i) + 0.5, k = prof(t) * Math.SQRT2; p.setXYZ(i, p.getX(i) * k, y0 + (y1 - y0) * t, p.getZ(i) * k); }
+    geo.computeVertexNormals(); return put(g, geo, THATCH, x, y, z, 0.14); };
+  hip((t) => (4.4 + (1.5 - 4.4) * t) * s, 3.6 * s, 5.2 * s, 2);                                   // (the wide eaves)
+  hip((t) => (0.15 + 1.45 * Math.pow(1 - t, 1.6)) * s, 5.1 * s, 13 * s, 6);                         // (the tower, drawn up to a point)
+}
+// a Sumba stone tomb: a great flat slab on four short legs, in front of the houses
+function tomb(g, x, y, z, ry = 0) {
+  const stone = [0.52, 0.5, 0.45];
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) put(g, new THREE.BoxGeometry(0.5, 1.1, 0.5), stone, x + dx * 1.3, y + 0.55, z + dz * 0.8, 0.1);
+  const slab = new THREE.BoxGeometry(3.6, 0.45, 2.4); slab.rotateY(ry); put(g, slab, stone, x, y + 1.3, z, 0.12);
+}
+// a Sumba horse (small, sturdy): body, neck, head, legs and tail, as one piece. grazing: head down to the grass;
+// rider: someone on its back
+function horse(g, x, y, z, ry, coat, grazing = false, rider = null) {
+  const mane = [0.08, 0.06, 0.05], P = [];
+  P.push(part(new THREE.CylinderGeometry(0.34, 0.36, 1.5, 8).scale(1, 1, 0.85), coat, 0, 1.2, 0, 0, Math.PI / 2));            // (the barrel of the body, along x)
+  const nk = new THREE.CylinderGeometry(0.16, 0.26, 0.85, 6); nk.rotateZ(grazing ? 2.3 : -0.6); P.push(part(nk, coat, grazing ? 0.95 : 0.85, grazing ? 0.95 : 1.62, 0));
+  const hd = new THREE.BoxGeometry(0.55, 0.22, 0.24); hd.rotateZ(grazing ? -1.2 : -0.35); P.push(part(hd, coat, grazing ? 1.25 : 1.25, grazing ? 0.5 : 1.92, 0));
+  for (const [lx, lz] of [[0.55, 0.18], [0.55, -0.18], [-0.55, 0.18], [-0.55, -0.18]]) P.push(part(new THREE.CylinderGeometry(0.07, 0.06, 1.0, 5), coat, lx, 0.5, lz));
+  P.push(part(new THREE.CylinderGeometry(0.03, 0.09, 0.8, 5), mane, -0.85, 0.95, 0, 0, -0.35));   // (the tail)
+  if (rider) { P.push(part(new THREE.CylinderGeometry(0.17, 0.19, 0.7, 6), rider, 0, 1.95, 0), part(new THREE.SphereGeometry(0.13, 6, 4), [0.35, 0.24, 0.17], 0.02, 2.42, 0),
+    part(new THREE.CylinderGeometry(0.07, 0.07, 0.75, 5), [0.2, 0.2, 0.22], 0.12, 1.45, 0.3, 0, 0.3), part(new THREE.CylinderGeometry(0.07, 0.07, 0.75, 5), [0.2, 0.2, 0.22], 0.12, 1.45, -0.3, 0, 0.3)); }
+  const geo = mergeGeometries(P); geo.rotateY(ry); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, landMaterial()); m.position.set(x, y, z); m.userData.prop = true; g.add(m);
+}
+// Pantai Kuda, the horse beach: a low green headland at the end of the bay with a Sumba village on it (the tall
+// thatch towers of the clan houses, stone tombs in front), and the village's horses on the sand and the grass below
+function horseHead(g) {
+  const at = headland(g, { x: 330, tipZ: 115, baseZ: 250, w: 30, h0: 9, h1: 16, rock: [0.52, 0.47, 0.36], grass: [0.2, 0.33, 0.12] });
+  [[0.22, -9], [0.3, 9], [0.4, -6], [0.48, 10], [0.58, -3]].forEach(([u, dx], k) => { const t = at(u); uma(g, 330 + dx, t.y - 0.6, t.z, 0.95 + (k % 3) * 0.12, k * 0.3); });
+  { const t = at(0.14); tomb(g, 326, t.y - 0.3, t.z, 0.2); tomb(g, 336, t.y - 0.3, t.z + 4, -0.3); }
+  const sandY = (x, z) => (z - 185) / 40 * 2.2 - 0.2 + Math.sin(x * 0.05) * 0.2;   // (the beach's own slope: see coast())
+  const COATS = [[0.33, 0.19, 0.1], [0.12, 0.09, 0.07], [0.78, 0.74, 0.66], [0.45, 0.3, 0.16], [0.24, 0.15, 0.09]];
+  const herd = [[232, 207, 0.3, 0, 1], [240, 210, -2.6, 1, 0], [251, 205, 2.9, 2, 0], [262, 209, 0.9, 3, 1], [276, 212, -0.4, 4, 0], [200, 204, 3.0, 1, 0, [0.85, 0.2, 0.15]], [214, 203, 2.8, 2, 0, [0.95, 0.9, 0.8]]];
+  for (const [x, z, ry, c, graze, rider] of herd) horse(g, x, sandY(x, z) - 0.05, z, ry, COATS[c], !!graze, rider || null);
+  for (const [u, dx, ry, c] of [[0.66, -12, 1.2, 0], [0.72, 6, -0.7, 2], [0.8, -4, 2.2, 4]]) { const t = at(u); horse(g, 330 + dx, t.y - 0.4, t.z, ry, COATS[c], true); }   // (and a few grazing up top)
+}
+// Gunung Laut, the mountain in the sea: a great island peak standing out of the ocean down the line past the end of
+// the reef, a jagged summit up in the storm, black rocks round its foot
+function seaMountain(g) {
+  const cx = 760, cz = -40, R = 150, Hm = 260, geo = new THREE.ConeGeometry(R, Hm, 28, 14, true), p = geo.attributes.position, c = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x), t = (y + Hm / 2) / Hm;
+    const n = 1 + 0.16 * Math.sin(a * 5 + t * 4) + 0.09 * Math.sin(a * 11 - t * 9) + 0.05 * Math.sin(a * 23 + t * 17), rr = n * (1 - 0.25 * Math.pow(t, 0.6));   // (ribs and gullies down its flanks; the lower slopes spread out)
+    p.setXYZ(i, x * rr, y + Hm / 2 - 6 + (18 * Math.sin(a * 3) + 22 * Math.sin(a * 7 + 1) * Math.pow(t, 3)) * t, z * rr);   // (a broken, jagged summit, not a clean point)
+    const k = 0.85 + Math.random() * 0.3, col = t < 0.05 ? [0.13, 0.13, 0.14] : t < 0.55 && Math.sin(a * 7 + t * 20) > -0.2 ? [0.1, 0.17, 0.09] : [0.24, 0.24, 0.25];   // (black rock at the waterline, jungle on the lower flanks, bare grey rock above)
+    c[i * 3] = col[0] * k; c[i * 3 + 1] = col[1] * k; c[i * 3 + 2] = col[2] * k; }
+  geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); const flat = geo.toNonIndexed(); flat.computeVertexNormals();
+  const m = new THREE.Mesh(flat, landMaterial()); m.position.set(cx, 0, cz); m.userData.prop = true; g.add(m);
+  // broken black rocks round its foot
+  for (let k = 0; k < 16; k++) { const an = k * 0.39 + 1.6, r = R * (0.95 + (k % 4) * 0.06); put(g, new THREE.DodecahedronGeometry(6 + (k % 3) * 4, 0).scale(1, 0.8 + (k % 2) * 0.6, 1), [0.14, 0.14, 0.15], cx + Math.cos(an) * r, -1, cz + Math.sin(an) * r, 0.25); }
+}
+
 // things in the water down the line, where you look while you ride: each built as one piece, and the ones that float
 // ride up and over the swells (g.userData.floaters: the game moves them each frame)
 const part = (geo, rgb, x, y, z, ry = 0, rz = 0, jit = 0.06) => { tint(geo, rgb, jit); if (geo.attributes.uv) geo.deleteAttribute('uv'); if (rz) geo.rotateZ(rz); if (ry) geo.rotateY(ry); geo.translate(x, y, z); return geo.index ? geo.toNonIndexed() : geo; };
@@ -282,5 +351,5 @@ function theMountain(g) {
     geo.computeVertexNormals(); put(g, geo, [0.2, 0.2, 0.21], x, h / 2 - 2, z, 0.3);
     const cap = new THREE.SphereGeometry(r * 0.8, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2); cap.scale(1, 0.35, 1); put(g, cap, [0.1, 0.17, 0.09], x, h - 2, z, 0.3);
   };
-  stack(-330, -120, 95, 22); stack(-290, -40, 60, 14); stack(-380, 40, 130, 30); stack(680, -60, 110, 26); stack(620, 60, 70, 16);   // (beyond the end of the reef, clear of the waves)
+  stack(-330, -120, 95, 22); stack(-290, -40, 60, 14); stack(-380, 40, 130, 30); stack(590, 90, 70, 16);   // (beyond the end of the reef, clear of the waves)
 }

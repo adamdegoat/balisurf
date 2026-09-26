@@ -9,7 +9,7 @@ export async function cap(i, pr = 2) {
   r.autoClear = false; r.clear(); r.render(g.scene, g.camera);
   const a = g.armCam; a.position.copy(g.camera.position); a.quaternion.copy(g.camera.quaternion); if (mir) g.flipProj(a); r.clearDepth(); r.render(g.scene, a); if (mir) g.flipProj(a); r.autoClear = true;
   if (mir) g.flipProj(g.camera);
-  const b = await new Promise((res) => r.domElement.toBlob(res, 'image/jpeg', 0.92));
+  const b = await (await fetch(r.domElement.toDataURL('image/jpeg', 0.92))).blob();   // (toBlob never calls back while the browser pane is hidden)
   await fetch(`http://127.0.0.1:8799/f?shot=look&i=${i}`, { method: 'POST', body: b });
   return `${r.domElement.width}x${r.domElement.height}`;
 }

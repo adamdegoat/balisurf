@@ -2,10 +2,12 @@
 // on the swell, and when a wave comes the one in position takes off: drops down the face, carves up and down it,
 // sometimes stalls into the barrel, then kicks out over the back and paddles back out. They aren't physics riders
 // (that's only you): each one follows a line on the wave's real face (the same shape you ride), so from the cliff they
-// sit exactly on the water, in the pocket, under the lip. Drawn as three instanced meshes (limbs, heads, boards),
-// so a whole crew costs three draw calls.
+// sit exactly on the water, in the pocket, under the lip. Once their bodies are in (setPeople: real people in
+// boardshorts, see surfers.js) each is posed from the same points the old stick figures were drawn from; until then (or
+// if they can't load) they're drawn as three instanced meshes (limbs, heads, boards).
 import * as THREE from 'three';
 import { heightAt } from './surf.js?v=121';
+import { waterPerson, poseFrom } from './surfers.js?v=3';
 
 const N = 7, SEG = 7;   // surfers; limb pieces each (2 thighs, 2 shins, torso, 2 arms)
 const SKIN = [[0.62, 0.42, 0.3], [0.45, 0.3, 0.2], [0.75, 0.55, 0.42]], TOPS = [[0.08, 0.08, 0.09], [0.9, 0.9, 0.88], [0.15, 0.3, 0.55], [0.75, 0.2, 0.15], [0.95, 0.75, 0.2]],
@@ -48,6 +50,14 @@ export function crew(scene) {
   const limb = (idx, p0, p1, r) => { v.subVectors(p1, p0); const len = v.length(); q.setFromUnitVectors(Y, v.divideScalar(len || 1)); a.addVectors(p0, p1).multiplyScalar(0.5);
     limbs.setMatrixAt(idx, m4.compose(a, q, sc.set(r, len, r))); };
   const P = Array.from({ length: 10 }, () => new THREE.Vector3());
+  // real people: one each, posed from the joints each frame (the stick figures and their heads are then not drawn)
+  const people = [], LK = new THREE.Vector3(), J = { up: new THREE.Vector3(), face: new THREE.Vector3(), look: null };
+  let frame = 0; const api = { detail: false };   // detail: every surfer posed every frame (set while you zoom or watch a ride)
+  const HD = new THREE.Vector3();
+  function setPeople(list) {
+    list.slice(0, N).forEach(([src, look], i) => { const Pn = waterPerson(src, look); Pn.body.traverse((o) => { if (o.isMesh) o.userData.crew = true; }); group.add(Pn.root); people[i] = Pn; });
+    limbs.count = 0; heads.count = 0;
+  }
 
   // one surfer's body, posed: standing (crouched by c, facing the side sg), lying down paddling, or sitting up
   function pose(i, s) {
@@ -68,15 +78,27 @@ export function crew(scene) {
       W(s, -0.15, 0.17, 0, hip); W(s, 0.45, 0.26, 0, sho); W(s, 0.62, 0.36, 0, head);
       W(s, 0.45 + 0.45 * Math.cos(k), 0.1 + 0.3 * Math.max(0, Math.sin(k)) - 0.25 * Math.max(0, -Math.sin(k)), 0.32, hL);
       W(s, 0.45 + 0.45 * Math.cos(k + Math.PI), 0.1 + 0.3 * Math.max(0, Math.sin(k + Math.PI)) - 0.25 * Math.max(0, -Math.sin(k + Math.PI)), -0.32, hR);
-    } else {   // SIT: straddling the board, legs in the water, hands on the thighs
+    } else {   // SIT: straddling the board, legs in the water, hands on the rails in front
       W(s, 0.35, -0.45, 0.22, fL); W(s, 0.35, -0.45, -0.22, fR); W(s, 0.3, 0.12, 0.2, kL); W(s, 0.3, 0.12, -0.2, kR);
       W(s, -0.1, 0.14, 0, hip); W(s, -0.05, 0.7, 0, sho); W(s, -0.02, 0.88, 0, head);
-      W(s, 0.22, 0.25, 0.24, hL); W(s, 0.22, 0.25, -0.24, hR);
+      W(s, 0.34, 0.07, 0.24, hL); W(s, 0.34, 0.07, -0.24, hR);
     }
-    const o = i * SEG;
-    limb(o, hip, kL, 0.075); limb(o + 1, hip, kR, 0.075); limb(o + 2, kL, fL, 0.055); limb(o + 3, kR, fR, 0.055);
-    limb(o + 4, hip, sho, 0.15); limb(o + 5, sho, hL, 0.045); limb(o + 6, sho, hR, 0.045);
-    heads.setMatrixAt(i, m4.compose(head, q.identity(), sc.set(0.11, 0.12, 0.11)));
+    const Pn = people[i];
+    if (Pn) {   // a real person on those points
+      Pn.root.visible = !s.hidden;
+      Object.assign(J, { hip, sho, head, fL, fR, kL, kR, hL, hR });
+      if (s.st === 'PADDLE') { J.up.subVectors(sho, hip); J.face.copy(s.u).negate(); J.look = null; }
+      else if (s.st === 'RIDE' || s.st === 'WIPE') { J.up.subVectors(sho, hip); J.face.copy(side).multiplyScalar(s.sg); J.look = LK.copy(s.f); }
+      else { J.up.copy(s.u); J.face.copy(s.f); J.look = LK.copy(s.f); }
+      // (out at the break with the naked eye they're a few dots tall: posed every third frame, and between times just
+      // carried along with their board)
+      if (!s.hidden) { if (api.detail || (frame + i) % 3 === 0 || !Pn.hip) { poseFrom(Pn, J); (Pn.hip ||= new THREE.Vector3()).copy(hip); }
+        else { Pn.root.position.add(HD.subVectors(hip, Pn.hip)); Pn.hip.copy(hip); } }
+    }
+    else { const o = i * SEG;
+      limb(o, hip, kL, 0.075); limb(o + 1, hip, kR, 0.075); limb(o + 2, kL, fL, 0.055); limb(o + 3, kR, fR, 0.055);
+      limb(o + 4, hip, sho, 0.15); limb(o + 5, sho, hL, 0.045); limb(o + 6, sho, hR, 0.045);
+      heads.setMatrixAt(i, m4.compose(head, q.identity(), sc.set(0.11, 0.12, 0.11))); }
     // the board: a long thin lens under the feet, along the heading
     m4.makeBasis(s.f, s.u, side); q.setFromRotationMatrix(m4); a.copy(s.p).addScaledVector(s.u, 0.02);
     boards.setMatrixAt(i, m4.compose(a, q, sc.set(0.93, 0.04, 0.25)));
@@ -92,7 +114,7 @@ export function crew(scene) {
   const tgt = new THREE.Vector3(), nrm = new THREE.Vector3(), prev = new THREE.Vector3(), fwd = new THREE.Vector3();
 
   function update(dt, waves, T) {
-    if (!group.visible) return;
+    if (!group.visible) return; frame++;
     // a wave about to break: the free surfer sitting nearest the peak goes
     for (const w of waves) {
       const t = T - w.tBreak;
@@ -152,5 +174,5 @@ export function crew(scene) {
     sprayTick(dt);
     limbs.instanceMatrix.needsUpdate = true; heads.instanceMatrix.needsUpdate = true; boards.instanceMatrix.needsUpdate = true;
   }
-  return { group, update, surfers: S };
+  return Object.assign(api, { group, update, surfers: S, setPeople });
 }

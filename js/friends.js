@@ -6,6 +6,7 @@
 // frame. Walk up and they look round and say something; Nando calls out the barrels he sees.
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { idle } from './life.js?v=1';
 
 const HM = new THREE.Matrix4(), HX = new THREE.Vector3();
 const L2 = (F) => (LOOK[F.id] && LOOK[F.id].scale) || 1;   // (a friend's size, for what they wear)
@@ -15,7 +16,7 @@ function aim(bone, child, dir, w = 1) {
   bone.getWorldPosition(_a); child.getWorldPosition(_b); _d.subVectors(_b, _a).normalize();
   _q.setFromUnitVectors(_d, dir); if (w < 1) _q.slerp(_wq.identity(), 1 - w);
   bone.getWorldQuaternion(_wq); bone.parent.getWorldQuaternion(_pq);
-  bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq))); bone.updateMatrixWorld(true);
+  bone.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));   // (no need to redo every bone below it: getWorldPosition/Quaternion bring each one up to date as it's read)
 }
 // two-bone reach: shoulder->elbow->hand to a target, the elbow bending out toward pole
 const _s = new THREE.Vector3(), _e = new THREE.Vector3(), _t = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
@@ -111,11 +112,17 @@ function liftFringe(mesh) {
   for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (p.getZ(i) > 0.04 && y < 1.575) p.setY(i, 1.575 - (1.575 - y) * 0.25); }
   p.needsUpdate = true; g.computeVertexNormals();
 }
+// the small movements of their own (Rocketbox motion capture, see life.js): which clips each plays while idle, and
+// while talking
+const LIFE = { kai: ['m_sit_chair_breathe_01', 'm_sit_chair_idle_relaxed_01'], putu: ['m_sit_chair_idle_neutral_01', 'm_sit_chair_idle_look_around', 'm_sit_chair_breathe_01'],
+  wayan: ['m_idle_neutral_01', 'm_idle_neutral_02'], nando: ['m_idle_neutral_03', 'm_idle_neutral_01'], rudi: ['m_idle_neutral_02', 'm_idle_neutral_03', 'm_idle_look_around_01'],
+  belle: ['f_idle_neutral_01', 'f_idle_look_around_01'] };
+const LIFE_TALK = { rudi: ['m_gestic_talk_neutral_01'] };
 // a Rocketbox person's skeleton (3ds Max biped) under the names the poses below use
 const BIP = { pelvis: 'Pelvis', spine_01: 'Spine', spine_02: 'Spine1', spine_03: 'Spine2', neck_01: 'Neck', head: 'Head',
   thigh_l: 'L_Thigh', calf_l: 'L_Calf', foot_l: 'L_Foot', thigh_r: 'R_Thigh', calf_r: 'R_Calf', foot_r: 'R_Foot',
   upperarm_l: 'L_UpperArm', lowerarm_l: 'L_Forearm', hand_l: 'L_Hand', upperarm_r: 'R_UpperArm', lowerarm_r: 'R_Forearm', hand_r: 'R_Hand' };
-export function friends(scene, src, spots, people) {
+export function friends(scene, src, spots, people, life = null) {
   const group = new THREE.Group(); scene.add(group);
   const list = [];
   spots.forEach((S, i) => {
@@ -130,6 +137,7 @@ export function friends(scene, src, spots, people) {
       body.updateMatrixWorld(true); const hp = B.head.getWorldPosition(new THREE.Vector3()), ep = B.LEye.getWorldPosition(new THREE.Vector3()).add(B.REye.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5).sub(hp);
       body.rotation.y = -Math.atan2(ep.x, ep.z); body.updateMatrixWorld(true);
       body.userData.rest = []; body.traverse((o) => { if (o.isBone) body.userData.rest.push([o, o.position.clone(), o.quaternion.clone(), o.scale.clone()]); });   // (their standing pose, to start each frame from)
+      if (life && LIFE[S.id]) { const byName = {}; body.traverse((o) => { if (o.isBone) byName[o.name] = o; }); body.userData.idle = idle(life, byName, LIFE[S.id], LIFE_TALK[S.id]); }
     } else {
       body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.visible = true; o.frustumCulled = false; o.material = o.material.clone(); o.material.side = THREE.FrontSide;
         const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; liftFringe(o); } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
@@ -196,6 +204,16 @@ export function friends(scene, src, spots, people) {
   const CHATTY = { rudi: 1, putu: 1 };   // (these two keep talking while you stay: a new tip or a new spot every few seconds)
   for (const id in LINES) if (CHATTY[id]) { const a = LINES[id]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }   // (a different order each visit)
 
+  // standing: legs straight down the first time; after that, with their weight shifting, each foot stays where it
+  // was planted and the knee gives (thigh and shin reach down to it)
+  const FT = new THREE.Vector3(), KP = new THREE.Vector3(), DA = new THREE.Vector3(), DB = new THREE.Vector3();
+  function stand(F, fw, dirs) {
+    const { B, root } = F;
+    for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1;
+      if (!F.feet || !F.feet[sd] || !F.body.userData.idle) { const [dt, dc] = dirs(sg); aim(B['thigh_' + sd], B['calf_' + sd], dt); aim(B['calf_' + sd], B['foot_' + sd], dc);
+        if (F.body.userData.idle) { (F.feet ||= {})[sd] = root.worldToLocal(B['foot_' + sd].getWorldPosition(new THREE.Vector3())); } }
+      else reach(B['thigh_' + sd], B['calf_' + sd], B['foot_' + sd], root.localToWorld(FT.copy(F.feet[sd])), KP.copy(fw).addScaledVector(up, -0.2)); }
+  }
   const V = new THREE.Vector3(), W = new THREE.Vector3(), fw = new THREE.Vector3(), rt = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), tgt = new THREE.Vector3(), tgt2 = new THREE.Vector3(), pole = new THREE.Vector3(), SD = new THREE.Vector3(), TA = new THREE.Vector3(), TB = new THREE.Vector3(), HP = new THREE.Vector3();
   function update(dt, t, beat, you, camera) {
     for (const F of list) {
@@ -204,12 +222,14 @@ export function friends(scene, src, spots, people) {
       F.posed = true;
       if (F.body.userData.rest) for (const [b, p, q, sc] of F.body.userData.rest) { b.position.copy(p); b.quaternion.copy(q); b.scale.copy(sc); }   // (a Rocketbox skeleton: back to its own standing pose; its bind data doesn't survive skeleton.pose())
       else F.skins[0].skeleton.pose();
-      root.updateMatrixWorld(true);   // (every mesh of a friend shares the one set of bones: posing it once does them all)
+      const LF = F.body.userData.idle;   // (then their own small movements on top: breathing, shifting weight, glancing round)
+      if (LF) { LF.update(dt, F.talkT > 0); LF.apply(1, S.pose === 'bino' ? 0 : F.talkT > 0 || F.near ? 0.35 : 1); }   // (the head stays on you while they talk to you; on the binoculars while he looks through them)
+      root.updateWorldMatrix(true, false);   // (every mesh of a friend shares the one set of bones: posing it once does them all)
       // you nearby, on their level? then they look round at you, and say something
       B.head.getWorldPosition(F.head);
-      const dx = you.x - F.head.x, dz = you.z - F.head.z, dist = Math.hypot(dx, dz), near = dist < 3.6 && Math.abs(you.y - F.head.y) < 1.6;
+      const dx = you.x - F.head.x, dz = you.z - F.head.z, dist = Math.hypot(dx, dz), near = dist < 3.6 && Math.abs(you.y - F.head.y) < 1.6; F.near = near;
       if (F.yaw === undefined) F.yaw = S.yaw;
-      if (S.pose === 'coach') { const want = near ? Math.atan2(dx, dz) : S.yaw, d = Math.atan2(Math.sin(want - F.yaw), Math.cos(want - F.yaw)); F.yaw += d * Math.min(1, dt * 2.5); root.rotation.y = F.yaw; root.updateMatrixWorld(true); }   // (the coach turns right round to talk to you)
+      if (S.pose === 'coach') { const want = near ? Math.atan2(dx, dz) : S.yaw, d = Math.atan2(Math.sin(want - F.yaw), Math.cos(want - F.yaw)); F.yaw += d * Math.min(1, dt * 2.5); root.rotation.y = F.yaw; root.updateWorldMatrix(true, false); }   // (the coach turns right round to talk to you)
       fw.set(Math.sin(F.yaw), 0, Math.cos(F.yaw)); rt.set(-fw.z, 0, fw.x);   // (their right, looking along fw)
       if (near && F.cool <= 0 && !(talking && talking !== F && talking.talkT > 0)) { say(F, LINES[F.id][F.lineI++ % LINES[F.id].length]); F.cool = CHATTY[F.id] ? F.talkT + 3.5 : 18; }   // (never over the top of someone else)
       const toYou = Math.atan2(dx, dz) - F.yaw, want = near ? Math.max(-1.1, Math.min(1.1, Math.atan2(Math.sin(toYou), Math.cos(toYou)))) : 0;
@@ -217,7 +237,7 @@ export function friends(scene, src, spots, people) {
       const hip = B.pelvis.getWorldPosition(HP);
       if (S.pose === 'guitar') {
         // sitting on the log: hips down to the seat, thighs forward, shins down; leaning a little into the guitar
-        root.position.y = S.y + S.seat + 0.02 - (hip.y - root.position.y); root.updateMatrixWorld(true);   // (the pelvis down onto the log)
+        root.position.y = S.y + S.seat + 0.02 - (hip.y - root.position.y); root.updateWorldMatrix(true, false);   // (the pelvis down onto the log)
         for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1;
           aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(fw).multiplyScalar(0.92).addScaledVector(up, -0.28).addScaledVector(rt, sg * 0.18).normalize());
           aim(B['calf_' + sd], B['foot_' + sd], tgt.copy(up).multiplyScalar(-0.95).addScaledVector(fw, 0.25).addScaledVector(rt, sg * 0.05).normalize()); }
@@ -238,7 +258,7 @@ export function friends(scene, src, spots, people) {
         aim(B.spine_01, B.spine_02, tgt.copy(up).addScaledVector(fw, talk ? 0.35 : 0.8).normalize());
         aim(B.spine_03, B.neck_01, tgt.copy(up).addScaledVector(fw, talk ? 0.3 : 0.55).normalize());
         aim(B.neck_01, B.head, tgt.copy(up).addScaledVector(fw, talk ? 0.2 : 0.9).addScaledVector(rt, Math.sin(F.look) * 0.9).normalize());
-        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(rt, sg * 0.1).addScaledVector(fw, -0.05).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, 0.03).normalize()); }
+        stand(F, fw, (sg) => [DA.copy(up).multiplyScalar(-1).addScaledVector(rt, sg * 0.1).addScaledVector(fw, -0.05).normalize(), DB.copy(up).multiplyScalar(-1).addScaledVector(fw, 0.03).normalize()]);
         const deck = W.set(S.board[0], S.board[1], S.board[2]);
         const circle = tgt.copy(deck).addScaledVector(rt, 0.12 + Math.cos(t * 3.2) * 0.12).addScaledVector(fw, Math.sin(t * 3.2) * 0.07);
         if (!talk) reach(B.upperarm_r, B.lowerarm_r, B.hand_r, circle, pole.copy(rt).addScaledVector(up, -0.3));
@@ -248,7 +268,7 @@ export function friends(scene, src, spots, people) {
         // standing at the rail with the binoculars up, panning slowly along the line; lowers them to talk to you
         const talk = F.talkT > 0 || Math.sin(t * 0.21) > 0.85, pan = Math.sin(t * 0.3) * 0.35;
         const look = tgt.copy(fw).applyAxisAngle(up, pan + F.look * (talk ? 1 : 0)); look.y = talk ? 0.05 : -0.18; look.normalize();
-        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt2.copy(up).multiplyScalar(-1).addScaledVector(rt, sg * 0.1).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt2.copy(up).multiplyScalar(-1).normalize()); }
+        stand(F, fw, (sg) => [DA.copy(up).multiplyScalar(-1).addScaledVector(rt, sg * 0.1).normalize(), DB.copy(up).multiplyScalar(-1)]);
         aim(B.spine_03, B.neck_01, tgt2.copy(up).addScaledVector(look, 0.12).normalize());
         aim(B.neck_01, B.head, tgt2.copy(up).addScaledVector(look, 0.55).normalize());
         B.head.getWorldPosition(W); const eyes = W.addScaledVector(up, 0.07);
@@ -257,13 +277,17 @@ export function friends(scene, src, spots, people) {
           const side = SD.crossVectors(look, up).normalize();
           reach(B.upperarm_l, B.lowerarm_l, B.hand_l, TA.copy(at).addScaledVector(side, 0.07).addScaledVector(up, -0.03), pole.copy(up).multiplyScalar(-1).addScaledVector(side, 0.4));
           reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(at).addScaledVector(side, -0.07).addScaledVector(up, -0.03), pole.copy(up).multiplyScalar(-1).addScaledVector(side, -0.4)); }
-        else { B.hand_r.getWorldPosition(bn.position); bn.position.addScaledVector(up, -0.05); bn.quaternion.setFromUnitVectors(_a.set(0, 0, 1), up); }   // (hanging from the right hand)
+        else {   // binoculars down: hanging from his right hand at his side, his left hand resting on the rail in front of him
+          B.spine_03.getWorldPosition(TA);
+          reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(hip).addScaledVector(rt, 0.24).addScaledVector(up, -0.08).addScaledVector(fw, 0.04), pole.copy(fw).multiplyScalar(-1).addScaledVector(rt, 0.3));
+          reach(B.upperarm_l, B.lowerarm_l, B.hand_l, TA.addScaledVector(fw, 0.38).addScaledVector(rt, -0.2).addScaledVector(up, -0.32), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, -0.6));
+          B.hand_r.getWorldPosition(bn.position); bn.position.addScaledVector(up, -0.05); bn.quaternion.setFromUnitVectors(_a.set(0, 0, 1), up); }
         const hat = F.props.hat; if (hat) { B.head.getWorldPosition(hat.position); hat.position.addScaledVector(up, 0.14); B.head.getWorldQuaternion(hat.quaternion); hat.quaternion.setFromUnitVectors(_a.set(0, 1, 0), tgt2.copy(up).addScaledVector(look, 0.35).normalize()); }
       } else if (S.pose === 'coach') {
         // standing at the open doors watching the waves, clipboard in his left hand, right hand on his hip; turns to
         // you and talks with his hand when you come near
         const talk = F.talkT > 0, look = tgt.copy(fw).applyAxisAngle(up, F.look + (near ? 0 : Math.sin(t * 0.25) * 0.3)); look.y = near ? 0.02 : -0.06; look.normalize();
-        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt2.copy(up).multiplyScalar(-1).addScaledVector(rt, sg * 0.1).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt2.copy(up).multiplyScalar(-1).normalize()); }
+        stand(F, fw, (sg) => [DA.copy(up).multiplyScalar(-1).addScaledVector(rt, sg * 0.1).normalize(), DB.copy(up).multiplyScalar(-1)]);
         aim(B.spine_03, B.neck_01, tgt2.copy(up).addScaledVector(look, 0.08).normalize());
         aim(B.neck_01, B.head, tgt2.copy(up).addScaledVector(look, 0.5).normalize());
         B.spine_03.getWorldPosition(W); const chest = W;
@@ -276,7 +300,7 @@ export function friends(scene, src, spots, people) {
         const cap = F.props.cap; if (cap) { B.head.getWorldPosition(W); cap.position.copy(W).addScaledVector(up, 0.1); cap.lookAt(TA.copy(cap.position).add(look)); }
       } else if (S.pose === 'sofa') {
         // on the sofa with the map open on his lap; looks up and points out to sea when he talks
-        root.position.y = S.y + S.seat + 0.02 - (hip.y - root.position.y); root.updateMatrixWorld(true);
+        root.position.y = S.y + S.seat + 0.02 - (hip.y - root.position.y); root.updateWorldMatrix(true, false);
         const talk = F.talkT > 0;
         for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1;
           aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(fw).multiplyScalar(0.95).addScaledVector(up, -0.12).addScaledVector(rt, sg * 0.2).normalize());
@@ -293,7 +317,7 @@ export function friends(scene, src, spots, people) {
         // leaning on the end wall at the sea corner, forearms folded on the ledge, looking out at the view (her back to
         // the house: she talks over her shoulder, she doesn't turn round)
         if (!F.own) B.spine_03.scale.set(0.9, 1, 0.92);   // (narrower shoulders than the lads)
-        for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, -0.08).addScaledVector(rt, sg * 0.07).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, 0.04).normalize()); }
+        stand(F, fw, (sg) => [DA.copy(up).multiplyScalar(-1).addScaledVector(fw, -0.08).addScaledVector(rt, sg * 0.07).normalize(), DB.copy(up).multiplyScalar(-1).addScaledVector(fw, 0.04).normalize()]);
         aim(B.spine_02, B.spine_03, tgt.copy(up).addScaledVector(fw, 0.28).normalize());   // (leaning in on the ledge)
         const lookOut = 0.3 * Math.sin(t * 0.13) + 0.15 * Math.sin(t * 0.37);   // (her gaze drifting slowly along the horizon)
         aim(B.neck_01, B.head, tgt.copy(up).addScaledVector(fw, 0.35).applyAxisAngle(up, lookOut).normalize());

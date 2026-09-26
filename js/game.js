@@ -7,11 +7,13 @@ import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=1
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
 import { SurfAudio } from './audio.js?v=17';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=78';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=82';
 import { villa, VILLA } from './villa.js?v=119';
 import { makeBirds } from './birds.js?v=1';
-import { friends } from './friends.js?v=25';
-import { crew } from './crew.js?v=11';
+import { friends } from './friends.js?v=28';
+import { lifeLib } from './life.js?v=1';
+import { WATER_PEOPLE, waterPerson, straddle as straddleP } from './surfers.js?v=3';
+import { crew } from './crew.js?v=15';
 import { wildlife } from './wildlife.js?v=14';
 
 const Q = new URLSearchParams(location.search);
@@ -157,7 +159,8 @@ function updateLocals(dt) {
     const y = heightAt(waves, L.x, L.z);
     L.grp.position.set(L.x + Math.sin(T * 0.2 + L.ph) * 0.6, y + 0.05, L.z);
     L.grp.quaternion.setFromEuler(_le.set(-0.25 + Math.sin(T * 1.3 + L.ph) * 0.05, Math.PI + Math.sin(T * 0.15 + L.ph) * 0.3, Math.sin(T * 1.1 + L.ph) * 0.04));   // facing the sets, nose up (sitting on the tail)
-    L.mx.update(dt); straddleFor(L.B, L.grp, L.body);   // legs down either side of the board, hands on the deck
+    if (L.P) { L.P.reset(); L.grp.updateWorldMatrix(true, false); straddleP(L.P, L.grp); }   // a real person (see loadLocals): legs down either side of the board, hands on the deck
+    else { L.mx.update(dt); straddleFor(L.B, L.grp, L.body); }
   }
 }
 function updateScenery(dt) {
@@ -1528,28 +1531,51 @@ function warmAll() {
   const shown = []; scene.traverse((o) => { if (!o.visible) { o.visible = true; shown.push(o); } });
   try { renderer.compileAsync ? renderer.compileAsync(scene, camera).catch(() => {}) : renderer.compile(scene, camera); } finally { for (const o of shown) o.visible = false; }   // (the driver finishes them off the main thread where it can)
 }
+// the two locals in the lineup as real people (Rocketbox, in boardshorts: see surfers.js), fetched once the game is up;
+// until they're in (or if they can't load) they sit there in the old body
+const LOCALS = [['m16', 0x1f3f5f], ['m07', 0xb8452c]];
+function loadLocals() {
+  const L = new GLTFLoader();
+  Promise.all(LOCALS.map(([id]) => new Promise((res, rej) => L.load(`people/water/${WATER_PEOPLE[id].file}.glb?v=1`, (g) => res(g.scene), undefined, rej)))).then((a) => {
+    a.forEach((src, i) => { const lc = locals[i]; if (!lc) return; const [id, shorts] = LOCALS[i], P = waterPerson(src, { ...WATER_PEOPLE[id], shorts });
+      P.root.position.set(0, 0.12 - P.pelvisY, -0.2); lc.grp.add(P.root); lc.body.visible = false; lc.P = P; });
+    const v = locals.map((q) => q.grp.visible); for (const q of locals) q.grp.visible = true; renderer.compile(scene, camera); locals.forEach((q, i) => { q.grp.visible = v[i]; });   // (their shader built now, not in a stall mid-session)
+  }).catch(() => {});
+}
 { const idle = (f) => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 2500 }) : setTimeout(f, 60));
+  ready.then(() => setTimeout(() => idle(loadLocals), 900)).catch(() => {});
   ready.then(() => setTimeout(() => idle(() => { if (mode === 'villa' || starting) return; prepVilla(); if (villaW) { villaW.group.visible = false; crewW.group.visible = false; wildW.group.visible = false; } idle(() => { if (!starting) warmAll(); }); }), 1800)).catch(() => {}); }
 // your villa friends' own bodies (Rocketbox people, MIT licence: see people/): fetched only when you first go to the
 // villa, so a surf session never downloads or carries them. Until they're in, nobody is shown (if they can't load,
 // the friends come as before, in your own body)
 const PEOPLE = { kai: 'Male_Adult_09', wayan: 'Male_Adult_10', nando: 'Male_Adult_06', rudi: 'Male_Adult_05', putu: 'Male_Adult_01', belle: 'Female_Adult_03' };
-let people = null, peopleFailed = false, peopleLoading = false;
+let people = null, peopleFailed = false, peopleLoading = false, life = null;
 function loadPeople() {
   if (people || peopleLoading) return; peopleLoading = true; const L = new GLTFLoader();
+  const lifeP = fetch('people/idle.json?v=1').then((r) => r.json()).then(lifeLib).catch(() => null);   // (their small movements: without it they just hold their poses)
   Promise.all(Object.entries(PEOPLE).map(([id, f]) => new Promise((res, rej) => L.load(`people/${f}.glb?v=1`, (g) => res([id, g.scene]), undefined, rej))))
     .then((a) => {
       // (a little of their own colour as fill light: at dusk, with the low sun behind someone in the garden, a real face
       // otherwise goes to a black silhouette)
       for (const [, sc] of a) sc.traverse((o) => { if (o.isMesh && o.material.map) { o.material.emissiveMap = o.material.map; o.material.emissive.setScalar(0.3); } });
-      people = Object.fromEntries(a); }).catch(() => { peopleFailed = true; });
+      return lifeP.then((lb) => { life = lb; people = Object.fromEntries(a); }); }).catch(() => { peopleFailed = true; });
+}
+// the surfers you watch from the villa as real people too (surfers.js): fetched on your first visit, stick figures till then
+const CREW = [['m02', 0x16181c], ['m07', 0x2f5f8a], ['m08', 0x9a2a22], ['m16', 0x2e2e30], ['f17', 0x1d6f7a], ['m02', 0xd49a2a], ['m08', 0x284a2c]];
+let crewLoading = false;
+function loadCrew() {
+  if (crewLoading || !crewW) return; crewLoading = true; const L = new GLTFLoader(), ids = [...new Set(CREW.map(([id]) => id))];
+  Promise.all(ids.map((id) => new Promise((res, rej) => L.load(`people/water/${WATER_PEOPLE[id].file}.glb?v=1`, (g) => res([id, g.scene]), undefined, rej)))).then((a) => {
+    const src = Object.fromEntries(a); crewW.setPeople(CREW.map(([id, shorts]) => [src[id], { ...WATER_PEOPLE[id], shorts }]));
+    const v = crewW.group.visible; crewW.group.visible = true; renderer.compile(scene, camera); crewW.group.visible = v;   // (their shader built now, not in a stall when you first look out to sea)
+  }).catch(() => {});
 }
 function startVilla() {
   chalHide(); loadPeople();
   if (starting) return;
   hello('the villa');
   mode = 'villa'; setWeather('villa'); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
-  prepVilla();
+  prepVilla(); loadCrew();
   setSpot('villa');
   if (!warmAll.done) { crewW.group.visible = true; renderer.compile(scene, camera); }   // (build every villa shader now, not in a stall the first time each thing comes into view: normally already done on the menu)
   for (const w of waves) w.dispose(scene); waves = []; nextBreak = T + 3; setLeft = 0; setPos = 0;
@@ -1647,8 +1673,8 @@ addEventListener('mousemove', (e) => lookMove('m', e.clientX, e.clientY));
 addEventListener('mouseup', (e) => lookEnd('m', e.clientX, e.clientY));
 function villaTick(dt) {
   const beat = radioOn ? audio.musicBeat() : 0;   // (once a frame: it keeps a running peak)
-  updateWaves(dt); crewW.update(dt, waves, T); wildW.update(dt, waves); birdsW.update(dt);
-  if (!friendsW && surfer && (people || peopleFailed)) friendsW = friends(scene, surfer, villaW.friendSpots.map((f) => ({ ...f, z: f.z + SPOTS.medium.dz, board: f.board && [f.board[0], f.board[1], f.board[2] + SPOTS.medium.dz] })), people);   // (your friends: as soon as the body model is in)
+  updateWaves(dt); crewW.detail = !!(walker && (walker.watch || walker.zoom || drone.on)); crewW.update(dt, waves, T); wildW.update(dt, waves); birdsW.update(dt);   // (zoomed in on them: every surfer posed every frame)
+  if (!friendsW && surfer && (people || peopleFailed)) friendsW = friends(scene, surfer, villaW.friendSpots.map((f) => ({ ...f, z: f.z + SPOTS.medium.dz, board: f.board && [f.board[0], f.board[1], f.board[2] + SPOTS.medium.dz] })), people, life);   // (your friends: as soon as the body model is in)
   if (friendsW) friendsW.update(dt, T, beat, { x: walker.x, y: walker.y, z: walker.z + SPOTS.medium.dz }, camera); if (villaW.tick) villaW.tick(dt, beat, walker.x, walker.z, walker.y - 1.65);
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid

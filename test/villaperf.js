@@ -8,9 +8,10 @@ export async function run(frames = 90) {
   while (!g.friends && performance.now() - t0 < 25000) { g.step(0.1, 1 / 30, false); await new Promise((res) => setTimeout(res, 150)); }
   const out = {};
   // (standing spots in the villa's frame: the living room looking at the coach and the sofa, the garden by the fire)
-  for (const [name, x, z, yaw] of [['living', -88, 38, 2.6], ['garden', -90, 52, 3.4]]) {
-    const w = g.walker; w.x = x; w.z = z; w.yaw = yaw; w.pitch = -0.1;
-    for (let k = 0; k < 20; k++) g.step(1 / 30, 1 / 30, false);
+  // (and watching a ride: the camera zoomed onto the surfers out at the break, the crew's cost at its most)
+  for (const [name, x, z, yaw] of [['living', -88, 38, 2.6], ['garden', -90, 52, 3.4], ['watch', -88, 38, 2.6]]) {
+    const w = g.walker; w.x = x; w.z = z; w.yaw = yaw; w.pitch = -0.1; w.watch = name === 'watch'; w.vant = null;
+    for (let k = 0; k < (w.watch ? 150 : 20); k++) g.step(1 / 30, 1 / 30, false);
     const cpu = [], gpu = [], q = [];
     for (let k = 0; k < frames; k++) {
       const a = performance.now(); g.step(1 / 30, 1 / 30, false); cpu.push(performance.now() - a);
@@ -22,6 +23,7 @@ export async function run(frames = 90) {
     for (const qq of q) if (gl.getQueryParameter(qq, gl.QUERY_RESULT_AVAILABLE)) gpu.push(gl.getQueryParameter(qq, gl.QUERY_RESULT) / 1e6);
     out[name] = { game: stats(cpu), gpu: gpu.length ? stats(gpu) : null, draws: r.info.render.calls, ktris: Math.round(r.info.render.triangles / 1000) };
   }
+  g.walker.watch = false;
   out.friends = g.friends ? g.friends.list.map((f) => f.id + (f.own ? ':own' : ':old')).join(' ') : 'none';
   g.paused = false;
   return out;
