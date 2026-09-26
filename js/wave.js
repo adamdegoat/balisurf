@@ -37,7 +37,7 @@ const K = {
   shoulder: [[1.3,0],[.8,.02],[.4,.12],[.15,.33],[0,.55],[-.06,.68],[-.1,.73],[-.12,.75],[-.15,.755],[-.25,.74],[-1.1,.4],[-2.5,0]],
   peak:     [[1.1,0],[.6,.03],[.25,.15],[.06,.42],[0,.72],[.06,.92],[.16,.99],[.24,.97],[.16,1.03],[-.05,1.02],[-.95,.55],[-2.3,0]],
   barrel:   [[1.9,0],[1.45,.02],[.4,.1],[-.02,.38],[-.14,.7],[.18,1.02],[.85,.93],[1.32,.12],[1.0,1.02],[.14,1.1],[-.9,.62],[-2.4,0]],   // a wide, round tube: the lip throws well out in front
-  white:    [[1.8,0],[1.3,.03],[.9,.12],[.6,.24],[.35,.34],[.2,.4],[.1,.42],[0,.43],[-.1,.43],[-.3,.4],[-1.2,.2],[-2.6,0]],   // (back to the 25 Sep afternoon pile: the taller one made the board ride up and down over it in turns)
+  white:    [[1.8,0],[1.3,.04],[.9,.17],[.6,.34],[.35,.47],[.2,.54],[.1,.57],[0,.58],[-.1,.57],[-.3,.52],[-1.2,.24],[-2.6,0]],   // the collapsed tube: a big rolling pile of foam (it settles lower further back, see amp)
 };
 // per control point: how much it glows (thin water) and where spray/foam sits when curling
 const THIN = [0, 0, .05, .2, .45, .75, .95, 1, .8, .45, .1, 0];
@@ -110,7 +110,9 @@ export class Wave {
   span() { const Lx = this.cond.len || 1, H = this.cond.H, Wd = this.cond.width || 1;
     return this._span ||= { sLo: -BEHIND * Lx, sHi: AHEAD * Lx, zLo: -4.6 * H * Wd - 2,   /* the whole drawn back of the wave */ zHi: 2.4 * H * Wd + 6 }; }
   // how tall the wave stands at distance s from the break: tallest at the peak, fading down the line (scaled by swell length)
-  amp(s) { const L = this.cond.len || 1; return s > 0 ? 1 - 0.55 * smooth(8 * L, 70 * L, s) : 1 - 0.15 * smooth(0, 40 * L, -s); }
+  amp(s) { const L = this.cond.len || 1, H = this.cond.H; if (s > 0) return 1 - 0.55 * smooth(8 * L, 70 * L, s);
+    // behind the break: the whitewater settles as it rolls on, and runs out to nothing at the far end (no cut-off edge)
+    return (1 - 0.15 * smooth(0, 40 * L, -s)) * (1 - 0.45 * smooth(7 * H, 16 * H, -s)) * smooth(BEHIND * L, 0.72 * BEHIND * L, -s); }
   // which blend of keyframes a slice at distance s ahead of the break has, plus how broken it is
   // (cached by 10 cm: the particles ask for it hundreds of times a second, and building the blend each time made garbage
   // that stuttered phones)
@@ -129,7 +131,7 @@ export class Wave {
     else if (s >= 0) P = lerpK(K.peak, K.shoulder, smooth(0, 15 * L, s));
     else if (s >= -1.1 * H) { curl = smooth(0, 1.1 * H, -s); P = lerpK(K.peak, barrel, curl); }
     else if (s >= -4.5 * H) { curl = 1; P = barrel; }                      // a long open tube behind the throw
-    else { curl = 1; broken = smooth(4.5 * H, 8 * H, -s); P = lerpK(barrel, K.white, broken); }
+    else { curl = 1; broken = smooth(4.5 * H, 6.5 * H, -s); P = lerpK(barrel, K.white, broken); }   // (the tube caves in fast: a long glassy half-collapse read as a cut-off pipe)
     return { P, curl: curl * hollow, broken };
   }
 
@@ -498,9 +500,10 @@ export function waterMaterial({ wave = false } = {}) {
           vec3 reefCol = mix(vec3(.3, .66, .62) + vec3(.06, .05, .02) * sandy, mix(vec3(.13, .25, .22), vec3(.21, .2, .13), coral * .7), clamp((smoothstep(.46, .6, rn) + .35 * (rn2 - .5)) * (1. - .85 * sandy) + coral * .4, 0., 1.));
           body = mix(body, reefCol * uReefTint * (.55 + .45 * uSunVis), reefK * .38);   // (fades in gradually up the trough: a narrow switch followed one row of the wave mesh and drew a ruler-straight edge)
         }
-        ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);\n        // the throwing lip is a moving sheet: light and dark streaks run through it, and its thinnest edge glows palest\n        if (glow > .001) {   // (the upper face and lip only)\n          vec2 shq = vec2(vW.x * .9, (vW.y - vW.z) * .3 + uTime * 1.2); float sheet = vnoise(shq) * .62 + vnoise(shq * 2.3 + 1.7) * .38;   // (two layers of noise: plenty for a streak, half the cost of the full four)\n          body *= 1. + (sheet - .5) * 1.4 * glow;\n          body += vec3(.3, .55, .5) * smoothstep(.8, 1., vFT.y) * glow * .25 * (.4 + .6 * uSunVis);\n        }' : ''}
+        ${wave ? '// the upper face and lip glow a lighter, see-through green: skylight passing through thin water near the top\n        float glow = smoothstep(.4, .95, vW.y / max(uH, .5)) * clamp(thin * 1.4, 0., 1.);\n        body += (turq * .55 + vec3(.04, .1, .08)) * glow * (.5 + .5 * uSunVis);\n        // the throwing lip is a moving sheet: light and dark streaks run through it, and its thinnest edge glows palest\n        if (glow > .001) {   // (the upper face and lip only)\n          vec2 shq = vec2(vW.x * .9, (vW.y - vW.z) * .3 + uTime * 1.2); float sheet = vnoise(shq) * .62 + vnoise(shq * 2.3 + 1.7) * .38;   // (two layers of noise: plenty for a streak, half the cost of the full four)\n          body *= 1. + (sheet - .5) * 1.4 * glow;\n          body += vec3(.3, .55, .5) * smoothstep(.8, 1., vFT.y) * glow * .25 * (.4 + .6 * uSunVis);\n          // sunlight through the thin lip: a bright, uneven band of pale green-gold where the water is thinnest, broken by the streaks\n          float thru = smoothstep(.55, .95, vFT.y) * glow * smoothstep(.3, .75, sheet);\n          body += (vec3(.35, .62, .5) + uSunCol * .18) * thru * (.35 + .65 * uSunVis);\n        }\n        // water drawn up the face: long vertical streaks, lighter and darker, running up the wall as it feeds the lip\n        float faceSt = 0.; { float faceK = smoothstep(.9, .45, abs(normalize(vN).y)) * smoothstep(40., 8., length(cameraPosition - vW)) * smoothstep(.05, .3, vW.y / max(uH, .5));\n          if (faceK > .001) { vec2 sq = vec2(vW.x * 2.4 + vW.z * .8, vW.y * .14 - uTime * .6); float st = smoothstep(.32, .68, vnoise(sq) * .6 + vnoise(sq * vec2(2.7, 1.3) + 5.1) * .4);\n            faceSt = (st - .5) * .42 * faceK; body *= 1. + faceSt; } }\n        // the lip itself, the sheet of water thrown out and down over you: it moves, so it streaks light and dark along its\n        // throw, with lighter bands where it is thinnest and the light comes through (it was one flat colour)\n        float cK = smoothstep(.85, .98, vFT.y);\n        if (cK > .001) { vec2 cq = vec2(vW.x * 2.6 + vW.z * 1.3, vW.y * .3 + uTime * 1.4); float c1 = vnoise(cq) * .6 + vnoise(cq * vec2(3.1, 1.2) + 2.3) * .4;\n          body *= 1. + (c1 - .5) * 1.2 * cK; body += (vec3(.22, .42, .36) + uSunCol * .08) * smoothstep(.55, .8, c1) * cK * (.3 + .3 * uSunVis); }' : ''}
         ${wave ? 'if (N.y < -.15) refl = mix(refl, body * .8, smoothstep(-.15, -.55, N.y));   // (the underside of the lip mirrors the water below it, not the sky)' : ''}
         vec3 col = mix(body, refl, fres);
+        ${wave ? 'col *= 1. + faceSt * .8;   // (the streaks show in the sky it reflects too: at a glancing angle the face is mostly reflection)' : ''}
         // sun glint
         // (broken into glitter by the small ripples, as on real water; a smooth glint reads as a white smudge up close)
         float spec = pow(max(dot(R, uSun), 0.), 220.) * uSunVis;
@@ -515,10 +518,10 @@ export function waterMaterial({ wave = false } = {}) {
         if (N.y > ${wave ? '.96' : '.5'} && fw < .7 && uSunVis * (1. - uCloud) > .02) {   // (on a wave, only its flat skirt: on the face they read as specks of dust)   // (skipped wholesale where it can't show: steep faces, far off, a storm)
         vec2 gi = floor(gp), gf = fract(gp);
         float sh = hash(gi), ph = sh * 60.;
-        vec3 nC = normalize(vec3((hash(gi + 1.3) - .5) * 1.2 + .2 * sin(uTime * 2.1 + ph), 1., (hash(gi + 5.9) - .5) * 1.2 + .2 * cos(uTime * 1.7 + ph)));
-        float spr = clamp(fw * .9, .03, .07);   // (up close a bigger point read as a white blob)
-        float spark = (1. - smoothstep(spr * .4, spr, length(gf - vec2(hash(gi + 3.1), hash(gi + 7.7)) * .7 - .15))) * smoothstep(.93, .985, dot(reflect(-V, nC), uSun)) * (1. - smoothstep(.3, .7, fw));
-        col += uSunCol * spark * 0.9 * uSunVis * (1. - uCloud);   // (more of them, softer: a few hard white points read as dust, a field of soft ones as glitter)
+        vec3 nC = normalize(vec3((hash(gi + 1.3) - .5) * 1.5 + .25 * sin(uTime * 2.1 + ph), 1., (hash(gi + 5.9) - .5) * 1.5 + .25 * cos(uTime * 1.7 + ph)));   // (tilted a little further: more of them catch the sun, a path of glitter toward it, not a few specks)
+        float spr = clamp(fw * 1.1, .04, .085);   // (up close a bigger point read as a white blob)
+        float spark = (1. - smoothstep(spr * .4, spr, length(gf - vec2(hash(gi + 3.1), hash(gi + 7.7)) * .7 - .15))) * smoothstep(.9, .98, dot(reflect(-V, nC), uSun)) * (1. - smoothstep(.35, .75, fw));
+        col += uSunCol * spark * 1.25 * uSunVis * (1. - uCloud);   // (more of them, softer: a few hard white points read as dust, a field of soft ones as glitter)
         }
         ${wave ? `
         // foam: churned white where the lip throws and the whitewater rolls (none of it is worked out on clean water:
@@ -540,6 +543,10 @@ export function waterMaterial({ wave = false } = {}) {
         vec3 foamCol = vec3(.93, .92, .9) * shade * (.72 + .28 * max(dot(N, uSun), 0.)) + mix(uHor, uZen, .5) * .12 * (1. - shade * .5);
         col = mix(col, foamCol, foamMask * (.82 + .18 * lump));   // thin spots show the water through
         }
+        // the lip laced with white: aerated streaks of foam running along the thrown sheet, thickest near its leading edge
+        { float lK = smoothstep(.88, .99, vFT.y);
+          if (lK > .001) { vec2 lq = vec2(vW.x * 3.4 + vW.z * 1.7, vW.y * .4 + uTime * 1.6); float fr = vnoise(lq) * .55 + vnoise(lq * vec2(2.9, 1.6) + 6.1) * .45;
+            col = mix(col, vec3(.9, .93, .92) * (.78 + .22 * uSunVis), lK * smoothstep(.6, .84, fr) * .45); } }
         ` : ''}
         // distance haze toward the horizon
         float d = length(cameraPosition - vW);

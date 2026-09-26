@@ -5,7 +5,7 @@
 // sit exactly on the water, in the pocket, under the lip. Drawn as three instanced meshes (limbs, heads, boards),
 // so a whole crew costs three draw calls.
 import * as THREE from 'three';
-import { heightAt } from './surf.js?v=119';
+import { heightAt } from './surf.js?v=118';
 
 const N = 7, SEG = 7;   // surfers; limb pieces each (2 thighs, 2 shins, torso, 2 arms)
 const SKIN = [[0.62, 0.42, 0.3], [0.45, 0.3, 0.2], [0.75, 0.55, 0.42]], TOPS = [[0.08, 0.08, 0.09], [0.9, 0.9, 0.88], [0.15, 0.3, 0.55], [0.75, 0.2, 0.15], [0.95, 0.75, 0.2]],
