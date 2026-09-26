@@ -477,7 +477,7 @@ const CHAL = {
   hard: [['Make the drop and ride 15 seconds', (c) => c.t >= 15], ['Hit 65 km/h', (c) => c.top >= 65], ['Come out of a 5 second barrel', (c) => c.out && c.tube >= 5]],
   extreme: [['Ride the giant for 20 seconds', (c) => c.t >= 20], ['An 8 second barrel inside the giant', (c) => c.tube >= 8], ['Hit 90 km/h', (c) => c.top >= 90]],
   kanan: [['Get barrelled for 10 seconds', (c) => c.tube >= 10], ['Snap, cutback and barrel on one wave', (c) => c.snaps >= 1 && c.cutbacks >= 1 && c.out], ['A heat score of 16', (c) => c.final && c.heat >= 16]],
-  hiu: [['Hit 70 km/h', (c) => c.top >= 70], ['Ride one wave for 20 seconds', (c) => c.t >= 20], ['A 5 second barrel on the longboard', (c) => c.board === 'long' && c.tube >= 5]],
+  hiu: [['Hit 65 km/h', (c) => c.top >= 65], ['Ride one wave for 20 seconds', (c) => c.t >= 20], ['A 5 second barrel on the longboard', (c) => c.board === 'long' && c.tube >= 5]],
   ranch: [['8 turns on one wave', (c) => c.turns >= 8], ['Get barrelled for 10 seconds', (c) => c.tube >= 10], ['Ride all three wave settings in one visit', (c) => c.kinds >= 3]],
 };
 const chalDone = (() => { try { return JSON.parse(localStorage.getItem('sumbasurf.chal') || '{}') || {}; } catch (e) { return {}; } })();
