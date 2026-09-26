@@ -1371,9 +1371,10 @@ const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)'); l
     document.body.classList.add('inapp'); document.getElementById('rtAppName').textContent = hit[0];
     const btn = document.getElementById('rtOpen'), url = 'https://sumbasurf.pages.dev/';
     if (/Android/i.test(ua)) btn.addEventListener('click', () => { location.href = 'intent://sumbasurf.pages.dev/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end'; });
-    else { btn.textContent = 'COPY LINK';
-      btn.addEventListener('click', async () => { let ok = false; try { await navigator.clipboard.writeText(url); ok = true; } catch (e) {}
-        btn.textContent = ok ? 'COPIED. PASTE IT IN SAFARI' : 'SEE THE LINK BELOW'; }); }
+    else { btn.textContent = 'OPEN IN SAFARI';   // (iOS 17 and later hand an x-safari link to Safari; if the app blocks it, the same tap has already copied the link)
+      btn.addEventListener('click', () => { let ok = false; try { navigator.clipboard.writeText(url).then(() => { ok = true; }, () => {}); } catch (e) {}
+        location.href = 'x-safari-' + url;
+        setTimeout(() => { if (document.visibilityState === 'visible') btn.textContent = ok ? 'LINK COPIED. PASTE IT IN SAFARI' : 'SEE THE LINK BELOW'; }, 1500); }); }
   } }
 let liveShown = false;
 let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1, lastPump = false;
