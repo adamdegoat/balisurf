@@ -2,17 +2,17 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=138';
-import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=118';
+import { Wave, CONDITIONS, RANCH_CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=142';
+import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=119';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
 import { SurfAudio } from './audio.js?v=17';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=45';
-import { villa, VILLA } from './villa.js?v=100';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=49';
+import { villa, VILLA } from './villa.js?v=104';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=22';
-import { crew } from './crew.js?v=8';
-import { wildlife } from './wildlife.js?v=11';
+import { crew } from './crew.js?v=9';
+import { wildlife } from './wildlife.js?v=12';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -278,7 +278,7 @@ function setSpot(m) {
 }
 function condFor(m) { return m === 'villa' ? 'medium' : m === 'ranch' ? ranchKind : m === 'random' ? ['easy', 'medium', 'hard'][Math.floor(Math.random() * 3)] : m; }
 function addWave(tBreak) {
-  const cond = CONDITIONS[condFor(mode)];
+  const cond = mode === 'ranch' ? RANCH_CONDITIONS[ranchKind] : CONDITIONS[condFor(mode)];   // (the pool has its own machine waves)
   const w = new Wave(scene, cond);
   if (!PROFILES.has(cond)) PROFILES.set(cond, new Profile(w));      // the surface shape is the same for every wave of a size: share its cache
   if (isRanch()) for (const k of ['mist', 'spit', 'veil', 'spray']) if (w[k]) { w[k].material.clippingPlanes = POOL_PLANES; w[k].material.needsUpdate = true; }   // (spray and mist stay inside the pool, not drifting over the deck)
@@ -302,7 +302,7 @@ function updateWaves(dt) {
     const w = waves[i], C = w.cond, t = T - w.tBreak;
     // the break doesn't peel at one steady speed: sections race ahead and slow down (more so in heavy surf), so a tube
     // opens and pinches and you have to keep adjusting. Integrated so it stays smooth.
-    const sg = C.name === 'Hard' || C.name === 'Extreme' ? 0.3 : C.name === 'Medium' ? 0.18 : 0.06;
+    const sg = C.wobble;   // (each spot's own: see CONDITIONS)
     let rate = C.peel * (1 + sg * (0.6 * Math.sin(t * 0.55 + w.seed) + 0.4 * Math.sin(t * 1.3 + w.seed * 2.1)));
     // sections: every few seconds a stretch ahead of the curl throws all at once, so the break races ahead for about a
     // second (the curl jumps 1.5-2 wave heights down the line), then eases while it recovers. You race it, or pull in.
@@ -310,9 +310,9 @@ function updateWaves(dt) {
       if (w.secT === undefined) w.secT = 3 + Math.random() * 4;
       // set up in the pocket (standing, just ahead of the curl, low on the face, not racing away) and the next section
       // throws right over you soon: real barrels mostly come to you like this, rather than after a long wait
-      if (rider && rider.wave === w && rider.state === 'RIDE' && !rider.inBarrel && rider.s > 0.2 * C.H && rider.s < 2.2 * C.H && rider.y < 0.6 * C.H && !(w.secK > 0) && w.secT > 0.6) { w.secT = 0.6; w.secSoft = true; }   // (a softer section: it covers you rather than racing past)
-      if (w.secK === undefined || w.secK <= 0) { w.secT -= dt; if (w.secT <= 0) { w.secK = 1.1; w.secA = w.secSoft ? (C.name === 'Hard' || C.name === 'Extreme' ? 0.8 : 0.35) : 1; w.secSoft = false; w.secT = 5 + Math.random() * 5; if (w.spitT !== undefined) w.spitT = 0.25; } }   // (a heavy wave's section throws hard over you: race it or it closes on you)
-      else { w.secK -= dt; const ph = 1 - w.secK / 1.1, A = C.name === 'Easy' ? 1.1 : C.name === 'Medium' ? 1.3 : C.name === 'Hard' ? 1.5 : 2.1; rate *= ph < 0.75 ? 1 + A * (w.secA || 1) * Math.sin(Math.PI * ph / 0.75) : 1 - 0.4 * (w.secA || 1); }
+      if (C.assist !== false && rider && rider.wave === w && rider.state === 'RIDE' && !rider.inBarrel && rider.s > 0.2 * C.H && rider.s < 2.2 * C.H && rider.y < 0.6 * C.H && !(w.secK > 0) && w.secT > 0.6) { w.secT = 0.6; w.secSoft = true; }   // (a softer section: it covers you rather than racing past)
+      if (w.secK === undefined || w.secK <= 0) { w.secT -= dt; if (w.secT <= 0) { w.secK = 1.1; w.secA = w.secSoft ? C.softA : 1; w.secSoft = false; w.secT = 5 + Math.random() * 5; if (w.spitT !== undefined) w.spitT = 0.25; } }   // (a heavy wave's section throws hard over you: race it or it closes on you)
+      else { w.secK -= dt; const ph = 1 - w.secK / 1.1, A = C.burst; rate *= ph < 0.75 ? 1 + A * (w.secA || 1) * Math.sin(Math.PI * ph / 0.75) : 1 - 0.4 * (w.secA || 1); }
     }
     w.px = (w.px === undefined ? C.peel * t : w.px + rate * dt);
     w.peelRate = rate;   // the physics uses the peel speed right now (not the average), so the wave's push matches what you see
@@ -360,7 +360,7 @@ function ranchSend(kind) {
   if (!ranchWaiting()) return;
   ranchKind = kind; audio.machine();
   // the wave leaves the machine wall 1.5 s after you order it (the lights pulse first), then runs down the pool to you
-  const C = CONDITIONS[kind], zStart = POOL.z0 + 1;
+  const C = RANCH_CONDITIONS[kind], zStart = POOL.z0 + 1;
   const w = addWave(T + 1.5 - zStart / C.speed); w.size = 1; w.ranchT0 = T;   // (every pool wave is the full size: no sets)
 }
 for (const b of document.querySelectorAll('#ranch button')) {
