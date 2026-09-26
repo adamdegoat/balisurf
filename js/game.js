@@ -7,7 +7,7 @@ import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=1
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
 import { SurfAudio } from './audio.js?v=17';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=63';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=72';
 import { villa, VILLA } from './villa.js?v=118';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=22';
@@ -263,7 +263,7 @@ const modeName = (m) => m === 'villa' ? 'Your villa' : m === 'ranch' ? 'Surf Ran
 function setSpot(m) {
   const r = m === 'ranch', key = SPOTS[m] ? m : 'medium', S = SPOTS[key];
   for (const g of builtSpots()) g.visible = false;
-  if (!r) spotGroup(scene, key).visible = true;
+  if (!r) { const sg = spotGroup(scene, key); sg.visible = true; if (sg.userData.farVilla) sg.userData.farVilla.visible = m !== 'villa'; }   // (at the villa itself the real house is drawn, not the stand-in seen from the water)
   ranchW.group.visible = r;
   if (villaW) villaW.group.visible = m === 'villa'; if (crewW) crewW.group.visible = m === 'villa'; if (wildW) wildW.group.visible = m === 'villa'; if (friendsW) { friendsW.group.visible = m === 'villa'; if (m !== 'villa') friendsW.hide(); }
   { const warm = m === 'villa', W = ENV.weather || {}; hemi.color.set(warm ? 0xfff0dc : W.hemi || 0xcfe6ff); hemi.groundColor.set(warm ? 0x5a4030 : W.hemiGround || 0x3a4a48); sunLight.color.set(warm ? 0xffdcb0 : W.light || 0xfff0dd); }   // (a spot's own light on the land: its weather can warm it or grey it)   // (the villa in warm evening light, reflected off the wood; the surf spots keep their clear daylight)
