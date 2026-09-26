@@ -834,7 +834,7 @@ function updateRig(dt, t) {
     // pumping is a rhythm, not a held squat: compress onto the board on the way down, spring up light, ~1.4 times a second
     pumpA += ((input.paddle ? 1 : 0) - pumpA) * Math.min(1, dt * 5); if (pumpA > 0.01) pumpPh += dt * Math.PI * 2 * 1.4;
     // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
-    const deep = Math.min(0.7, (0.14 + 0.06 * Math.min(1, rider.v / 10) + (0.31 - 0.06 * Math.min(1, rider.v / 10)) * barrelK) + 0.1 * pumpA + 0.2 * airK + 0.2 * (rider.stalling || 0));   // (no dip in turns: the view bobbing through a carve read as the board wobbling)   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
+    const deep = Math.min(0.7, (0.14 + 0.06 * Math.min(1, rider.v / 10) + (0.31 - 0.06 * Math.min(1, rider.v / 10)) * barrelK) + 0.22 * pumpA * (0.5 + 0.5 * Math.sin(pumpPh)) + 0.2 * airK + 0.2 * (rider.stalling || 0));   // (no dip in turns: the view bobbing through a carve read as the board wobbling)   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     // rising out of the pop-up's deep squat over half a second (not snapping up: that jerks your eyes up 16 cm in a frame)
     const up_ = Math.min(1, rider.stateT / 0.6), rise = up_ * up_ * (3 - 2 * up_);
@@ -1234,7 +1234,7 @@ function surfStance() {
   bones.upperarm_l.getWorldPosition(_ik1); bones.upperarm_r.getWorldPosition(_ik2);
   const chest = _cv.crossVectors(WORLD_UP, _ik3.subVectors(_ik2, _ik1)).dot(INTO_WAVE) > 0 ? 1 : 0;   // up x (right - left shoulder) = chest
   const leanW = Math.abs(leanN) * (Math.sign(_in.dot(R) * ws) || 0);   // + = leaning toward the wave (bottom turn), - = away (top turn / cutback)
-  const bt = Math.max(0, leanW), tt = Math.max(0, -leanW), pumpUp = 0;   // (no pump bounce: the rhythm read as the board bobbing up and down)   // + = compressed: the arms drive down and forward with the legs, back up as you spring
+  const bt = Math.max(0, leanW), tt = Math.max(0, -leanW), pumpUp = pumpA * Math.sin(pumpPh) * 0.1;   // + = compressed: the arms drive down and forward with the legs, back up as you spring
   // your eyes this frame (the camera itself is placed after the pose, a frame behind: at 10 m/s that's 17 cm)
   const eye = bones.head.getWorldPosition(_eyeA).addScaledVector(F, POVCAM.fwd).addScaledVector(WORLD_UP, POVCAM.up);
   // a target in eye space: f forward, d down, x toward the wave (negative = open side)
