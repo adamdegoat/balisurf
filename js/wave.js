@@ -37,7 +37,7 @@ const K = {
   shoulder: [[1.3,0],[.8,.02],[.4,.12],[.15,.33],[0,.55],[-.06,.68],[-.1,.73],[-.12,.75],[-.15,.755],[-.25,.74],[-1.1,.4],[-2.5,0]],
   peak:     [[1.1,0],[.6,.03],[.25,.15],[.06,.42],[0,.72],[.06,.92],[.16,.99],[.24,.97],[.16,1.03],[-.05,1.02],[-.95,.55],[-2.3,0]],
   barrel:   [[1.9,0],[1.45,.02],[.4,.1],[-.02,.38],[-.14,.7],[.18,1.02],[.85,.93],[1.32,.12],[1.0,1.02],[.14,1.1],[-.9,.62],[-2.4,0]],   // a wide, round tube: the lip throws well out in front
-  white:    [[1.8,0],[1.3,.04],[.9,.17],[.6,.34],[.35,.47],[.2,.54],[.1,.57],[0,.58],[-.1,.57],[-.3,.52],[-1.2,.24],[-2.6,0]],   // the collapsed tube: a big rolling pile of foam (it settles lower further back, see amp)
+  white:    [[1.8,0],[1.3,.03],[.9,.12],[.6,.24],[.35,.34],[.2,.4],[.1,.42],[0,.43],[-.1,.43],[-.3,.4],[-1.2,.2],[-2.6,0]],   // (back to the 25 Sep afternoon pile: the taller one made the board ride up and down over it in turns)
 };
 // per control point: how much it glows (thin water) and where spray/foam sits when curling
 const THIN = [0, 0, .05, .2, .45, .75, .95, 1, .8, .45, .1, 0];
@@ -131,7 +131,7 @@ export class Wave {
     else if (s >= 0) P = lerpK(K.peak, K.shoulder, smooth(0, 15 * L, s));
     else if (s >= -1.1 * H) { curl = smooth(0, 1.1 * H, -s); P = lerpK(K.peak, barrel, curl); }
     else if (s >= -4.5 * H) { curl = 1; P = barrel; }                      // a long open tube behind the throw
-    else { curl = 1; broken = smooth(4.5 * H, 6.5 * H, -s); P = lerpK(barrel, K.white, broken); }   // (the tube caves in fast: a long glassy half-collapse read as a cut-off pipe)
+    else { curl = 1; broken = smooth(4.5 * H, 8 * H, -s); P = lerpK(barrel, K.white, broken); }
     return { P, curl: curl * hollow, broken };
   }
 
