@@ -50,6 +50,7 @@
   #speed { top: max(10px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
   #score { top: max(36px, calc(env(safe-area-inset-top) + 26px)); right: max(16px, env(safe-area-inset-right)); color: var(--dim); font-variant-numeric: tabular-nums; }
   #tube { top: 22%; left: 0; right: 0; text-align: center; font-size: 22px; font-weight: 700; letter-spacing: .3em; opacity: 0; transition: opacity .25s; }
+  body.hinting #cond { opacity: 0; } #cond { transition: opacity .3s; }
   #hint { top: max(12px, env(safe-area-inset-top)); left: 22%; right: 22%; text-align: center; font-size: 14px; font-weight: 600; }
   #build { position: fixed; right: 8px; bottom: 4px; color: rgba(253,247,238,.45); font-size: 9px; pointer-events: none; }
   body.playing #build { display: none; }
@@ -149,6 +150,19 @@
     #start .boardrow { margin-top: 6px; }
     }
   #start .villarow { display: flex; gap: 12px; margin-top: 10px; align-items: center; }
+  /* a phone on its side with the browser bar showing (about 290 to 380 tall): everything still on one screen, nothing to scroll */
+  @media (max-height: 380px) {
+    #start { padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: 4px; }
+    #start h1 { font-size: 24px; } #start > p.intro { margin: 1px 0 5px; font-size: 10px; line-height: 1.25; }
+    #start .row { gap: 5px; } #start .row button { padding: 4px 8px 5px; border-radius: 10px; } #start .wg { height: 10px; margin-bottom: 1px; }
+    #start .nm { font-size: 15.5px; } #start .row small i { font-size: 10.5px; } #start .best { margin-top: 1px; font-size: 10.5px; }
+    #start .row #goSurf { padding: 4px 12px 4px 14px; } #goSurf span { font-size: 17px; } #start .row #goSurf small { font-size: 11px !important; margin-top: 2px; } #goSurf svg { width: 20px; height: 20px; }
+    #start .boardrow { margin-top: 5px; } #start .villarow { margin-top: 5px; } #start .boards button { padding-top: 3px !important; padding-bottom: 3px !important; }
+    #goVilla { padding: 3px 14px 3px 10px; } #goVilla span { font-size: 15px; } #goVilla small { display: none; } #goVilla svg { width: 20px; height: 20px; }
+    #load { margin-top: 2px; min-height: 0; }
+  }
+  @media (max-height: 320px) { #start > p.intro { display: none; } #start h1 { margin-bottom: 4px; } }
+  @media (max-height: 420px) { #hint { left: 15%; right: 15%; font-size: 13px; } }   /* (a short phone on its side: a tip fits on one line between the menu pill and the speed) */
   #start .villarow .stl { margin-left: 10px; } #start #stances svg { width: 22px; height: 12px; }   /* (the filled foot is the front one) */
   /* the villa: walk (left thumb), look (right thumb), tap a board in the rack */
   body:not(.villa) .vui { display: none !important; }
@@ -343,7 +357,7 @@
   <p id="soundTip"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6 6 0 0 1 0 9"/></svg> Tap anywhere for music</p>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260926-1309</small>
+<small id="build">build 260926-1408</small>
 <div id="rotate">
   <div class="menuOnly"><div class="rtName">SumbaSurf</div><div class="rtTag">Surf the barrels of Sumba</div></div>
   <div class="paused"><div class="rtName">Paused</div><div class="rtTag">Your wave is waiting</div></div>
@@ -375,6 +389,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=617"></script>
+<script type="module" src="js/game.js?v=618"></script>
 </body>
 </html>

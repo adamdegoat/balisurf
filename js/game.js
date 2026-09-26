@@ -1289,11 +1289,11 @@ function surfStance() {
     reachArm(ua, la, hd, P, _aq, st === 'POP' ? 0.95 : 0.92 * w);
   }
 }
-let waveSide = -1; const _eyeA = new THREE.Vector3(); const armSm = { l: { p: new THREE.Vector3(), ok: false }, r: { p: new THREE.Vector3(), ok: false } }, _hq = new THREE.Quaternion();
+let waveSide = -1; const _eyeA = new THREE.Vector3(), _wr = new THREE.Vector3(), _ray = new THREE.Raycaster(); const armSm = { l: { p: new THREE.Vector3(), ok: false }, r: { p: new THREE.Vector3(), ok: false } }, _hq = new THREE.Quaternion();
 let dtArm = 1 / 60;
 
 // ---------- HUD + end of ride
-const setText = (el, t) => { if (el && el._t !== t) { el._t = t; el.textContent = t; } };   // only touch the page when the text changes
+const setText = (el, t) => { if (el && el._t !== t) { el._t = t; el.textContent = t; if (el === ui.hint) document.body.classList.toggle('hinting', !!t); } };   // (a tip up top: the spot name beside it steps aside, on a small phone the two ran into each other)   // only touch the page when the text changes
 let endT = -1, snapCam = true, tubeShowT = 0, lastAir = false;
 function updateHUD(dt) {
   const st = rider.state;
@@ -1492,7 +1492,7 @@ document.getElementById('goVilla').addEventListener('touchend', (e) => { e.preve
 document.getElementById('vGo').addEventListener('click', (e) => { e.stopPropagation(); toMenu(); });
 { const zb = document.getElementById('vZoom'), zt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.zoom = !walker.zoom; zb.classList.toggle('on', walker.zoom); zb.querySelector('span').textContent = walker.zoom ? 'ZOOM OUT' : 'ZOOM'; };
   zb.addEventListener('click', zt); zb.addEventListener('touchstart', zt, { passive: false });
-  const wb = document.getElementById('vWatch'), wt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.watch = !walker.watch; walker.watchI = -1; wb.classList.toggle('on', walker.watch); wb.querySelector('span').textContent = walker.watch ? 'STOP WATCHING' : 'WATCH A RIDE'; };
+  const wb = document.getElementById('vWatch'), wt = (e) => { e.preventDefault(); e.stopPropagation(); if (!walker) return; walker.watch = !walker.watch; walker.watchI = -1; walker.vant = null; wb.classList.toggle('on', walker.watch); wb.querySelector('span').textContent = walker.watch ? 'STOP WATCHING' : 'WATCH A RIDE'; };
   wb.addEventListener('click', wt); wb.addEventListener('touchstart', wt, { passive: false }); }
 document.getElementById('vGo').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); toMenu(); }, { passive: false });
 // the drone: launch it off the balcony and fly out over the break. Left thumb flies (the way the camera faces), right
@@ -1629,6 +1629,11 @@ function villaTick(dt) {
     const S = crewW.surfers; let s = S[W_.watchI];
     if (!s || s.st !== 'RIDE') { W_.watchI = -1; let best = -1, bs = -1; S.forEach((q, i) => { if (q.st === 'RIDE') { const sc = q.tau + (q.tubeT > 0 ? 50 : 0); if (sc > bs) { bs = sc; best = i; } } }); W_.watchI = best; s = S[best]; }
     const c = camera.position, P = s ? s.p : _wl.set(5, 0, -18);
+    // from where you stand, is the break in sight? (indoors, a friend or the furniture filled the zoomed view) If not, the
+    // camera goes up to the tree deck for the ride, and you're back where you were when you stop watching
+    if (W_.vant == null) { _wr.set(P.x - c.x, P.y + 1 - c.y, P.z - c.z); const L = _wr.length(); _ray.set(c, _wr.normalize()); _ray.far = Math.min(L, 60);
+      W_.vant = _ray.intersectObjects([villaW.group, friendsW && friendsW.group].filter(Boolean), true).some((h) => h.object.visible && h.distance > 0.3); }
+    if (W_.vant) c.set(169.4, 35.6, 139.0);
     const dx = P.x - c.x, dz = P.z - c.z, dy = P.y + (s ? 0.9 : 0) - c.y, d = Math.hypot(dx, dz);
     const yaw = Math.atan2(dz, dx), pitch = Math.atan2(dy, d), k = Math.min(1, dt * (s ? 4 : 1.5));
     W_.yaw += Math.atan2(Math.sin(yaw - W_.yaw), Math.cos(yaw - W_.yaw)) * k; W_.pitch += (pitch - W_.pitch) * k;
