@@ -12,7 +12,8 @@ export const LEVELS = {
   decent:   { delay: 0.2,  shake: 0.2,  timing: 0.45, line: 'pocket' },
   good:     { delay: 0.1,  shake: 0.07, timing: 0.15, line: 'barrel' },
   carver:   { delay: 0.2,  shake: 0.2,  timing: 0.45, line: 'carve' },
-  carverLow: { delay: 0.2, shake: 0.2,  timing: 0.45, line: 'carve', hi: 0.62 },   // the same, turning off the top a bit lower   // a decent surfer who does turns, not just trims
+  carverLow: { delay: 0.2, shake: 0.2,  timing: 0.45, line: 'carve', hi: 0.62 },
+  racer:    { delay: 0.1,  shake: 0.07, timing: 0.15, line: 'pocket' },   // a good surfer who races the wave (no stalling)   // the same, turning off the top a bit lower   // a decent surfer who does turns, not just trims
 };
 
 export function run(mode, level = 'decent', waves = 8, seed = 7, kind = 'medium') {
