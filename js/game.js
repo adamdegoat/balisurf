@@ -10,7 +10,7 @@ import { ranch, POOL } from './ranch.js?v=4';
 import { SPOTS, spotGroup, builtSpots } from './spots.js?v=78';
 import { villa, VILLA } from './villa.js?v=119';
 import { makeBirds } from './birds.js?v=1';
-import { friends } from './friends.js?v=22';
+import { friends } from './friends.js?v=25';
 import { crew } from './crew.js?v=11';
 import { wildlife } from './wildlife.js?v=14';
 
@@ -1530,8 +1530,22 @@ function warmAll() {
 }
 { const idle = (f) => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 2500 }) : setTimeout(f, 60));
   ready.then(() => setTimeout(() => idle(() => { if (mode === 'villa' || starting) return; prepVilla(); if (villaW) { villaW.group.visible = false; crewW.group.visible = false; wildW.group.visible = false; } idle(() => { if (!starting) warmAll(); }); }), 1800)).catch(() => {}); }
+// your villa friends' own bodies (Rocketbox people, MIT licence: see people/): fetched only when you first go to the
+// villa, so a surf session never downloads or carries them. Until they're in, nobody is shown (if they can't load,
+// the friends come as before, in your own body)
+const PEOPLE = { kai: 'Male_Adult_09', wayan: 'Male_Adult_10', nando: 'Male_Adult_06', rudi: 'Male_Adult_05', putu: 'Male_Adult_01', belle: 'Female_Adult_03' };
+let people = null, peopleFailed = false, peopleLoading = false;
+function loadPeople() {
+  if (people || peopleLoading) return; peopleLoading = true; const L = new GLTFLoader();
+  Promise.all(Object.entries(PEOPLE).map(([id, f]) => new Promise((res, rej) => L.load(`people/${f}.glb?v=1`, (g) => res([id, g.scene]), undefined, rej))))
+    .then((a) => {
+      // (a little of their own colour as fill light: at dusk, with the low sun behind someone in the garden, a real face
+      // otherwise goes to a black silhouette)
+      for (const [, sc] of a) sc.traverse((o) => { if (o.isMesh && o.material.map) { o.material.emissiveMap = o.material.map; o.material.emissive.setScalar(0.3); } });
+      people = Object.fromEntries(a); }).catch(() => { peopleFailed = true; });
+}
 function startVilla() {
-  chalHide();
+  chalHide(); loadPeople();
   if (starting) return;
   hello('the villa');
   mode = 'villa'; setWeather('villa'); audio.start(); audio.quiet(false); audio.musicStart(MUSIC);
@@ -1634,7 +1648,7 @@ addEventListener('mouseup', (e) => lookEnd('m', e.clientX, e.clientY));
 function villaTick(dt) {
   const beat = radioOn ? audio.musicBeat() : 0;   // (once a frame: it keeps a running peak)
   updateWaves(dt); crewW.update(dt, waves, T); wildW.update(dt, waves); birdsW.update(dt);
-  if (!friendsW && surfer) friendsW = friends(scene, surfer, villaW.friendSpots.map((f) => ({ ...f, z: f.z + SPOTS.medium.dz, board: f.board && [f.board[0], f.board[1], f.board[2] + SPOTS.medium.dz] })));   // (your friends: as soon as the body model is in)
+  if (!friendsW && surfer && (people || peopleFailed)) friendsW = friends(scene, surfer, villaW.friendSpots.map((f) => ({ ...f, z: f.z + SPOTS.medium.dz, board: f.board && [f.board[0], f.board[1], f.board[2] + SPOTS.medium.dz] })), people);   // (your friends: as soon as the body model is in)
   if (friendsW) friendsW.update(dt, T, beat, { x: walker.x, y: walker.y, z: walker.z + SPOTS.medium.dz }, camera); if (villaW.tick) villaW.tick(dt, beat, walker.x, walker.z, walker.y - 1.65);
   const W_ = walker, V = villaW;
   // walk: the stick (or WASD / arrows) in the direction you're facing, sliding along anything solid

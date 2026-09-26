@@ -111,21 +111,35 @@ function liftFringe(mesh) {
   for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (p.getZ(i) > 0.04 && y < 1.575) p.setY(i, 1.575 - (1.575 - y) * 0.25); }
   p.needsUpdate = true; g.computeVertexNormals();
 }
-export function friends(scene, src, spots) {
+// a Rocketbox person's skeleton (3ds Max biped) under the names the poses below use
+const BIP = { pelvis: 'Pelvis', spine_01: 'Spine', spine_02: 'Spine1', spine_03: 'Spine2', neck_01: 'Neck', head: 'Head',
+  thigh_l: 'L_Thigh', calf_l: 'L_Calf', foot_l: 'L_Foot', thigh_r: 'R_Thigh', calf_r: 'R_Calf', foot_r: 'R_Foot',
+  upperarm_l: 'L_UpperArm', lowerarm_l: 'L_Forearm', hand_l: 'L_Hand', upperarm_r: 'R_UpperArm', lowerarm_r: 'R_Forearm', hand_r: 'R_Hand' };
+export function friends(scene, src, spots, people) {
   const group = new THREE.Group(); scene.add(group);
   const list = [];
   spots.forEach((S, i) => {
-    const body = cloneSkinned(src), root = new THREE.Group(); root.add(body); group.add(root);
+    const own = people && people[S.id], body = cloneSkinned(own || src), root = new THREE.Group(); root.add(body); group.add(root);   // (their own body if it's in, else yours re-dressed)
     body.position.set(0, 0, 0); body.quaternion.identity(); body.scale.set(1, 1, 1);   // (the clone carries wherever your own body was last posed on the board)
     const L = LOOK[S.id] || LOOK.kai;
-    body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.visible = true; o.frustumCulled = false; o.material = o.material.clone(); o.material.side = THREE.FrontSide;
-      const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; liftFringe(o); } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
-    const B = {}; body.traverse((o) => { if (o.isBone) B[o.name] = o; });
-    if (L.scale) body.scale.setScalar(L.scale);
-    if (S.id === 'belle') body.traverse((o) => { if (o.isMesh && (o.material.name === 'hair' || /short/.test(o.material.name))) o.visible = false; if (o.isSkinnedMesh && o.material.name === 'skin') womanise(o); });   // (her own long hair instead of the lads' crop; a swimsuit instead of board shorts)
+    const B = {};
+    if (own) {   // a real person: their own face, hair and clothes, as they come
+      body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.frustumCulled = false; o.castShadow = false; } if (o.isBone) { const k = o.name.replace(/^Bip01[ _]/, '').replace(/ /g, '_'); B[k] = o; } });
+      for (const k in BIP) B[k] = B[BIP[k]];
+      // (turn the body so it faces +z like the poses expect: from the head toward the eyes is forward)
+      body.updateMatrixWorld(true); const hp = B.head.getWorldPosition(new THREE.Vector3()), ep = B.LEye.getWorldPosition(new THREE.Vector3()).add(B.REye.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5).sub(hp);
+      body.rotation.y = -Math.atan2(ep.x, ep.z); body.updateMatrixWorld(true);
+      body.userData.rest = []; body.traverse((o) => { if (o.isBone) body.userData.rest.push([o, o.position.clone(), o.quaternion.clone(), o.scale.clone()]); });   // (their standing pose, to start each frame from)
+    } else {
+      body.traverse((o) => { o.layers.set(0); if (o.isMesh) { o.visible = true; o.frustumCulled = false; o.material = o.material.clone(); o.material.side = THREE.FrontSide;
+        const n = o.material.name; if (n === 'skin') o.material.color.setHex(L.skin); else if (n === 'hair') { o.material.color.setHex(L.hair); o.material.side = THREE.DoubleSide; liftFringe(o); } else if (/short/.test(n)) o.material.color.setHex(L.shorts); } });
+      body.traverse((o) => { if (o.isBone) B[o.name] = o; });
+      if (L.scale) body.scale.setScalar(L.scale);
+      if (S.id === 'belle') body.traverse((o) => { if (o.isMesh && (o.material.name === 'hair' || /short/.test(o.material.name))) o.visible = false; if (o.isSkinnedMesh && o.material.name === 'skin') womanise(o); });   // (her own long hair instead of the lads' crop; a swimsuit instead of board shorts)
+    }
     const skins = []; body.traverse((o) => { if (o.isSkinnedMesh) skins.push(o); });
     root.position.set(S.x, S.y, S.z); root.rotation.y = S.yaw;
-    const F = { id: S.id, name: S.name, root, body, B, skins, S, props: {}, look: 0, lineI: 0, talkT: 0, cool: 0, head: new THREE.Vector3() };
+    const F = { id: S.id, name: S.name, root, body, B, skins, S, own: !!own, props: {}, look: 0, lineI: 0, talkT: 0, cool: 0, head: new THREE.Vector3() };
     // what each is holding
     const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a2e, roughness: 0.5 }), dark = new THREE.MeshStandardMaterial({ color: 0x1c1712, roughness: 0.6 });
     if (S.id === 'kai') {   // an acoustic guitar: round body, sound hole, neck, headstock
@@ -141,7 +155,7 @@ export function friends(scene, src, spots) {
       group.add(bn); F.props.bino = bn;
       const hat = new THREE.Group(); const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.105, 0.08, 16), new THREE.MeshStandardMaterial({ color: 0xc9b58c, roughness: 0.9 })); hat.add(crown);
       const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.17, 0.012, 20), crown.material); brim.position.y = -0.035; brim.rotation.x = 0.12; hat.add(brim);
-      group.add(hat); F.props.hat = hat;
+      if (!own) { group.add(hat); F.props.hat = hat; }   // (a real person has their own hair: no hat perched on it)
     }
     if (S.id === 'rudi') {   // a clipboard, a faded cap and a whistle on a cord
       const cb = new THREE.Group(); const brd = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.012), new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.7 })); cb.add(brd);
@@ -151,10 +165,10 @@ export function friends(scene, src, spots) {
       const cap = new THREE.Group(), cm = new THREE.MeshStandardMaterial({ color: 0x2f5a78, roughness: 0.85 });
       const cr = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), cm); cr.scale.set(1, 0.75, 1.08); cap.add(cr);
       const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.01, 14, 1, false, -Math.PI / 2, Math.PI), cm); brim.position.set(0, 0.005, 0.07); brim.scale.set(1, 1, 0.9); cap.add(brim);
-      group.add(cap); F.props.cap = cap;
+      if (!own) { group.add(cap); F.props.cap = cap; }
       const wh = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.02, 0.05), new THREE.MeshStandardMaterial({ color: 0xd8b04a, metalness: 0.5, roughness: 0.4 })); group.add(wh); F.props.whistle = wh;
     }
-    if (S.id === 'belle') {   // long black hair (wet ends down her back)
+    if (S.id === 'belle' && !own) {   // long black hair (wet ends down her back)
       const hm = new THREE.MeshStandardMaterial({ color: 0x1c1411, roughness: 0.32 }), sw = new THREE.MeshStandardMaterial({ color: 0xd6405c, roughness: 0.55 });
       // (the hair: a crown over the top down to a hairline on the forehead, and a shell round the sides and back; the face left open)
       const hair = new THREE.Group(), hs = THREE.DoubleSide; hm.side = hs;
@@ -188,7 +202,9 @@ export function friends(scene, src, spots) {
       const { B, S, root } = F; F.cool -= dt;
       if (F.posed && F.talkT <= 0 && Math.hypot(you.x - F.head.x, you.z - F.head.z) > 26) continue;   // (far off: keep the last pose, skip the work)
       F.posed = true;
-      F.skins[0].skeleton.pose(); root.updateMatrixWorld(true);   // (every mesh of a friend shares the one set of bones: posing it once does them all)
+      if (F.body.userData.rest) for (const [b, p, q, sc] of F.body.userData.rest) { b.position.copy(p); b.quaternion.copy(q); b.scale.copy(sc); }   // (a Rocketbox skeleton: back to its own standing pose; its bind data doesn't survive skeleton.pose())
+      else F.skins[0].skeleton.pose();
+      root.updateMatrixWorld(true);   // (every mesh of a friend shares the one set of bones: posing it once does them all)
       // you nearby, on their level? then they look round at you, and say something
       B.head.getWorldPosition(F.head);
       const dx = you.x - F.head.x, dz = you.z - F.head.z, dist = Math.hypot(dx, dz), near = dist < 3.6 && Math.abs(you.y - F.head.y) < 1.6;
@@ -242,7 +258,7 @@ export function friends(scene, src, spots) {
           reach(B.upperarm_l, B.lowerarm_l, B.hand_l, TA.copy(at).addScaledVector(side, 0.07).addScaledVector(up, -0.03), pole.copy(up).multiplyScalar(-1).addScaledVector(side, 0.4));
           reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(at).addScaledVector(side, -0.07).addScaledVector(up, -0.03), pole.copy(up).multiplyScalar(-1).addScaledVector(side, -0.4)); }
         else { B.hand_r.getWorldPosition(bn.position); bn.position.addScaledVector(up, -0.05); bn.quaternion.setFromUnitVectors(_a.set(0, 0, 1), up); }   // (hanging from the right hand)
-        const hat = F.props.hat; B.head.getWorldPosition(hat.position); hat.position.addScaledVector(up, 0.14); B.head.getWorldQuaternion(hat.quaternion); hat.quaternion.setFromUnitVectors(_a.set(0, 1, 0), tgt2.copy(up).addScaledVector(look, 0.35).normalize());
+        const hat = F.props.hat; if (hat) { B.head.getWorldPosition(hat.position); hat.position.addScaledVector(up, 0.14); B.head.getWorldQuaternion(hat.quaternion); hat.quaternion.setFromUnitVectors(_a.set(0, 1, 0), tgt2.copy(up).addScaledVector(look, 0.35).normalize()); }
       } else if (S.pose === 'coach') {
         // standing at the open doors watching the waves, clipboard in his left hand, right hand on his hip; turns to
         // you and talks with his hand when you come near
@@ -257,7 +273,7 @@ export function friends(scene, src, spots) {
         if (talk) reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(chest).addScaledVector(fw, 0.38).addScaledVector(rt, 0.2).addScaledVector(up, -0.05 + 0.07 * Math.sin(t * 4.5)), pole.copy(up).multiplyScalar(-1).addScaledVector(rt, 0.7));
         else reach(B.upperarm_r, B.lowerarm_r, B.hand_r, TB.copy(hip).addScaledVector(rt, 0.24).addScaledVector(up, 0.08).addScaledVector(fw, -0.02), pole.copy(fw).multiplyScalar(-1).addScaledVector(rt, 0.5));
         F.props.whistle.position.copy(chest).addScaledVector(fw, 0.13).addScaledVector(up, -0.02);   // (on its cord at his chest: before W is reused for the head)
-        B.head.getWorldPosition(W); const cap = F.props.cap; cap.position.copy(W).addScaledVector(up, 0.1); cap.lookAt(TA.copy(cap.position).add(look));
+        const cap = F.props.cap; if (cap) { B.head.getWorldPosition(W); cap.position.copy(W).addScaledVector(up, 0.1); cap.lookAt(TA.copy(cap.position).add(look)); }
       } else if (S.pose === 'sofa') {
         // on the sofa with the map open on his lap; looks up and points out to sea when he talks
         root.position.y = S.y + S.seat + 0.02 - (hip.y - root.position.y); root.updateMatrixWorld(true);
@@ -276,7 +292,7 @@ export function friends(scene, src, spots) {
       } else if (S.pose === 'pool') {
         // leaning on the end wall at the sea corner, forearms folded on the ledge, looking out at the view (her back to
         // the house: she talks over her shoulder, she doesn't turn round)
-        B.spine_03.scale.set(0.9, 1, 0.92);   // (narrower shoulders than the lads)
+        if (!F.own) B.spine_03.scale.set(0.9, 1, 0.92);   // (narrower shoulders than the lads)
         for (const sd of ['l', 'r']) { const sg = sd === 'l' ? -1 : 1; aim(B['thigh_' + sd], B['calf_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, -0.08).addScaledVector(rt, sg * 0.07).normalize()); aim(B['calf_' + sd], B['foot_' + sd], tgt.copy(up).multiplyScalar(-1).addScaledVector(fw, 0.04).normalize()); }
         aim(B.spine_02, B.spine_03, tgt.copy(up).addScaledVector(fw, 0.28).normalize());   // (leaning in on the ledge)
         const lookOut = 0.3 * Math.sin(t * 0.13) + 0.15 * Math.sin(t * 0.37);   // (her gaze drifting slowly along the horizon)
@@ -287,7 +303,7 @@ export function friends(scene, src, spots) {
         // (a frame for the head from world directions: up along the neck, forward where she looks; the bone's own axes aren't upright)
         B.neck_01.getWorldPosition(TA); B.head.getWorldPosition(W); const hu = TB.subVectors(W, TA).normalize(), hf = SD.copy(fw).applyAxisAngle(up, lookOut); hf.addScaledVector(hu, -hf.dot(hu)).normalize();
         HM.makeBasis(HX.crossVectors(hu, hf), hu, hf); const k = L2(F);
-        const hr = F.props.hair; hr.position.copy(W); hr.quaternion.setFromRotationMatrix(HM); hr.scale.setScalar(k);
+        const hr = F.props.hair; if (hr) { hr.position.copy(W); hr.quaternion.setFromRotationMatrix(HM); hr.scale.setScalar(k); }
       }
       if (F.talkT > 0) F.talkT -= dt;
     }
