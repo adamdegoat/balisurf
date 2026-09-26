@@ -214,6 +214,16 @@
     color: rgba(246,236,220,.85); background: linear-gradient(180deg, rgba(40,28,18,.8), rgba(22,15,10,.86)); border: 1px solid var(--line); }
   #rotate .rtLock svg { flex: none; width: 22px; height: 22px; color: var(--amber); margin-top: 1px; }
   #rotate .rtLock b { color: var(--sand); font-weight: 600; }
+  /* opened inside Instagram, TikTok, Facebook...: their browser never turns sideways, so the screen asks for the phone's own browser instead */
+  #rtApp { display: none; flex-direction: column; align-items: center; }
+  body.inapp #rtApp { display: flex; } body.inapp #rotate svg.rtPhone { display: none; } body.inapp #rotate .rtStd, body.inapp #rotate .rtLock, body.inapp #rtTurn { display: none !important; }
+  #rtApp ol { margin: 14px 0 0; padding: 0; list-style: none; counter-reset: st; max-width: 320px; text-align: left; font-size: 15px; line-height: 1.4; color: rgba(246,236,220,.9); }
+  #rtApp li { counter-increment: st; display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; text-shadow: 0 1px 8px rgba(0,0,0,.5); }
+  #rtApp li::before { content: counter(st); flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 700 14px var(--disp); color: #2a1a0c; background: var(--amber); }
+  #rtApp li b { color: var(--sand); }
+  #rtApp button { margin-top: 20px; font: 700 16px var(--disp); letter-spacing: .06em; color: #2a1a0c; padding: 12px 24px; border-radius: 999px; touch-action: manipulation;
+    background: linear-gradient(180deg, #ffd694, #f2ad52); border: 1px solid rgba(255,236,200,.7); box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 3px 14px rgba(0,0,0,.25); }
+  #rtApp .rtUrl { margin-top: 10px; font: 600 15px var(--disp); letter-spacing: .04em; color: var(--amber); }
   @media (max-height: 640px) { #rotate .rtName { font-size: 36px; } #rotate svg.rtPhone { width: 104px; height: 104px; margin-bottom: 10px; } #rotate h2 { font-size: 25px; }
     #rotate .rtWhy { font-size: 14px; margin-top: 6px; } #rtTurn { margin-top: 14px; padding: 10px 20px; } #rotate .rtMid { padding: 8px 0 14px; } #rotate .rtLock { font-size: 12px; padding: 10px 12px; } }
   body:not(.villa) .vui, body:not(.playing) .ctl, body:not(.reef) #ear { display: none !important; }   /* (who shows where wins over the looks below) */
@@ -326,7 +336,7 @@
   <p id="soundTip"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6 6 0 0 1 0 9"/></svg> Tap anywhere for music</p>
   <p id="homeTip" hidden>For full screen: tap <b>Share</b>, then <b>Add to Home Screen</b>, and play from the icon.</p>
 </div>
-<small id="build">build 260926-0339</small>
+<small id="build">build 260926-0925</small>
 <div id="rotate">
   <div class="menuOnly"><div class="rtName">SumbaSurf</div><div class="rtTag">Surf the barrels of Sumba</div></div>
   <div class="paused"><div class="rtName">Paused</div><div class="rtTag">Your wave is waiting</div></div>
@@ -342,9 +352,15 @@
         <rect x="68" y="30" width="14" height="3" rx="1.5" fill="#f6ecdc" opacity=".6"/>
       </g>
     </svg>
+    <div id="rtApp"><h2>Open in your browser</h2>
+      <p class="rtWhy"><span id="rtAppName">This app</span>'s built-in browser can't turn sideways, and SumbaSurf is played with your phone on its side.</p>
+      <ol><li><span>Tap the <b>three dots</b> at the top right of this screen.</span></li><li><span>Choose <b>Open in external browser</b>.</span></li><li><span>Turn your phone sideways and play.</span></li></ol>
+      <button id="rtOpen">OPEN IN CHROME</button><div class="rtUrl">sumbasurf.pages.dev</div></div>
+    <div class="rtStd">
     <h2 class="menuOnly">Turn your phone sideways</h2>
     <h2 class="paused">Turn sideways to keep surfing</h2>
     <p class="rtWhy">SumbaSurf plays on its side, one thumb on each half of the screen, like holding a controller.</p>
+    </div>
     <button id="rtTurn" hidden>TURN IT FOR ME</button>
   </div>
   <div class="rtLock"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="10" width="10" height="8" rx="1.5"/><path d="M8 10V7.5a3 3 0 0 1 6 0V10"/><path d="M3.5 7.5A8.5 8.5 0 0 1 11 2.5M18.5 14.5A8.5 8.5 0 0 1 11 19.5"/></svg><span><b>Screen will not turn?</b> Rotation lock is on. Swipe down from the top right corner of your screen and tap the lock icon to switch it off.</span></div>
@@ -352,6 +368,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
 </script>
-<script type="module" src="js/game.js?v=600"></script>
+<script type="module" src="js/game.js?v=601"></script>
 </body>
 </html>

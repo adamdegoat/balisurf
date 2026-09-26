@@ -1361,6 +1361,20 @@ const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)'); l
     rtT.hidden = false;
     rtT.addEventListener('click', () => { try { document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation.lock('landscape')).catch(() => { rtT.hidden = true; }); } catch (e) { rtT.hidden = true; } });
   } }
+// opened from a link inside Instagram, TikTok, Facebook and the like: their built-in browser stays upright whatever you
+// do, so the screen says so and helps you out to the phone's own browser (Android: straight into Chrome; iPhone: copy the link)
+{ const ua = navigator.userAgent, q = new URLSearchParams(location.search).get('inapp');
+  const apps = [['Instagram', /Instagram/], ['TikTok', /musical_ly|BytedanceWebview|TikTok/i], ['Threads', /Barcelona/], ['Facebook', /FBAN|FBAV|FB_IAB/], ['Messenger', /Messenger/],
+    ['Snapchat', /Snapchat/], ['LinkedIn', /LinkedInApp/], ['LINE', /\bLine\//]];
+  const hit = q ? [q.charAt(0).toUpperCase() + q.slice(1)] : apps.find(([, re]) => re.test(ua));
+  if (hit) {
+    document.body.classList.add('inapp'); document.getElementById('rtAppName').textContent = hit[0];
+    const btn = document.getElementById('rtOpen'), url = 'https://sumbasurf.pages.dev/';
+    if (/Android/i.test(ua)) btn.addEventListener('click', () => { location.href = 'intent://sumbasurf.pages.dev/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end'; });
+    else { btn.textContent = 'COPY LINK';
+      btn.addEventListener('click', async () => { let ok = false; try { await navigator.clipboard.writeText(url); ok = true; } catch (e) {}
+        btn.textContent = ok ? 'COPIED. PASTE IT IN SAFARI' : 'SEE THE LINK BELOW'; }); }
+  } }
 let liveShown = false;
 let last = performance.now(), T = 0, strokeT = 0, lastState = '', lastTrick = null, crashT = 1, lastPump = false;
 // ---------- your villa: walk around the clifftop villa at Tanjung Uma, pick a board from the rack, watch the waves
