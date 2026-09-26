@@ -468,7 +468,23 @@ function showBests() {
   }
 }
 showBests();
-for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => start(b.dataset.mode));
+// the spots only select (the one you'll surf lights up and is remembered); START SURFING takes you there
+let spotSel = 'easy'; try { const v = localStorage.getItem('sumbasurf.spot'); if (v && document.querySelector(`[data-mode="${v}"]`)) spotSel = v; } catch (e) {}
+const spotLabel = (m) => m === 'ranch' ? 'Surf Ranch' : (SPOTS[m] && SPOTS[m].name) || m;
+function selSpot(m) { spotSel = m; try { localStorage.setItem('sumbasurf.spot', m); } catch (e) {}
+  for (const b of document.querySelectorAll('[data-mode]')) b.classList.toggle('sel', b.dataset.mode === m);
+  document.getElementById('goSpot').textContent = spotLabel(m); }
+// a tap that counts even if the finger slides a little (the page blocks touch scrolling, and on a phone that made a tap
+// with any movement in it vanish: spots needed pressing two or three times)
+function onTap(el, fn) {
+  let t0 = null;
+  el.addEventListener('touchstart', (e) => { const t = e.changedTouches[0]; t0 = { x: t.clientX, y: t.clientY }; }, { passive: true });
+  el.addEventListener('touchend', (e) => { const t = e.changedTouches[0]; if (t0 && Math.hypot(t.clientX - t0.x, t.clientY - t0.y) < 28) { e.preventDefault(); fn(e); } t0 = null; }, { passive: false });
+  el.addEventListener('click', fn);   // (mouse and keyboard; after a handled touch the browser sends no click)
+}
+for (const b of document.querySelectorAll('[data-mode]')) onTap(b, () => selSpot(b.dataset.mode));
+selSpot(spotSel);
+onTap(document.getElementById('goSurf'), () => start(spotSel));
 for (const b of document.querySelectorAll('[data-board]')) b.addEventListener('click', () => useBoard(b.dataset.board));
 let starting = false;
 // back to the level select: stop the game behind the menu (you pick a level again to restart)
@@ -504,9 +520,9 @@ async function start(m) {
   mode = m; setWeather(m); setSpot(m); audio.start(); audio.quiet(false); audio.musicStart(MUSIC); document.body.classList.toggle('reef', m !== 'ranch');
   // fullscreen + landscape lock must be asked for inside the tap, before any waiting (Android); iOS ignores both safely
   try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {}); } catch (e) {}
-  ui.load.textContent = surfer ? '' : 'Loading...';
+  ui.load.textContent = surfer ? '' : 'Loading...'; document.getElementById('goSurf').classList.toggle('wait', !surfer);
   try { await ready; } catch (e) { starting = false; return; }
-  ui.load.textContent = '';
+  ui.load.textContent = ''; document.getElementById('goSurf').classList.remove('wait');
   ui.start.style.display = 'none'; document.body.classList.add('playing');
   session = { waves: 0, total: 0, best: 0, scores: [], barrels: 0 };
   setLeft = 0; setPos = 0;
