@@ -1,9 +1,9 @@
-# Cloudflare Pages settings for sumbasurf.pages.dev: a little storage for the player alerts (it remembers which
+# Cloudflare Pages settings for sumbasurf.app (project sumbasurf-app, on the evergrow11 account): a little storage for the player alerts (it remembers which
 # Telegram chat to message). The bot key itself is a secret set in Cloudflare, not here.
-name = "sumbasurf"
+name = "sumbasurf-app"
 pages_build_output_dir = "."
 compatibility_date = "2026-09-01"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "a652d727290b45eda5efcca6703606ec"
+id = "732d4a884f85425892100a965667f697"

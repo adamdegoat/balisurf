@@ -488,7 +488,7 @@ document.getElementById('menu').addEventListener('click', toMenu);
 let helloSent = false;
 try { const me = (location.search.match(/[?&]me=(1|0|claude)\b/) || [])[1]; if (me === '0') localStorage.removeItem('sumbasurf.me'); else if (me) localStorage.setItem('sumbasurf.me', me); } catch (e) {}   // (?me=claude: the owner's assistant testing the live site: still sends, marked as such)
 function hello(where) {
-  if (helloSent || !/\.pages\.dev$/.test(location.hostname)) return; helloSent = true;
+  if (helloSent || !/(^|\.)sumbasurf\.app$|\.pages\.dev$/.test(location.hostname)) return; helloSent = true;
   let kind = 'new', who = '';
   try { const me = localStorage.getItem('sumbasurf.me'); if (me === '1') return; if (me === 'claude') { who = 'claude'; kind = 'test'; throw 0; } const last = localStorage.getItem('sumbasurf.seen'), today = new Date().toISOString().slice(0, 10);
     if (last === today) return; kind = last ? 'back' : 'new'; localStorage.setItem('sumbasurf.seen', today); } catch (e) {}
@@ -1369,8 +1369,8 @@ const portrait = matchMedia('(orientation: portrait) and (max-width: 900px)'); l
   const hit = q ? [q.charAt(0).toUpperCase() + q.slice(1)] : apps.find(([, re]) => re.test(ua));
   if (hit) {
     document.body.classList.add('inapp'); document.getElementById('rtAppName').textContent = hit[0];
-    const btn = document.getElementById('rtOpen'), url = 'https://sumbasurf.pages.dev/';
-    if (/Android/i.test(ua)) btn.addEventListener('click', () => { location.href = 'intent://sumbasurf.pages.dev/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end'; });
+    const btn = document.getElementById('rtOpen'), url = 'https://sumbasurf.app/';
+    if (/Android/i.test(ua)) btn.addEventListener('click', () => { location.href = 'intent://sumbasurf.app/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end'; });
     else { btn.textContent = 'OPEN IN SAFARI';   // (iOS 17 and later hand an x-safari link to Safari; if the app blocks it, the same tap has already copied the link)
       btn.addEventListener('click', () => { let ok = false; try { navigator.clipboard.writeText(url).then(() => { ok = true; }, () => {}); } catch (e) {}
         location.href = 'x-safari-' + url;
