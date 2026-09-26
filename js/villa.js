@@ -7,7 +7,7 @@
 // house carries a spiral stair up to a deck in its canopy, the highest seat on the point.
 import * as THREE from 'three';
 import { makeBoard } from './board.js?v=15';
-import { landMaterial, waterMaterial } from './wave.js?v=128';
+import { landMaterial, waterMaterial } from './wave.js?v=133';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const VILLA = { x0: -100, x1: -86, z0: 30, z1: 44, Y: 26 };   // the house and its floor height (in the point's own frame, below)
@@ -807,7 +807,7 @@ export function villa(scene) {
   const walk = { x0: OX - Math.max(B.x1, TX + RD, PL.x1), x1: OX - G.x0, z0: B.z0 + OZ, z1: Math.max(TZ + RD, G.z1) + OZ };
   // places to sit (or lie), each with the view it frames: [x, z, eye height, look direction, look pitch, what it is]
   const seatL = [
-    [-84.7, 34.4, Y + 0.95, 0.35, -0.08, 'LIE BACK'], [-84.7, 39.6, Y + 0.95, -0.2, -0.08, 'LIE BACK'], [-88.1, 32.3, Y + 1.15, -0.3, -0.06, 'SIT'],
+    [-84.7, 34.4, Y + 0.95, 0.35, -0.08, 'LIE BACK'], [-84.7, 39.6, Y + 0.95, -0.2, -0.08, 'LIE BACK'], [-87.62, 32.15, Y + 1.15, -0.3, -0.06, 'SIT'],
     [-90.2, 41.5, Y + 1.1, -Math.PI / 2 + 0.25, -0.05, 'SIT'], [tub.x, tub.z, Y + 1.38, -0.55, -0.08, 'SOAK'],
     [TX + 2.5, TZ - 0.3, Y + DH + 1.4, 0, -0.3, 'SIT'], [TX - 0.3, TZ - 2.5, Y + DH + 1.4, -Math.PI / 2 + 0.3, -0.3, 'SIT'],   // (perched up on the bench back, looking down over the rail at the break)
     [-101.6, 49.3, GY + 1.25, -Math.PI / 2, 0.25, 'LIE IN HAMMOCK'], [BAR.x, BAR.z + 0.72, Y + 1.35, -Math.PI / 2 + 0.5, -0.06, 'SIT AT THE BAR'],

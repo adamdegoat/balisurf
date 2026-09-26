@@ -2,13 +2,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=128';
+import { Wave, CONDITIONS, skyDome, ocean, setWeather, WeatherFX, ENV } from './wave.js?v=133';
 import { Rider, Profile, waterAt, heightAt, RIDE, setBoard } from './surf.js?v=118';
 import { makeBoard, BOARD_LENGTH, BOARD_WIDTH } from './board.js?v=15';
 import { SurfAudio } from './audio.js?v=17';
 import { ranch, POOL } from './ranch.js?v=4';
-import { SPOTS, spotGroup, builtSpots } from './spots.js?v=39';
-import { villa, VILLA } from './villa.js?v=92';
+import { SPOTS, spotGroup, builtSpots } from './spots.js?v=40';
+import { villa, VILLA } from './villa.js?v=94';
 import { makeBirds } from './birds.js?v=1';
 import { friends } from './friends.js?v=22';
 import { crew } from './crew.js?v=8';
@@ -187,7 +187,7 @@ let surfer = null, mixer = null, clips = {}, curClip = null;
 const CUT = { value: 0.21 };   // just the neck and head (at 42 cm it cut your arms off at the elbow: floating hands)
 // which skeleton bones are "arm" (upper arm down to the fingertips): the cutaway never removes those, so you always see
 // whole arms, while your chest, shoulders and neck near the camera are hidden (they were showing as a stretched skin fin)
-const FADE = { value: new THREE.Vector3(0.24, 0.46, 0.25) };   // your own body right at the lens fades out between x and y metres (not a hard cut); inside faces nearer than z aren't drawn
+const FADE = { value: new THREE.Vector3(0.32, 0.64, 0.25) };   // your own body right at the lens fades out between x and y metres (not a hard cut); inside faces nearer than z aren't drawn
 const ARMBONE = { value: new Float32Array(96) }, LEGBONE = { value: new Float32Array(96) }, HIDELEGS = { value: 0 }, ARMTH = { value: 0.12 }, ARMCUT = { value: 0 }, WATERY = { value: -99 };
 function cutaway(m) {
   m.onBeforeCompile = (sh) => {
