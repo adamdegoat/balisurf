@@ -626,7 +626,7 @@ function povCamera(dt) {
   camera.position.copy(pov.pos).add(rig.position);
   // feel the water: small quick bumps through the board (chop under you), stronger with speed and chop, and a
   // rattle when the tail slides; tiny, so it reads as texture, never as shake
-  if (standing && st === 'RIDE') {
+  if (false && standing && st === 'RIDE') {   // (off: the fast rattle read as the board shaking in turns)
     const chop = ENV.weather ? ENV.weather.chop : 1, sp = Math.min(1, rider.v / 9), rattle = Math.min(1, (rider.slide || 0) * 2.5 + rider.skid);
     const t = T, n1 = Math.sin(t * 11.3) * 0.6 + Math.sin(t * 17.9 + 1.3) * 0.4, n2 = Math.sin(t * 23.7 + 0.7) * 0.5 + Math.sin(t * 31.1 + 2.1) * 0.5;
     const amp = (0.006 + 0.006 * chop) * sp + 0.008 * rattle;
@@ -834,7 +834,7 @@ function updateRig(dt, t) {
     // pumping is a rhythm, not a held squat: compress onto the board on the way down, spring up light, ~1.4 times a second
     pumpA += ((input.paddle ? 1 : 0) - pumpA) * Math.min(1, dt * 5); if (pumpA > 0.01) pumpPh += dt * Math.PI * 2 * 1.4;
     // knees: deeper at speed, in the barrel and when pumping; they compress under the load of a hard turn and extend out of it
-    const deep = Math.min(0.7, (0.14 + 0.06 * Math.min(1, rider.v / 10) + (0.31 - 0.06 * Math.min(1, rider.v / 10)) * barrelK) + 0.22 * pumpA * (0.5 + 0.5 * Math.sin(pumpPh)) + 0.2 * airK + 0.25 * gLoad + 0.22 * Math.min(1, Math.abs(rider.lean) / RIDE.leanMax) + 0.2 * (rider.stalling || 0));   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
+    const deep = Math.min(0.7, (0.14 + 0.06 * Math.min(1, rider.v / 10) + (0.31 - 0.06 * Math.min(1, rider.v / 10)) * barrelK) + 0.22 * pumpA * (0.5 + 0.5 * Math.sin(pumpPh)) + 0.2 * airK + 0.2 * (rider.stalling || 0));   // (no dip in turns: the view bobbing through a carve read as the board wobbling)   // (the crouch clip is a full squat: trim is a light knee bend, hips well above the knees)
     if (curClip !== clips.crouch) { play('crouch', { fade: 0.3 }); clips.stand.reset().play(); }
     // rising out of the pop-up's deep squat over half a second (not snapping up: that jerks your eyes up 16 cm in a frame)
     const up_ = Math.min(1, rider.stateT / 0.6), rise = up_ * up_ * (3 - 2 * up_);
