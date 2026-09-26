@@ -15,10 +15,10 @@ async function chatId(env) {
 export async function onRequestPost({ request, env }) {
   const none = new Response(null, { status: 204 });
   if (!env.TG_TOKEN) return none;
-  // only the game's own page can ping, and each connection at most once every 10 minutes (so nobody can flood the chat)
+  // only the game's own page can ping, and each connection at most once every 5 minutes (so nobody can flood the chat)
   const from = request.headers.get('origin') || ''; if (!/^https:\/\/((www\.)?sumbasurf\.app|([a-z0-9-]+\.)?sumbasurf(-app)?\.pages\.dev)$/.test(from)) return none;
   const ip = request.headers.get('cf-connecting-ip') || '';
-  if (env.KV && ip) { if (await env.KV.get('ip:' + ip)) return none; await env.KV.put('ip:' + ip, '1', { expirationTtl: 600 }); }
+  if (env.KV && ip) { if (await env.KV.get('ip:' + ip)) return none; await env.KV.put('ip:' + ip, '1', { expirationTtl: 300 }); }
   let b = {}; try { b = (await request.json()) || {}; } catch (e) {}
   if (typeof b !== 'object') b = {};
   try {
