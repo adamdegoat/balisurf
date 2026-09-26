@@ -110,9 +110,7 @@ export class Wave {
   span() { const Lx = this.cond.len || 1, H = this.cond.H, Wd = this.cond.width || 1;
     return this._span ||= { sLo: -BEHIND * Lx, sHi: AHEAD * Lx, zLo: -4.6 * H * Wd - 2,   /* the whole drawn back of the wave */ zHi: 2.4 * H * Wd + 6 }; }
   // how tall the wave stands at distance s from the break: tallest at the peak, fading down the line (scaled by swell length)
-  amp(s) { const L = this.cond.len || 1, H = this.cond.H; if (s > 0) return 1 - 0.55 * smooth(8 * L, 70 * L, s);
-    // behind the break: the whitewater settles as it rolls on, and runs out to nothing at the far end (no cut-off edge)
-    return (1 - 0.15 * smooth(0, 40 * L, -s)) * (1 - 0.45 * smooth(7 * H, 16 * H, -s)) * smooth(BEHIND * L, 0.72 * BEHIND * L, -s); }
+  amp(s) { const L = this.cond.len || 1; return s > 0 ? 1 - 0.55 * smooth(8 * L, 70 * L, s) : 1 - 0.15 * smooth(0, 40 * L, -s); }
   // which blend of keyframes a slice at distance s ahead of the break has, plus how broken it is
   // (cached by 10 cm: the particles ask for it hundreds of times a second, and building the blend each time made garbage
   // that stuttered phones)
