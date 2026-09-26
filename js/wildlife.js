@@ -1,6 +1,9 @@
 // Life in the water off the villa: a pod of dolphins porpoising across the bay now and then, sea turtles coming up to
-// breathe by the rocks under the balcony, and out the back a humpback whale: it blows and rolls, lifts its tail to
-// dive, and every few minutes breaches, most of its body out of the water, and comes down in a huge splash.
+// breathe by the rocks under the balcony, and out the back a humpback whale that blows, rolls and dives. And about
+// every two minutes, a show (see SHOWS): a note goes up, and five seconds later it happens in front of the balcony:
+// the humpback breaching two or three times, slapping its tail, a mother and her calf breaching together, the dolphins
+// leaping and spinning in close under the cliff, manta rays by the rocks (one jumps), a sea eagle taking a fish, or
+// a school of flying fish skimming across the bay.
 // Everything is in the world frame (the waves' frame), low-poly and instanced, and only runs while the villa is shown.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -43,6 +46,40 @@ function whaleGeo() {   // a humpback, ~14 m, nose along +z: long white pectoral
   const c = g.attributes.color, p = g.attributes.position;   // (the pectoral fins are white all over)
   for (let i = 0; i < p.count; i++) if (Math.abs(p.getX(i)) > 1.8 && p.getZ(i) < 3.6 && p.getZ(i) > -1.5) { c.setXYZ(i, 0.9, 0.9, 0.88); }
   return g; }
+
+function mantaGeo() {   // a manta ray, 4 m across, nose along +z, flat: black on top, white underneath (wings flap: see mantas)
+  const top = [0.1, 0.11, 0.13], belly = [0.88, 0.88, 0.85], P = [], C = [];
+  const tri = (a, b, c, col) => { P.push(...a, ...b, ...c); for (let i = 0; i < 3; i++) C.push(...col); };
+  const nose = [0, 0.05, 0.9], back = [0, 0.05, -0.7], ceph = (s) => [s * 0.35, 0.02, 1.15];
+  for (const s of [-1, 1]) { const tip = [s * 2, 0, -0.1], root = [s * 0.35, 0.08, 0.2];
+    for (const [y, col, flip] of [[0, top, s > 0], [-0.06, belly, s < 0]]) { const d = (v) => [v[0], v[1] + y, v[2]];
+      if (flip) { tri(d(nose), d(tip), d(root), col); tri(d(root), d(tip), d(back), col); } else { tri(d(nose), d(root), d(tip), col); tri(d(root), d(back), d(tip), col); } }
+    tri(nose, ceph(s), [s * 0.2, 0.02, 0.85], top); tri(nose, [s * 0.2, 0.02, 0.85], ceph(s), top); }   // (the horn-like head fins)
+  tri([0, 0.03, -0.7], [0.04, 0.03, -2.4], [-0.04, 0.03, -2.4], top); tri([0, 0.03, -0.7], [-0.04, 0.03, -2.4], [0.04, 0.03, -2.4], top);   // (the whip tail)
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.computeVertexNormals(); return g; }
+function flyfishGeo() {   // a flying fish, 0.35 m, its big pectoral fins spread like wings: a dark blue back (what you see from up on the cliff), silver underneath
+  const P = [], C = [], tri = (a, b, c, col) => { P.push(...a, ...b, ...c, ...a, ...c, ...b); for (let i = 0; i < 6; i++) C.push(...col); };
+  const back = [0.04, 0.08, 0.2], side = [0.75, 0.8, 0.86], fin = [0.12, 0.16, 0.24];
+  tri([0, 0.03, 0.18], [0.03, 0, -0.1], [-0.03, 0, -0.1], back); tri([0, -0.03, 0.18], [-0.03, 0, -0.1], [0.03, 0, -0.1], side);
+  for (const s of [-1, 1]) tri([s * 0.02, 0.01, 0.1], [s * 0.26, 0.02, -0.02], [s * 0.02, 0.01, -0.08], fin);   // (the "wings")
+  tri([0, 0, -0.1], [0, 0.07, -0.2], [0, -0.07, -0.2], back);   // (the forked tail)
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.computeVertexNormals(); return g; }
+// a white-bellied sea eagle, 2.1 m wingspan, facing +z: brown wings, white head, body and tail (wings are separate
+// pieces so they can beat)
+function eagleParts(mat) {
+  const col = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set(c, i * 3); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+  const bird = new THREE.Group(), white = [0.92, 0.92, 0.9], brown = [0.28, 0.22, 0.17];
+  const body = new THREE.SphereGeometry(0.2, 8, 6); body.scale(0.8, 0.8, 2.2); bird.add(new THREE.Mesh(col(body, white), mat));
+  const head = new THREE.SphereGeometry(0.12, 8, 6); head.translate(0, 0.05, 0.48); bird.add(new THREE.Mesh(col(head, white), mat));
+  const bill = new THREE.ConeGeometry(0.04, 0.12, 5); bill.rotateX(Math.PI / 2); bill.translate(0, 0.03, 0.62); bird.add(new THREE.Mesh(col(bill, [0.55, 0.55, 0.5]), mat));
+  const tail = new THREE.BufferGeometry(); tail.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, -0.35, 0.18, 0, -0.75, -0.18, 0, -0.75, 0, 0, -0.35, -0.18, 0, -0.75, 0.18, 0, -0.75], 3)); tail.computeVertexNormals(); bird.add(new THREE.Mesh(col(tail, white), mat));
+  const wings = [];
+  for (const s of [-1, 1]) { const w = new THREE.BufferGeometry(); w.setAttribute('position', new THREE.Float32BufferAttribute([
+      0, 0, 0.18, s * 1.05, 0, 0.05, 0, 0, -0.22,  0, 0, 0.18, 0, 0, -0.22, s * 1.05, 0, 0.05,  s * 1.05, 0, 0.05, s * 1.05, 0, -0.3, 0, 0, -0.22,  s * 1.05, 0, 0.05, 0, 0, -0.22, s * 1.05, 0, -0.3], 3));
+    w.computeVertexNormals(); const m = new THREE.Mesh(col(w, brown), mat); m.userData.side = s; bird.add(m); wings.push(m); }
+  const fish = new THREE.Mesh(col(new THREE.BoxGeometry(0.06, 0.08, 0.4), [0.75, 0.78, 0.82]), mat); fish.position.set(0, -0.28, 0.05); fish.visible = false; bird.add(fish);
+  return { bird, wings, fish };
+}
 
 // white water: splashes, spray and the whale's blow, as soft round points (two sizes)
 function splashes(scene, size, n, mistK) {
@@ -89,30 +126,146 @@ export function wildlife(scene, { point }) {
   // ---- turtles: two, grazing on the reef by the rocks and coming up to breathe
   const TN = 2, tur = new THREE.InstancedMesh(turtleGeo(), mat, TN); tur.frustumCulled = false; group.add(tur);
   const TU = Array.from({ length: TN }, (_, i) => ({ x: point.x - 18 - i * 9, z: point.z - 8 + i * 14, h: Math.random() * 6, t: Math.random() * 20, up: 0, sw: Math.random() * 6 }));
-  // ---- the humpback
-  const whale = new THREE.Mesh(whaleGeo(), mat); whale.frustumCulled = false; whale.visible = false; group.add(whale);
-  const W = { st: 'away', t: 0, next: 20, n: 0, x: 0, z: 0, yaw: 0, notify: null, sound: null };   // (sound(kind, x, z): the game plays it, late by the distance)
-  function whaleEvent() {
-    if (W.st === 'away') { W.x = 100 + Math.random() * 70; W.z = -55 - Math.random() * 40; W.yaw = Math.PI / 2 + (Math.random() - 0.5) * 0.8; }   // (out the back, clear of the swells still coming in: ~180-220 m from the balcony)
-    W.n++; const kind = W.n % 4 === 0 || (W.n === 2) ? 'breach' : W.n % 4 === 3 ? 'dive' : 'roll';
-    Object.assign(W, { st: kind, t: 0, blown: false, hit: false }); whale.visible = true;
-    if (kind === 'breach' && W.notify) W.notify('A humpback is breaching out the back. Tap ZOOM!');
+  // ---- the humpback (and, in one show, her calf). On its own it just comes up to blow and roll, and dives; the big
+  // moves (breaching, tail slapping) are shows. plan: [[at s, move], ...] a show gives it to play through
+  const whaleGeom = whaleGeo(), whale = new THREE.Mesh(whaleGeom, mat), calf = new THREE.Mesh(whaleGeom, mat);
+  for (const m of [whale, calf]) { m.frustumCulled = false; m.visible = false; group.add(m); }
+  const W = { m: whale, k: 1, st: 'away', t: 0, next: 20, n: 0, x: 0, z: 0, yaw: 0, plan: null, clock: 0 }, C = { m: calf, k: 0.42, st: 'away', t: 0, plan: null, clock: 0, x: 0, z: 0, yaw: 0 };
+  let notify = null, sound = null;   // (sound(kind, x, z): the game plays it, late by the distance)
+  const outBack = (A) => { A.x = 100 + Math.random() * 70; A.z = -55 - Math.random() * 40; A.yaw = Math.PI / 2 + (Math.random() - 0.5) * 0.8; };   // (out the back, clear of the swells still coming in: ~180-220 m from the balcony)
+  const start = (A, kind) => { Object.assign(A, { st: kind, t: 0, blown: false, hit: false, slap: 0 }); A.m.visible = true; };
+  function whaleEvent() {   // (on its own: up to breathe, and now and then a dive)
+    if (W.st === 'away') outBack(W);
+    W.n++; start(W, W.n % 3 === 0 ? 'dive' : 'roll');
+  }
+  // one step of a whale's move; true when it's done (A.k: its size, 1 the mother, less for the calf)
+  const TIP = new THREE.Vector3();
+  function stepWhale(A, dt) {
+    A.t += dt; const t = A.t, k = A.k, fx = Math.sin(A.yaw), fz = Math.cos(A.yaw), n = (c) => Math.max(4, Math.round(c * k * k)); let cy = -3 * k, pitch = 0, roll = 0, dur = 6;
+    if (A.st === 'roll') {   // up to breathe: the blow, then the long back rolls over, the little dorsal, and under
+      dur = 7; const u = t / dur; cy = (-2.2 + 1.6 * Math.sin(Math.PI * u)) * k; pitch = 0.3 * Math.cos(Math.PI * u); A.x += fx * 2.2 * dt; A.z += fz * 2.2 * dt;
+      if (!A.blown && t > 1.2) { A.blown = true; mist.emit(A.x + fx * 5 * k, 0.5, A.z + fz * 5 * k, 0, 7 * k, 0, 0.6, n(90)); if (sound) sound('blow', A.x, A.z); } }
+    else if (A.st === 'dive') {   // the tail comes up out of the water and slides under
+      dur = 6; const u = t / dur; A.x += fx * 1.8 * dt; A.z += fz * 1.8 * dt; pitch = -0.15 - 1.15 * Math.min(1, u * 1.6); cy = (-1.2 - 4 * u) * k;
+      if (!A.blown && t > 0.3) { A.blown = true; mist.emit(A.x + fx * 5 * k, 0.5, A.z + fz * 5 * k, 0, 7 * k, 0, 0.6, n(70)); }
+      if (u > 0.55 && !A.hit) { A.hit = true; big.emit(A.x - fx * 6 * k, 0.5, A.z - fz * 6 * k, 0, 4, 0, 1.5 * k, n(60)); } }
+    else if (A.st === 'lobtail') {   // head down, the tail up out of the water, slammed down on the surface again and again
+      dur = 17; const inn = Math.min(1, t / 1.8, (dur - t) / 1.8), ph = Math.max(0, t - 1.8) * 2 * Math.PI / 2.6, lift = Math.max(0, Math.sin(ph));
+      cy = (-10 + 5.6 * inn) * k; pitch = -(0.55 + 0.85 * lift) * inn; roll = 0.35 * Math.sin(ph * 0.5);   // (the tail stock and flukes 3 m up at the top of the swing, down flat on the water at the bottom)
+      const down = Math.sin(ph) <= 0 && A.slap > 0 && t < dur - 2.5; A.slap = Math.sin(ph);
+      if (down) { A.m.updateMatrixWorld(); TIP.set(0, 0, -7.6).applyMatrix4(A.m.matrixWorld);   // (the flukes hit the water: a boom and a wall of spray)
+        big.emit(TIP.x, 0.3, TIP.z, 0, 9, 0, 2.5, 220); huge.emit(TIP.x, 0.5, TIP.z, 0, 7, 0, 2.5, 60); foam.fire(TIP.x, TIP.z, 5, 4); if (sound) sound('slap', TIP.x, TIP.z); } }
+    else {   // the breach: straight up out of the sea, twisting, and over onto its side
+      dur = 8; if (t < 1.5) { const u = t / 1.5; cy = (-10 + 14 * (1 - (1 - u) * (1 - u))) * k; pitch = 1.3; roll = 1.4 * u; }
+      else if (t < 2.7) { const u = (t - 1.5) / 1.2; cy = (4 - 5 * u * u) * k; pitch = 1.3 - 1.25 * u; roll = 1.4 + 0.6 * u; A.x += fx * 3 * k * dt; A.z += fz * 3 * k * dt; }
+      else { const u = (t - 2.7) / 5.3; cy = (-1 - 5 * u) * k; pitch = 0.05; roll = 2; }
+      if (t > 0.9 && !A.blown) { A.blown = true; big.emit(A.x, 0.3, A.z, 0, 9 * k, 0, 3 * k, n(160)); huge.emit(A.x, 0.5, A.z, 0, 6 * k, 0, 3 * k, n(50)); foam.fire(A.x, A.z, 6, 5 * k); }   // (bursting out)
+      if (t > 2.6 && !A.hit) { A.hit = true; big.emit(A.x + fx * 2 * k, 0.3, A.z + fz * 2 * k, 0, 16 * k, 0, 6 * k, n(400)); big.emit(A.x, 0.3, A.z, 0, 7 * k, 0, 10 * k, n(300)); huge.emit(A.x + fx * 3 * k, 0.5, A.z + fz * 3 * k, 0, 13 * k, 0, 5 * k, n(160)); huge.emit(A.x, 0.5, A.z, 0, 6 * k, 0, 9 * k, n(120)); foam.fire(A.x + fx * 3 * k, A.z + fz * 3 * k, 14, 11 * k); if (sound) sound(k < 1 ? 'slap' : 'crash', A.x, A.z); } }   // (the crash)
+    e.set(-pitch, A.yaw, roll); q.setFromEuler(e); A.m.quaternion.copy(q); A.m.position.set(A.x, cy, A.z); A.m.scale.setScalar(k);
+    if (t > dur) { A.m.visible = false; return true; }
+    return false;
+  }
+  // a whale with a plan (a show) plays it through, move by move at its times
+  function planWhale(A, dt) {
+    A.clock += dt;
+    if (A.st !== 'idle' && A.st !== 'away' && stepWhale(A, dt)) A.st = 'idle';
+    if (A.st === 'idle' && A.plan.length && A.clock >= A.plan[0][0]) start(A, A.plan.shift()[1]);
+    if (A.st === 'idle' && !A.plan.length) { A.plan = null; A.st = 'away'; if (A === W) W.next = 20 + Math.random() * 20; }
+  }
+
+  // ---- manta rays: three gliding past the rocks under the balcony, wingtips breaking the surface; one jumps
+  const mantaG = mantaGeo(), mantaMat = Object.assign(mat.clone(), { side: THREE.DoubleSide }), MANTA = Array.from({ length: 3 }, () => { const m = new THREE.Mesh(mantaG, mantaMat); m.frustumCulled = false; m.visible = false; group.add(m); return { m }; });
+  // ---- flying fish: a school launching in bursts and gliding a few metres over the water
+  const FN = 42, ffish = new THREE.InstancedMesh(flyfishGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.3, side: THREE.DoubleSide }), FN);
+  ffish.frustumCulled = false; ffish.visible = false; group.add(ffish); const FF = Array.from({ length: FN }, () => ({}));
+  // ---- the sea eagle
+  const EG = eagleParts(mat); EG.bird.visible = false; EG.bird.scale.setScalar(1.8); group.add(EG.bird);   // (on the big side, so it reads from the balcony)
+
+  // ---- the shows: a note, five seconds, then the show, about every two minutes (never the same one twice running)
+  const SHOWS = {
+    breach: 'A humpback is about to breach out the back. Tap ZOOM!',
+    lobtail: 'The humpback is slapping its tail out the back. Tap ZOOM!',
+    calf: 'A mother humpback and her calf, out the back. Tap ZOOM!',
+    dolphins: 'Dolphins coming in under the cliff. Look down!',
+    mantas: 'Manta rays by the rocks below the balcony!',
+    eagle: 'A sea eagle is hunting in front of the villa!',
+    flyfish: 'Flying fish skipping across the bay. Tap ZOOM!',
+  };
+  const SH = { next: 25, wait: 0, kind: null, on: null, t: 0, last: null };
+  function showStart(kind) {
+    SH.on = kind; SH.t = 0;
+    if (kind === 'breach' || kind === 'lobtail' || kind === 'calf') {
+      outBack(W); W.x = 115 + Math.random() * 40; W.z = -40 - Math.random() * 25; W.st = 'idle'; W.m.visible = false; W.clock = 0;   // (a little nearer than usual)
+      W.plan = kind === 'breach' ? [[0, 'breach'], [11, 'breach']].concat(Math.random() < 0.6 ? [[22, 'breach']] : []) : kind === 'lobtail' ? [[0, 'lobtail']] : [[0, 'breach'], [13, 'roll']];
+      if (kind === 'calf') { Object.assign(C, { x: W.x + Math.cos(W.yaw) * 14, z: W.z - Math.sin(W.yaw) * 14, yaw: W.yaw, st: 'idle', clock: 0, plan: [[4.5, 'breach'], [13.5, 'roll']] }); }
+    } else if (kind === 'dolphins') {   // in close, 20-35 m out from the foot of the cliff, leaping high and spinning
+      const dir = Math.random() < 0.5 ? 1 : -1; Object.assign(pod, { on: true, show: true, t: 0, dur: 32, x0: dir > 0 ? point.x - 120 : point.x + 20, z0: point.z - 22 - Math.random() * 12, dx: dir * 4.5, dz: 0 });
+    } else if (kind === 'mantas') {
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      MANTA.forEach((M, i) => Object.assign(M, { x: point.x - 28 - dir * (40 + i * 7), z: point.z - 16 - i * 4 + Math.random() * 3, dx: dir * 3, ph: Math.random() * 6, jump: i === 1 ? 9 + Math.random() * 3 : null, jt: -1 }));
+      MANTA.forEach((M) => { M.m.visible = true; });
+    } else if (kind === 'eagle') {
+      Object.assign(EG, { t: 0, cx: point.x - 22, cz: point.z - 28, a: Math.random() * 6, grabbed: false }); EG.bird.visible = true; EG.fish.visible = false;   // (circling just off the balcony, a little above you)
+    } else if (kind === 'flyfish') {
+      const cx = point.x - 32, cz = point.z - 34, hd = Math.random() * 6.3;   // (40-odd metres off the balcony)
+      FF.forEach((f, i) => Object.assign(f, { at: (i / 7 | 0) * 2.2 + Math.random() * 0.6, x0: cx + (Math.random() - 0.5) * 30, z0: cz + (Math.random() - 0.5) * 30, hd: hd + (Math.random() - 0.5) * 0.4, len: 30 + Math.random() * 25, dur: 2.8 + Math.random() * 1.6, h: 1 + Math.random() * 0.9, st: 0 }));
+      ffish.visible = true;
+    }
+  }
+  function showStep(dt) {
+    SH.t += dt; const t = SH.t, k = SH.on;
+    if (k === 'breach' || k === 'lobtail' || k === 'calf') { if (!W.plan && (!C.plan || k !== 'calf')) return true; }
+    else if (k === 'dolphins') { if (!pod.on) { pod.show = false; return true; } }
+    else if (k === 'mantas') {
+      let done = true;
+      MANTA.forEach((M, i) => { M.x += M.dx * dt; M.ph += dt * 2 * Math.PI / 3.2; const s = sea(M.x, M.z), flap = Math.sin(M.ph);
+        let y = s + 0.05, pitch = 0, roll = 0.18 * Math.sin(M.ph * 0.5);
+        if (M.jump != null && t > M.jump && M.jt < 0) { M.jt = 0; small.emit(M.x, s, M.z, M.dx * 0.3, 4, 0, 1, 25); }
+        if (M.jt >= 0 && M.jt < 1.6) { M.jt += dt; const u = M.jt / 1.6; y = s + 3.2 * Math.sin(Math.PI * u); pitch = 0.9 - 1.6 * u; roll = 0.3;   // (out of the water, nose up, over and flat onto its belly)
+          if (M.jt >= 1.6) { big.emit(M.x, s, M.z, 0, 7, 0, 2, 160); foam.fire(M.x, M.z, 4, 3); if (sound) sound('slap', M.x, M.z); } }
+        else if (flap > 0.93 && Math.random() < dt * 3) small.emit(M.x + (Math.random() < 0.5 ? 1.8 : -1.8), s, M.z, 0, 1.5, 0, 0.2, 4);   // (a wingtip flicking water)
+        e.set(-pitch, Math.atan2(M.dx, 0), roll); q.setFromEuler(e); M.m.quaternion.copy(q); M.m.position.set(M.x, y, M.z); M.m.scale.set(1 + 0.08 * flap, 1, 1);
+        if (Math.abs(M.x - point.x + 28) < 70) done = false; });
+      if (done || t > 45) { MANTA.forEach((M) => { M.m.visible = false; }); return true; }
+    } else if (k === 'eagle') {
+      const B = EG.bird, W1 = EG.wings; let pitch = 0, bank = 0, beat = 0.15, yaw;
+      if (t < 9) { EG.a += dt * 0.45; B.position.set(EG.cx + Math.cos(EG.a) * 15, 33 + Math.sin(t * 0.7) * 1.5, EG.cz + Math.sin(EG.a) * 15); yaw = -EG.a; bank = -0.35; beat = Math.sin(t * 0.8) > 0.7 ? 0.9 : 0.1;   // (circling, watching the water)
+        if (t + dt >= 9) { EG.from = B.position.clone(); EG.to = new THREE.Vector3(EG.cx + (Math.random() - 0.5) * 6, 0, EG.cz + 8); } }
+      else if (t < 11.4) { const u = (t - 9) / 2.4; B.position.lerpVectors(EG.from, EG.to, u).setY(EG.from.y + (sea(EG.to.x, EG.to.z) + 0.3 - EG.from.y) * u * u); yaw = Math.atan2(EG.to.x - EG.from.x, EG.to.z - EG.from.z); pitch = 0.9 * Math.min(1, u * 2) - 1.2 * Math.max(0, u - 0.8) * 5; beat = 0; }   // (the stoop, feet swung forward at the end)
+      else { if (!EG.grabbed) { EG.grabbed = true; EG.fish.visible = true; small.emit(B.position.x, sea(B.position.x, B.position.z), B.position.z, 0, 3.5, 0, 0.6, 30); }   // (the strike)
+        const u = t - 11.4; yaw = Math.atan2(EG.to.x - EG.from.x, EG.to.z - EG.from.z) + 0.9; B.position.x += Math.sin(yaw) * 9 * dt; B.position.z += Math.cos(yaw) * 9 * dt; B.position.y += (1 + u * 0.9) * dt; pitch = -0.25; beat = 1; }   // (off low with the fish, climbing away)
+      e.set(pitch, yaw, bank); q.setFromEuler(e); B.quaternion.copy(q);
+      const fl = Math.sin(t * 7) * beat; for (const w of W1) w.rotation.z = w.userData.side * (0.12 + fl * 0.55) - (beat === 0 && t > 9 ? w.userData.side * 0.5 : 0);
+      if (t > 22) { B.visible = false; return true; }
+    } else if (k === 'flyfish') {
+      let alive = false;
+      FF.forEach((f, i) => { let y = -5, x = f.x0, z = f.z0;
+        if (t >= f.at) { const u = (t - f.at) / f.dur;
+          if (u < 1) { alive = true; x = f.x0 + Math.sin(f.hd) * f.len * u; z = f.z0 + Math.cos(f.hd) * f.len * u; y = sea(x, z) + f.h * Math.min(1, u * 6) * (1 - Math.pow(u, 6)) + 0.1;
+            if (f.st === 0) { f.st = 1; small.emit(x, sea(x, z), z, 0, 1.5, 0, 0.1, 3); } }
+          else if (f.st === 1) { f.st = 2; x = f.x0 + Math.sin(f.hd) * f.len; z = f.z0 + Math.cos(f.hd) * f.len; small.emit(x, sea(x, z), z, 0, 1.6, 0, 0.15, 4); } }
+        else alive = true;
+        e.set(0, f.hd, Math.sin(t * 9 + i) * 0.15); q.setFromEuler(e); ffish.setMatrixAt(i, m4.compose(v.set(x, y, z), q, sc.setScalar(3))); });   // (big for a flying fish, so the school reads from up here)
+      ffish.instanceMatrix.needsUpdate = true;
+      if (!alive) { ffish.visible = false; return true; }
+    }
+    return t > 60;
   }
 
   function update(dt, wv) {
     if (!group.visible) return; T += dt; waves = wv || [];
     small.update(dt); big.update(dt); huge.update(dt); mist.update(dt); foam.update(dt);
     // dolphins
-    if (!pod.on && (pod.next -= dt) <= 0) podStart();
+    if (!pod.on && (pod.next -= dt) <= 0 && SH.on !== 'dolphins' && !SH.kind) podStart();
     if (pod.on) { pod.t += dt; const px = pod.x0 + pod.dx * pod.t, pz = pod.z0 + pod.dz * pod.t;
-      D.forEach((d, i) => { d.ph += dt * 2 * Math.PI / 1.7; if (d.ph > Math.PI * 2) { d.ph -= Math.PI * 2; d.amp = Math.random() < 0.15 ? 2.6 : 0.9 + Math.random() * 0.4; }
+      D.forEach((d, i) => { d.ph += dt * 2 * Math.PI / 1.7; if (d.ph > Math.PI * 2) { d.ph -= Math.PI * 2; const high = Math.random() < (pod.show ? 0.45 : 0.15); d.amp = high ? (pod.show ? 3 : 2.6) : 0.9 + Math.random() * 0.4; d.spin = pod.show && high && Math.random() < 0.5; }
         const s = Math.sin(d.ph), y = (d.amp * 0.9) * s - 0.55, vy = d.amp * 0.9 * Math.cos(d.ph) * 2 * Math.PI / 1.7, x = px + d.off[1] * Math.sign(pod.dx), z = pz + d.off[0] + Math.sin(T * 0.3 + i) * 1.5;
         const surf = sea(x, z), above = y > 0.1;
         if (above !== d.above) { small.emit(x, surf, z, pod.dx * 0.3, 3.5, 0, 0.5, above ? 8 : 16); d.above = above; }
-        e.set(-Math.atan2(vy, Math.abs(pod.dx)), Math.atan2(pod.dx, pod.dz), 0); q.setFromEuler(e);
+        e.set(-Math.atan2(vy, Math.abs(pod.dx)), Math.atan2(pod.dx, pod.dz), d.spin && above ? d.ph * 2 : 0); q.setFromEuler(e);   // (a spinner: twice round in the air)
         dol.setMatrixAt(i, m4.compose(v.set(x, surf + y, z), q, sc.set(1, 1, 1))); });
       dol.instanceMatrix.needsUpdate = true; dol.visible = true;
-      if (pod.t > pod.dur) { pod.on = false; pod.next = 45 + Math.random() * 50; dol.visible = false; } }
+      if (pod.t > pod.dur) { pod.on = false; pod.show = false; pod.next = 45 + Math.random() * 50; dol.visible = false; } }
     // turtles: ~25 s gliding below, ~7 s at the top breathing, head up
     TU.forEach((t, i) => { t.t += dt; t.sw += dt * 1.6; const cyc = t.t % 32, up = cyc > 25 ? Math.min(1, (cyc - 25) * 1.5, (32 - cyc) * 1.5) : 0;
       t.x += Math.sin(t.t * 0.08 + i) * dt * 0.4; t.z += Math.cos(t.t * 0.06 + i * 2) * dt * 0.4;
@@ -120,26 +273,17 @@ export function wildlife(scene, { point }) {
       e.set(-0.12 + 0.1 * Math.sin(t.sw), t.t * 0.05 + i * 2, 0.05 * Math.sin(t.sw * 0.5)); q.setFromEuler(e);
       tur.setMatrixAt(i, m4.compose(v.set(t.x, sea(t.x, t.z) - 1.3 + up * 1.22, t.z), q, sc.set(1, 1, 1))); });
     tur.instanceMatrix.needsUpdate = true;
-    // the whale
-    if (W.st === 'away' || W.st === 'wait') { if ((W.next -= dt) <= 0) whaleEvent(); }
-    else {
-      W.t += dt; const t = W.t, fx = Math.sin(W.yaw), fz = Math.cos(W.yaw); let cy = -3, pitch = 0, roll = 0, dur = 6;
-      if (W.st === 'roll') {   // up to breathe: the blow, then the long back rolls over, the little dorsal, and under
-        dur = 7; const k = t / dur; cy = -2.2 + 1.6 * Math.sin(Math.PI * k); pitch = 0.3 * Math.cos(Math.PI * k); W.x += fx * 2.2 * dt; W.z += fz * 2.2 * dt;
-        if (!W.blown && t > 1.2) { W.blown = true; mist.emit(W.x + fx * 5, 0.5, W.z + fz * 5, 0, 7, 0, 0.6, 90); if (W.sound) W.sound('blow', W.x, W.z); } }
-      else if (W.st === 'dive') {   // the tail comes up out of the water and slides under
-        dur = 6; const k = t / dur; W.x += fx * 1.8 * dt; W.z += fz * 1.8 * dt; pitch = -0.15 - 1.15 * Math.min(1, k * 1.6); cy = -1.2 - 4 * k;
-        if (!W.blown && t > 0.3) { W.blown = true; mist.emit(W.x + fx * 5, 0.5, W.z + fz * 5, 0, 7, 0, 0.6, 70); }
-        if (k > 0.55 && !W.hit) { W.hit = true; big.emit(W.x - fx * 6, 0.5, W.z - fz * 6, 0, 4, 0, 1.5, 60); } }
-      else {   // the breach: straight up out of the sea, twisting, and over onto its side
-        dur = 8; if (t < 1.5) { const k = t / 1.5; cy = -10 + 14 * (1 - (1 - k) * (1 - k)); pitch = 1.3; roll = 1.4 * k; }
-        else if (t < 2.7) { const k = (t - 1.5) / 1.2; cy = 4 - 5 * k * k; pitch = 1.3 - 1.25 * k; roll = 1.4 + 0.6 * k; W.x += fx * 3 * dt; W.z += fz * 3 * dt; }
-        else { const k = (t - 2.7) / 5.3; cy = -1 - 5 * k; pitch = 0.05; roll = 2; }
-        if (t > 0.9 && !W.blown) { W.blown = true; big.emit(W.x, 0.3, W.z, 0, 9, 0, 3, 160); huge.emit(W.x, 0.5, W.z, 0, 6, 0, 3, 50); foam.fire(W.x, W.z, 6, 5); }   // (bursting out)
-        if (t > 2.6 && !W.hit) { W.hit = true; big.emit(W.x + fx * 2, 0.3, W.z + fz * 2, 0, 16, 0, 6, 400); big.emit(W.x, 0.3, W.z, 0, 7, 0, 10, 300); huge.emit(W.x + fx * 3, 0.5, W.z + fz * 3, 0, 13, 0, 5, 160); huge.emit(W.x, 0.5, W.z, 0, 6, 0, 9, 120); foam.fire(W.x + fx * 3, W.z + fz * 3, 14, 11); if (W.sound) W.sound('crash', W.x, W.z); } }   // (the crash)
-      e.set(-pitch, W.yaw, roll); q.setFromEuler(e); whale.quaternion.copy(q); whale.position.set(W.x, cy, W.z);
-      if (t > dur) { const was = W.st; whale.visible = false; W.st = 'wait'; W.next = was === 'breach' ? 40 : 14 + Math.random() * 16; if (W.n % 4 === 0) { W.st = 'away'; W.next = 60 + Math.random() * 60; } }
-    }
+    // the whale: on its own, blowing and rolling; with a show's plan, the show's moves
+    if (W.plan) planWhale(W, dt);
+    else if (W.st === 'away' || W.st === 'wait') { if ((W.next -= dt) <= 0 && !SH.kind) whaleEvent(); }
+    else if (stepWhale(W, dt)) { W.st = 'wait'; W.next = 14 + Math.random() * 16; if (W.n % 4 === 0) { W.st = 'away'; W.next = 40 + Math.random() * 40; } }
+    if (C.plan) planWhale(C, dt);
+    // the shows
+    if (SH.on) { if (showStep(dt)) { SH.on = null; SH.next = 110 + Math.random() * 30; } }
+    else if (SH.kind) { if ((SH.wait -= dt) <= 0) { showStart(SH.kind); SH.last = SH.kind; SH.kind = null; } }
+    else if ((SH.next -= dt) <= 0) { const ks = Object.keys(SHOWS).filter((k) => k !== SH.last); SH.kind = ks[Math.random() * ks.length | 0]; SH.wait = 5; if (notify) notify(SHOWS[SH.kind]); }
   }
-  return { group, update, whale: W, pod, splash(x, z) { small.emit(x, 0.2, z, 0, 3.2, 0, 0.5, 22); }, set notify(f) { W.notify = f; }, set sound(f) { W.sound = f; } };   // (splash: a bird hitting the water)
+  // show(kind): put one on now (the note, then five seconds); tests use it
+  return { group, update, whale: W, pod, shows: SH, show(kind) { SH.kind = kind; SH.wait = 5; SH.on = null; if (notify) notify(SHOWS[kind]); },
+    splash(x, z) { small.emit(x, 0.2, z, 0, 3.2, 0, 0.5, 22); }, set notify(f) { notify = f; }, set sound(f) { sound = f; } };   // (splash: a bird hitting the water)
 }

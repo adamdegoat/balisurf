@@ -14,7 +14,7 @@ import { friends } from './friends.js?v=28';
 import { lifeLib } from './life.js?v=1';
 import { WATER_PEOPLE, waterPerson, straddle as straddleP } from './surfers.js?v=3';
 import { crew } from './crew.js?v=15';
-import { wildlife } from './wildlife.js?v=14';
+import { wildlife } from './wildlife.js?v=19';
 
 const Q = new URLSearchParams(location.search);
 // ---------- renderer with hidden automatic quality (drops sharpness if the phone struggles, raises it back if not)
@@ -1519,9 +1519,10 @@ function prepVilla() {
   villaW = villa(scene); villaW.group.position.z = SPOTS.medium.dz; crewW = crew(scene); if (audio.now) villaW.setSong(...songOf(audio.now));
     wildW = wildlife(scene, { point: { x: 172, z: 125 } });   // (the balcony, in the waves' frame)
     birdsW = makeBirds(wildW.group, { center: [60, 5], span: [140, 40], splash: (x, z) => wildW.splash(x, z) });   // (seabirds over the break: frigatebirds high, terns diving for fish)
-    wildW.notify = (msg) => { const n = document.getElementById('vNote'); n.textContent = msg; n.classList.add('on'); clearTimeout(n.t); n.t = setTimeout(() => n.classList.remove('on'), 5000); };
+    wildW.notify = (msg) => { const n = document.getElementById('vNote'); n.textContent = msg; n.classList.add('on'); clearTimeout(n.t); n.t = setTimeout(() => n.classList.remove('on'), 9000); };   // (up through the first seconds of the show it announces)
     wildW.sound = (kind, x, z) => { const d = walker ? Math.hypot(x - walker.x, z - (walker.z + SPOTS.medium.dz)) : 250, late = d / 343, k = Math.min(1, 120 / d);   // (sound takes its time over 250 m of water)
       if (kind === 'blow') { audio.burst(0.25 * k, 500, 1.4, 'bandpass', late); audio.burst(0.15 * k, 180, 1.2, 'lowpass', late); }
+      else if (kind === 'slap') { audio.burst(0.4 * k, 260, 1.1, 'lowpass', late); audio.burst(0.22 * k, 1100, 0.7, 'bandpass', late + 0.02); }   // (a tail or a manta hitting the water flat)
       else { audio.burst(0.7 * k, 160, 2.6, 'lowpass', late); audio.burst(0.4 * k, 900, 1.8, 'bandpass', late + 0.05); for (const q of crewW.surfers) if (q.st !== 'RIDE') { audio.hoot(0.6 * k); break; } } };
 }
 // while you look at the menu: build the villa and get every shader in the game ready, in the background, a bit after
