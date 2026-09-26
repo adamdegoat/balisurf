@@ -371,7 +371,7 @@ export function villa(scene) {
     x2.fillStyle = '#1f2a26'; x2.fillRect(0, 0, 512, 360); x2.strokeStyle = '#6b4a2c'; x2.lineWidth = 22; x2.strokeRect(0, 0, 512, 360);
     x2.fillStyle = 'rgba(240,236,224,.92)'; x2.font = 'bold 34px "Chalkboard SE", "Marker Felt", "Comic Sans MS", sans-serif'; x2.fillText('TANJUNG UMA', 34, 62);
     x2.font = '26px "Chalkboard SE", "Marker Felt", "Comic Sans MS", sans-serif';
-    ['Surf  4.5 m, clean', 'Wind  light offshore', 'Swell  14 s, SW', 'Tide  mid, pushing in', 'Crowd  7 out'].forEach((t, i) => x2.fillText(t, 34, 118 + i * 44));
+    ['Surf  7.5 m, clean', 'Wind  light offshore', 'Swell  14 s, SW', 'Tide  mid, pushing in', 'Crowd  7 out'].forEach((t, i) => x2.fillText(t, 34, 118 + i * 44));
     x2.fillStyle = '#ffcf8a'; x2.font = 'bold 26px "Chalkboard SE", "Marker Felt", "Comic Sans MS", sans-serif'; x2.fillText('GO!', 400, 320);
     const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 4;
     const cb = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.4), new THREE.MeshStandardMaterial({ map: tx, roughness: 0.95, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: 0.25 }));
