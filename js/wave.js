@@ -20,12 +20,12 @@ export const CONDITIONS = {
   //   fat   = how gently the lower face ramps out in front (soft ramp vs near-vertical wall)
   //   tube  = how much the barrel helps you hold your line inside it (a small friendly tube is easy to stay in; a heavy one is all on you)
   // speed from shallow-water physics c ~ sqrt(g(d+H/2)) with d = H/0.78, ~4.2*sqrt(H)
-  easy:    { H: 3.5,  speed: 6.4,  peel: 3.4,  angle: 62, period: 12, hollow: 0.72, forgive: 0.6, len: 1,   width: 1.3,  fat: 1.3, tube: 1.3,  name: 'Easy' },     // a proper double-overhead wave, but slow and forgiving (slower than a real one this size): the beginner's barrel
-  medium:  { H: 4.5,  speed: 8.4,  peel: 5.0,  angle: 62, period: 14, hollow: 0.8,  forgive: 1,   len: 1.1, width: 1.1,  fat: 1.1, tube: 1.0,  name: 'Medium' },   // clean peeling walls
-  hard:    { H: 6.0,  speed: 10.2, peel: 7.6,  angle: 55, period: 16, hollow: 1.0,  forgive: 0.85,   len: 1.5, width: 0.95, fat: 0.8, tube: 0,    name: 'Hard' },     // steep, hollow, heavy
+  easy:    { H: 5,    speed: 6.4,  peel: 3.4,  angle: 62, period: 12, hollow: 0.72, forgive: 0.6, len: 1,   width: 1.3,  fat: 1.3, tube: 1.3,  name: 'Easy' },     // a proper double-overhead wave, but slow and forgiving (slower than a real one this size): the beginner's barrel
+  medium:  { H: 7.5,  speed: 8.4,  peel: 5.0,  angle: 62, period: 14, hollow: 0.8,  forgive: 1,   len: 1.1, width: 1.1,  fat: 1.1, tube: 1.0,  name: 'Medium' },   // clean peeling walls
+  hard:    { H: 10,   speed: 10.2, peel: 7.6,  angle: 55, period: 16, hollow: 1.0,  forgive: 0.85,   len: 1.5, width: 0.95, fat: 0.8, tube: 0,    name: 'Hard' },     // steep, hollow, heavy
   // the two rights (drawn mirrored): their own waves, not copies of the lefts
-  kanan:   { H: 4.2,  speed: 8.2,  peel: 5.6,  angle: 60, period: 13, hollow: 0.92, forgive: 0.95, len: 1.0, width: 1.05, fat: 1.0, tube: 0.8,  name: 'Medium' },   // a racier, hollower mid-size right: more tube, a bit less wall
-  hiu:     { H: 5.6,  speed: 10.0, peel: 7.6,  angle: 52, period: 15, hollow: 1.0,  forgive: 0.85, len: 1.35, width: 0.92, fat: 0.76, tube: 0, name: 'Hard' },     // a fast, shallow, square right over coral: runs away from you
+  kanan:   { H: 7.0,  speed: 8.2,  peel: 5.6,  angle: 60, period: 13, hollow: 0.92, forgive: 0.95, len: 1.0, width: 1.05, fat: 1.0, tube: 0.8,  name: 'Medium' },   // a racier, hollower mid-size right: more tube, a bit less wall
+  hiu:     { H: 9.3,  speed: 10.0, peel: 7.6,  angle: 52, period: 15, hollow: 1.0,  forgive: 0.85, len: 1.35, width: 0.92, fat: 0.76, tube: 0, name: 'Hard' },     // a fast, shallow, square right over coral: runs away from you
   extreme: { H: 15,   speed: 13.5, peel: 11,   angle: 45, period: 20, hollow: 1.0,  forgive: 1,   len: 4,   width: 1.25, fat: 1.1, tube: 0.3,  name: 'Extreme' },  // a 15 m mountain of water; a giant reef wave breaks in shallower water (H/d ~1.1) and runs ~13-14 m/s, like Jaws
 };
 
@@ -170,6 +170,24 @@ export class Wave {
       const Lx = this.cond.len || 1, s = w < 0 ? -BEHIND * Lx * Math.pow(-w, 1.6) : AHEAD * Lx * Math.pow(w, 1.6);   // a longer swell is drawn longer
       this.xs[i] = s;
       this.section(s, tmp);
+      // the top of the wave only hangs out over the face where it's really throwing (its curl). Ahead of that the physics
+      // has no lip (you ride under it as open air), yet a drawn one hung there at head height and your eyes went into it:
+      // there the lip is drawn standing up over the top of the face instead, blending into the full throw as the curl builds
+      // (only on the open face ahead of the barrel: from the first bit of curl on, the barrel is drawn exactly as it was)
+      const kl = smooth(0, 0.1, this.shapeAt(s).curl);
+      if (kl < 1) {
+        let j = 1; for (; j < NU; j++) if (tmp[j * 4] >= tmp[(j - 1) * 4] - 1e-4 || tmp[j * 4 + 1] < tmp[(j - 1) * 4 + 1] - 1e-3) break;
+        let c = j - 1; for (let q = j; q < NU; q++) if (tmp[q * 4 + 1] > tmp[c * 4 + 1]) c = q;   // the crest: the highest point past the face
+        const zt = tmp[(j - 1) * 4], yt = tmp[(j - 1) * 4 + 1], yc = tmp[c * 4 + 1];
+        for (let q = j; q <= c; q++) { const u = (q - j + 1) / (c - j + 1);
+          if (tmp[q * 4] > zt) tmp[q * 4] = zt + (tmp[q * 4] - zt) * kl; tmp[q * 4 + 1] = yt + (yc - yt) * u + (tmp[q * 4 + 1] - yt - (yc - yt) * u) * kl; }
+        // (and from the crest, whatever of the lip's top still leans out past the face runs straight back to where the back
+        //  of the wave passes behind it: left where it was it folded back over itself into a paper-thin sheet)
+        let e = c + 1; while (e < NU && tmp[e * 4] > zt) e++;
+        if (e < NU) { const ze = tmp[e * 4], ye = tmp[e * 4 + 1];
+          for (let q = c + 1; q < e; q++) { const u = (q - c) / (e - c), bz = zt + (ze - zt) * u, by = yc + (ye - yc) * u;
+            tmp[q * 4] = bz + (tmp[q * 4] - bz) * kl; tmp[q * 4 + 1] = by + (tmp[q * 4 + 1] - by) * kl; } }
+      }
       for (let j = 0; j < NU; j++) {
         const p = (i * NU + j) * 3, a = (i * NU + j) * 2;
         const bend = this.bend(s);   // crest line wraps slightly toward the beach (the physics uses the same curve)
